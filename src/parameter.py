@@ -1,86 +1,94 @@
 
 # planning parameter
 class PlanningParameter:
-    k_long = None
-    k_lat = None
+    def __init__(self):
 
-    k_jerk_lon = None
-    k_jerk_lat = None
-    k_time = None
-    k_distance = None
+        # weightening factors for cost calculation
+        self.k_long = None
+        self.k_lat = None
 
-    prediction_horizon = None
-    speed_limit = None
+        self.k_jerk_lon = None
+        self.k_jerk_lat = None
+        self.k_time = None
+        self.k_distance = None
 
-    t_step_size = None
-    lat_step_size = None
-    long_step_size = None
+        # time planning parameters: t_N * t_step_size = prediction_horizon
+        self.prediction_horizon = None  # s
+        self.t_N = None
+        self.t_step_size = None # s
+        self.t_min = None
+
+        # direction planning parameter
+        self.d_deviation = None
+        self.d_N = None
+
+
+    def parameter_position_reaching(self):
+
+        self.k_long = 1.0
+        self.k_lat = 10.0
+
+        self.k_jerk_lat = 5.0  # 1.0
+        self.k_jerk_lon = 5.0
+        self.k_time = 10.0
+        self.k_distance = 10.0  # 2.0
+
+        # time planning parameters: t_N * t_step_size = prediction_horizon
+        self.prediction_horizon = 3.0  # s
+        self.t_N = 30
+        self.t_step_size = .2  # s
+        self.t_min = 0.6
+
+        # direction planning parameter
+        self.d_deviation = 2
+        self.d_N = 5
+
+    def parameter_velocity_reaching(self):
+
+        self.k_long = .1
+        self.k_lat = 1.0
+
+        self.k_jerk_lat = 5.0
+        self.k_jerk_lon = 5.0
+        self.k_time = 10.0
+        self.k_distance = 2.0
+
+        # time planning parameters: t_N * t_step_size = prediction_horizon
+        self.prediction_horizon = 6.0  # s
+        self.t_N = 3
+        self.t_step_size = .2  # s
+        self.t_min = 0.1
+
+        # direction planning parameter
+        self.d_deviation = 2
+        self.d_N = 5
 
 
 # vehicle parameter
 class VehicleParameter:
-    jerk_long_max = None
-    jerk_lat_max = None
+    def __init__(self):
+        self.jerk_long_max = None
+        self.jerk_lat_max = None
 
-    acceleration_max = 8  # m/s²
-    velocity_max = 150 / 3.6  # m/s
+        self.acceleration_max = 8  # m/s²
+        self.acceleration_dot_max = 0.2
+        self.velocity_max = 150 / 3.6  # m/s
 
-    curvature_max = 0.2
+        self.curvature_max = 0.2
 
-    width = 1.674  # vehicle width [m]
-    length = 4.298  # vehicle length [m]
+        self.kappa_max = 0.2
+        self.kappa_dot_max = 10
 
-    # parameters for calculating steering angle
+        self.width = 1.674  # vehicle width [m]
+        self.length = 4.298  # vehicle length [m]
 
-    length_front = length / 3
-    length_rear = 2 * length / 3
-    stiffness_front = 40000  # front tire stiffness [N/rad]
-    stiffness_rear = 40000  # rear tire stiffens [N/rad]
-    mass = 1500  # mass of vehicle [kg]
+        # parameters for calculating steering angle
 
-
-
-def parameter_velocity_reaching():
-
-    params = PlanningParameter()
-
-    params.k_long = .1
-    params.k_lat = 5.0
-
-    params.k_jerk_lat = 5.0
-    params.k_jerk_lon = 5.0
-    params.k_time = 10.0
-    params.k_distance = 2.0
-
-    params.prediction_horizon = 3.0     # s
-    params.speed_limit = 130.0/3.6      # m/s
-
-    params.t_step_size = .5               # s
-    params.lat_step_size = 1
-    params.long_step_size = 1
-
-    return params
-
-
-def parameter_position_reaching():
-    params = PlanningParameter()
-
-    params.k_long = 1.0
-    params.k_lat = 10.0
-
-    params.k_jerk_lat = 5.0  # 1.0
-    params.k_jerk_lon = 5.0
-    params.k_time = 10.0
-    params.k_distance = 10.0  # 2.0
-
-    params.prediction_horizon = 3.0  # s
-    params.speed_limit = 130.0/3.6      # m/s
-
-    params.t_step_size = .5  # s
-    params.lat_step_size = 1
-    params.long_step_size = 1
-
-    return params
+        self.length_front = self.length / 3
+        self.length_rear = 2 * self.length / 3
+        self.stiffness_front = 40000  # front tire stiffness [N/rad]
+        self.stiffness_rear = 40000  # rear tire stiffens [N/rad]
+        self.mass = 1500  # mass of vehicle [kg]
 
 
 # visualization parameter
