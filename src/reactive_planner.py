@@ -202,7 +202,7 @@ class ReactivePlanner(object):
         self._desired_t = self.horizon
 
         # Default sampling -> [desired - min,desired + max,initial step]
-        self._sampling_d = SamplingParameters(-5, 5, 50)          # lower limit, upper limit, number of trajectories
+        self._sampling_d = SamplingParameters(-5, 5, 10)          # lower limit, upper limit, number of trajectories
         self._sampling_t = SamplingParameters(3 * self.dT, self.horizon, 3)  # ll, ul, NoT
         self._sampling_v = self.set_desired_speed(v_desired)
 
@@ -935,7 +935,7 @@ if __name__ == '__main__':
     print('Creating velocity reaching bundle....')
 
     """fabian: Option to pick one of all start positions"""
-    xml_file = "/home/fabian/Praktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Merge-1_1_T-1.xml" #ZAM_Over-1_1.xml"
+    xml_file = "/home/fabian/Praktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Over-1_1.xml"
     tree = ET.parse(xml_file)
     root = tree.getroot()
     IDs = []
