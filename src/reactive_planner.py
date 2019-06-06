@@ -1,27 +1,21 @@
-from parameter import VehicleParameter
+from parameter import VehicleParameter, PlanningParameter
 from trajectory_bundle import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample
-from parameter import parameter_velocity_reaching
 from polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
-from parameter import PlanningParameter
 from commonroad.common.validity import *
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 from commonroad.scenario.lanelet import LaneletNetwork, Lanelet
-from commonroad.common.file_reader import CommonRoadFileReader
-from commonroad.visualization.draw_dispatch_cr import draw_object
 from commonroad.prediction.prediction import TrajectoryPrediction
 from commonroad.geometry.shape import Rectangle
 from commonroad.scenario.trajectory import Trajectory,State
 import pycrcc
 from pycrccosy import TrapezoidCoordinateSystem
 from commonroad_ccosy.geometry.trapezoid_coordinate_system import create_coordinate_system_from_polyline
-from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_checker
-from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_object
-import commonroad_ccosy.visualization.draw_dispatch
-from commonroad_cc.visualization.draw_dispatch import draw_object as draw_cc
 from typing import List
 import matplotlib.pyplot as plt
 import numpy as np
 import time, warnings
+from parameter_classes import VehModelParameters, SamplingParameters
+from polyline import compute_curvature_from_polyline, compute_orientation_from_polyline, compute_pathlength_from_polyline
 
 
 __author__ = "Christian Pek"
@@ -33,135 +27,38 @@ __email__ = "Christian.Pek@tum.de"
 __status__ = "Alpha"
 
 
-def compute_orientation_from_polyline(polyline: npy.ndarray) -> npy.ndarray:
-    """
-    Computes the orientations along a given polyline
-    :param polyline: The polyline to check
-    :return: The orientations along the polyline
-    """
-    assert isinstance(polyline, npy.ndarray) and len(polyline) > 1 and polyline.ndim == 2 and len(
-        polyline[0, :]) == 2, '<Math>: not a valid polyline. polyline = {}'.format(polyline)
-
-    if (len(polyline) < 2):
-        raise NameError('Cannot create orientation from polyline of length < 2')
-
-    orientation = [0]
-    for i in range(1, len(polyline)):
-        pt1 = polyline[i - 1]
-        pt2 = polyline[i]
-        tmp = pt2 - pt1
-        orientation.append(np.arctan2(tmp[1], tmp[0]))
-
-    return orientation
-
-
-def compute_curvature_from_polyline(polyline: npy.ndarray) -> npy.ndarray:
-    """
-    Computes the curvature of a given polyline
-    :param polyline: The polyline for the curvature computation
-    :return: The curvature of the polyline
-    """
-    assert isinstance(polyline, npy.ndarray) and polyline.ndim == 2 and len(
-        polyline[:, 0]) > 2, 'Polyline malformed for curvature computation p={}'.format(polyline)
-    x_d = np.gradient(polyline[:, 0])
-    x_dd = np.gradient(x_d)
-    y_d = np.gradient(polyline[:, 1])
-    y_dd = np.gradient(y_d)
-
-    return (x_d * y_dd - x_dd * y_d) / ((x_d ** 2 + y_d ** 2) ** (3. / 2.))
-
-
-def compute_pathlength_from_polyline(polyline: npy.ndarray) -> npy.ndarray:
-    """
-    Computes the pathlength of a given polyline
-    :param polyline: The polyline
-    :return: The pathlength of the polyline
-    """
-    assert isinstance(polyline, npy.ndarray) and polyline.ndim == 2 and len(
-        polyline[:, 0]) > 2, 'Polyline malformed for pathlenth computation p={}'.format(polyline)
-    distance = np.zeros((len(polyline),))
-    for i in range(1, len(polyline)):
-        distance[i] = distance[i - 1] + npy.linalg.norm(polyline[i] - polyline[i - 1])
-
-    return npy.array(distance)
-
-
-class SamplingParameters(object):
-    """
-    Class that represents the sampling parameters for planning
-    """
-
-    def __init__(self, low: float, up: float, n_samples: int):
-        # Check validity of input
-        assert is_real_number(low), '<SamplingParameters>: Lower sampling bound not valid! low = {}'.format(low)
-        assert is_real_number(up), '<SamplingParameters>: Upper sampling bound not valid! up = {}'.format(up)
-        assert np.greater(up,
-                          low), '<SamplingParameters>: Upper sampling bound is not greater than lower bound! up = {} , low = {}'.format(
-            up, low)
-        assert is_positive(n_samples), '<SamplingParameters>: Step size is not valid! step size = {}'.format(step)
-        assert isinstance(n_samples, int)
-        assert n_samples > 0
-
-        self.low = low
-        self.up = up
-        self.n_samples = n_samples
-
-    def to_range(self, sampling_factor: int=1) -> np.ndarray:
-        """
-        Convert to numpy range object as [center-low,center+up] in "step" steps
-        :param sampling_factor: Multiplicative factor for number of samples
-        :return: The range [low,up] in "n_samples*sampling_factor" steps
-        """
-        if divmod(self.n_samples*sampling_factor,2) == 0:
-            samples = self.n_samples*sampling_factor + 1
-        else:
-            samples = self.n_samples * sampling_factor + 1
-
-        if sampling_factor == 0:
-            return np.array([(self.up+self.low)/2])
-        else:
-            return np.linspace(self.low, self.up, samples)
-
-    def no_of_samples(self) -> int:
-        """
-        Returns the number of elements in the range of this sampling parameters object
-        :return: The number of elements in the range
-        """
-        return len(self.to_range())
-
-
-class VehModelParameters:
-    """
-    Class that represents the vehicle's constraints
-    """
-    def __init__(self, a_max, theta_dot_max, kappa_max, kappa_dot_max):
-        self.a_max = a_max
-        self.theta_dot_max = theta_dot_max
-        self.kappa_max = kappa_max
-        self.kappa_dot_max = kappa_dot_max
-
 
 class ReactivePlanner(object):
-    def __init__(self, dt: float, t_h: float, N: int, width: float = 2.0, length: float = 5.2,
-                 v_desired=14, collision_check_in_cl: bool = False, lanelet_network:LaneletNetwork=None):
-        assert is_positive(dt), '<ReactivePlanner>: provided dt is not correct! dt = {}'.format(dt)
-        assert is_positive(N) and is_natural_number(N), '<ReactivePlanner>: provided N is not correct! dt = {}'.format(
-            N)
-        assert is_positive(t_h), '<ReactivePlanner>: provided t_h is not correct! dt = {}'.format(dt)
-        assert np.isclose(t_h, N * dt), '<ReactivePlanner>: Provided time horizon information is not correct!'
-        assert np.isclose(N*dt,t_h)
+    def __init__(self, v_desired=14, collision_check_in_cl: bool = False, lanelet_network:LaneletNetwork=None):
 
-        # Set horizon variables
-        self.horizon = t_h
-        self.N = N
-        self.dT = dt
+        params = PlanningParameter()
+        params.parameter_velocity_reaching()
+
+        vehicle_params = VehicleParameter()
+
+        # Set time sampling variables
+        self.horizon = params.prediction_horizon
+        self.dT = params.t_step_size
+        self.N = params.t_N
+
+        assert is_positive(self.dT), '<ReactivePlanner>: provided dt is not correct! dt = {}'.format(self.dT)
+        assert is_positive(self.horizon), '<ReactivePlanner>: provided t_h is not correct! dt = {}'.format(self.dT)
+
+        assert is_positive(self.N) and is_natural_number(self.N), '<ReactivePlanner>: provided N is not correct! dt = {}'.format(
+            self.N)
+        #assert np.isclose(self.horizon, self.N * self.dT), '<ReactivePlanner>: Provided time horizon information is not correct!'
+        #assert np.isclose(self.N * self.dT, self.horizon)
+
+        # Set direction sampling options
+        self.d_deviation = params.d_deviation
+        self.d_N = params.d_N
 
         # Set width and length
-        self._width = width
-        self._length = length
+        self._width = vehicle_params.width
+        self._length = vehicle_params.length
 
         # Create default VehModelParameters
-        self.constraints = VehModelParameters(VehicleParameter.acceleration_max, 0.2, 0.2, 10)
+        self.constraints = VehModelParameters(vehicle_params.acceleration_max, vehicle_params.acceleration_dot_max, vehicle_params.kappa_max, vehicle_params.kappa_dot_max)
 
         # Current State
         self.x_0:State = None
@@ -192,18 +89,23 @@ class ReactivePlanner(object):
 
         # store desired velocity
         self._desired_speed = v_desired
-        self._desired_d = 0.
+        self._desired_d = 0
         self._desired_t = self.horizon
 
         # Default sampling -> [desired - min,desired + max,initial step]
-        self._sampling_d = SamplingParameters(-.5, .5, 5)
-        self._sampling_t = SamplingParameters(3 * self.dT, self.horizon, 3)
+        self._sampling_d = SamplingParameters(-self.d_deviation, self.d_deviation, self.d_N)
+        self._sampling_t = SamplingParameters(params.t_min, self.horizon, self.N)
         self._sampling_v = self.set_desired_speed(v_desired)
 
         # compute sampling sets
         self._setup_sampling_sets()
 
     def set_desired_speed(self, v_desired):
+        """
+        Sets desired velocity and calculates velocity for each sample
+        :param v_desired: velocity in m/s
+        :return: velocity in m/s
+        """
         self._desired_speed = v_desired
         if self.x_0 is not None:
             reference_speed = self.x_0.velocity
@@ -219,6 +121,11 @@ class ReactivePlanner(object):
         return self._sampling_v
 
     def set_reference_path(self, reference_path:np.ndarray):
+        """
+        Sets internal parameters for reference path
+        :param reference_path: reference path
+        :return: none
+        """
         cosy: TrapezoidCoordinateSystem = create_coordinate_system_from_polyline(reference_path)
         # Set reference
         self._cosy = cosy
@@ -229,6 +136,7 @@ class ReactivePlanner(object):
         self._theta_ref = theta_ref
         self._ref_curv_d = np.gradient(self._ref_curv, self._ref_pos)
 
+    # TODO ?! High level planner
     def set_reference_lane(self, lane_direction: int) -> None:
         """
         compute new reference path based on relative lane position.
@@ -376,10 +284,11 @@ class ReactivePlanner(object):
         """
 
         # get parameters for planning
-        params = parameter_velocity_reaching()
+        params = PlanningParameter()
+        params.parameter_velocity_reaching()
 
         # create trajectory bundle object
-        trajectory_bundle = TrajectoryBundle(params)
+        trajectory_bundle = TrajectoryBundle()
 
         # reset cost statistic
         self._min_cost = 10 ** 9
@@ -696,10 +605,9 @@ class ReactivePlanner(object):
     def plan(self, x_0: State, cc: object, cl_states=None) -> tuple:
         """
         Plans an optimal trajectory
-        :param x_0: Initial state as CR state
+        :param x_0: Initial state as CR state (CR = cartesian)
         :param cc:  CollisionChecker object
         :param cl_states: Curvilinear state if replanning is used
-        :param lane_change_direction: 0=current lane >0=right lanes, <0=left lanes
         :return: Optimal trajectory as tuple
         """
         self.x_0 = x_0
@@ -713,7 +621,7 @@ class ReactivePlanner(object):
         print('<Reactive Planner>: initial state is: lon = {} / lat = {}'.format(x_0_lon, x_0_lat))
 
         # create empty bundle
-        bundle = TrajectoryBundle(None)
+        bundle = TrajectoryBundle()
         # initial index of sampling set to use
         i = 0
 
@@ -740,10 +648,10 @@ class ReactivePlanner(object):
                 # create artifical standstill trajectory
                 print('Adding standstill trajectory')
                 traj_lon = QuarticTrajectory(t_start_s=0, duration_s=self.horizon, desired_horizon=self.horizon,
-                                                    start_state=x_0_lon, target_velocity=v,
+                                                    start_state=x_0_lon,
                                                     desired_velocity=self._desired_speed)
-                traj_lat = QuinticTrajectory(t_start_s=0, duration_s=s_lon_goal, desired_horizon=self.horizon,
-                                                       start_state=x_0_lat, end_state=end_state_lat)
+                traj_lat = QuinticTrajectory(t_start_s=0, desired_horizon=self.horizon,
+                                                       start_state=x_0_lat)
                 p = TrajectorySample(0, traj_lon, traj_lat, 0)
                 p.cartesian = CartesianSample(np.repeat(x_0.position[0], self.N), np.repeat(x_0.position[1], self.N),
                                               np.repeat(x_0.orientation, self.N), np.repeat(0, self.N),
@@ -823,7 +731,7 @@ class ReactivePlanner(object):
     def _get_feasible_trajectories(self, trajectory_bundle: TrajectoryBundle, cc: object,
                                    x_0: State) -> TrajectoryBundle:
         """
-        Checks the feasibility of the trajectories within a trajectory bundle
+        Checks the feasibility of the trajectories within a trajectory bundle for collisions and vehicle kinematics
         :param trajectory_bundle: The trajectory bundle to check
         :return: The set of feasible trajectories
         """
@@ -831,7 +739,7 @@ class ReactivePlanner(object):
         trajectories = trajectory_bundle.trajectory_bundle
 
         # Create new trajectory bundle
-        feasible_trajectories = TrajectoryBundle(trajectory_bundle.params)
+        feasible_trajectories = TrajectoryBundle()
 
         print('<ReactivePlanner>: Checking {} trajectories for feasibility!'.format(len(trajectories)))
 
@@ -921,50 +829,4 @@ class ReactivePlanner(object):
         prediction = TrajectoryPrediction(trajectory,shape)
 
         return DynamicObstacle(42, ObstacleType.CAR,shape, trajectory.state_list[0],prediction)
-
-
-
-
-if __name__ == '__main__':
-    print('Creating velocity reaching bundle....')
-
-    crfr = CommonRoadFileReader('/home/klischat/GIT_REPOS/testCaseOpt/scenarios_border_obstacles/2018b/ZAM_Over-1_1_border_obstacles_shell.xml')
-    scenario, _ = crfr.open()
-    plt.figure(figsize=(25, 10))
-    draw_object(scenario)
-    plt.axis('equal')
-    plt.show(block=False)
-    plt.pause(0.1)
-
-    # create coordinate system
-    reference_path = scenario.lanelet_network.find_lanelet_by_id(1000).center_vertices
-    curvilinear_cosy = create_coordinate_system_from_polyline(reference_path)
-
-    # create collision checker for scenario
-    collision_checker = create_collision_checker(scenario)
-
-    # convert coordinates and create initial state
-    x, y = curvilinear_cosy.convert_to_cartesian_coords(25, 0)
-    x_0 = State(**{'position':np.array([x,y]),'orientation':0.04, 'velocity':10, 'acceleration':0,'yaw_rate':0})
-
-    planner:ReactivePlanner = ReactivePlanner(0.2, 6, 30)
-    planner.set_reference_path(reference_path)
-
-    x_cl = None
-
-    for k in range(0, 18):
-        optimal = planner.plan(x_0, collision_checker, cl_states=x_cl)
-        # convert to CR obstacle
-        ego = planner.convert_cr_trajectory_to_object(optimal[0])
-        draw_object(ego)
-        draw_object(ego.prediction.occupancy_at_time_step(1))
-        plt.pause(0.1)
-
-        x_0 = optimal[0].state_list[1]
-        x_cl = (optimal[2][1], optimal[3][1])
-
-        print("Goal state is: {}".format(optimal[1].state_list[-1]))
-
-    print('Done')
-    plt.show(block=True)
 
