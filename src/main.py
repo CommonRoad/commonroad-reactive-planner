@@ -16,7 +16,7 @@ if __name__ == '__main__':
     print('Creating velocity reaching bundle....')
 
     # Please set the path to your scenario here
-    scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/hand-crafted/ZAM_Over-1_1.xml'
+    scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/hand-crafted/ZAM_Urban-1_1_S-1.xml'
 
     # Initialize reactive planner
     scenario, planning_problem_set = CommonRoadFileReader(scenario_path).open()
@@ -43,12 +43,23 @@ if __name__ == '__main__':
 
         planning_problem = planning_problem_set.find_planning_problem_by_id(int(problemid))
 
-    goal_lanelet = scenario.lanelet_network.lanelets_in_proximity(
-        planning_problem.goal.state_list[0].position.center, 100)
+    # find goal region
+    if hasattr(planning_problem.goal.state_list[0],'position'):
+        if planning_problem.goal.lanelets_of_goal_position:
+            goal_lanelet = planning_problem.goal.lanelets_of_goal_position
+            goal_lanelet_id = goal_lanelet[0][0]
+        else:
+            goal_lanelet = scenario.lanelet_network.lanelets_in_proximity(
+                planning_problem.goal.state_list[0].position.center, 100)
+            goal_lanelet_id = list(goal_lanelet)[0].lanelet_id
+    else:
+        # set initial lanelet as goal lanelet if not other specified
+        goal_lanelet = scenario.lanelet_network.lanelets_in_proximity(
+            planning_problem.initial_state.position, 100)
+        goal_lanelet_id = list(goal_lanelet)[0].lanelet_id
+        print('No Goal Region defined: Driving on initial lanelet.')
 
-    goal_lanelet_id = list(goal_lanelet)[0].lanelet_id
-
-    # find reference path
+    # set reference path
     route_planner = RoutePlanner(scenario.lanelet_network)
     reference_path, lanelets_leading_to_goal = find_reference_path_and_lanelets_leading_to_goal(
         route_planner=route_planner,
@@ -58,7 +69,7 @@ if __name__ == '__main__':
         resampling_step_reference_path=1.5,
         max_curvature_reference_path=0.15)
 
-    # create coordinate system
+    # create coordinate system from reference path
     curvilinear_cosy = create_coordinate_system_from_polyline(reference_path)
 
     # create collision checker for scenario
