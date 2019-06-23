@@ -1,67 +1,86 @@
 
 # planning parameter
 class PlanningParameter:
-    def __init__(self):
+    def __init__(self, velocity_reaching = True):
+        if velocity_reaching:
+            # weightening factors for cost calculation
+            self.k_long = .1
+            self.k_lat = 1.0
 
-        # weightening factors for cost calculation
-        self.k_long = None
-        self.k_lat = None
+            self.k_jerk_lat = 5.0
+            self.k_jerk_lon = 5.0
+            self.k_time = 10.0
+            self.k_distance = 2.0
 
-        self.k_jerk_lon = None
-        self.k_jerk_lat = None
-        self.k_time = None
-        self.k_distance = None
+            # time planning parameters: t_N * t_step_size = prediction_horizon
+            self.prediction_horizon = 6.0  # s
+            self.t_N = 3
+            self.t_step_size = .2  # s
+            self.t_min = 0.1
 
-        # time planning parameters: t_N * t_step_size = prediction_horizon
-        self.prediction_horizon = None  # s
-        self.t_N = None
-        self.t_step_size = None # s
-        self.t_min = None
+            # direction planning parameter
+            self.d_deviation = 2
+            self.d_N = 5
 
-        # direction planning parameter
-        self.d_deviation = None
-        self.d_N = None
+        else:
+            # Values for position reaching
+            self.k_long = 1.0
+            self.k_lat = 10.0
 
+            self.k_jerk_lat = 5.0  # 1.0
+            self.k_jerk_lon = 5.0
+            self.k_time = 10.0
+            self.k_distance = 10.0  # 2.0
 
-    def parameter_position_reaching(self):
+            # time planning parameters: t_N * t_step_size = prediction_horizon
+            self.prediction_horizon = 3.0  # s
+            self.t_N = 30
+            self.t_step_size = .2  # s
+            self.t_min = 0.6
 
-        self.k_long = 1.0
-        self.k_lat = 10.0
+            # direction planning parameter
+            self.d_deviation = 2
+            self.d_N = 5
 
-        self.k_jerk_lat = 5.0  # 1.0
-        self.k_jerk_lon = 5.0
-        self.k_time = 10.0
-        self.k_distance = 10.0  # 2.0
+    #def parameter_position_reaching(self):
 
-        # time planning parameters: t_N * t_step_size = prediction_horizon
-        self.prediction_horizon = 3.0  # s
-        self.t_N = 30
-        self.t_step_size = .2  # s
-        self.t_min = 0.6
+        #    self.k_long = 1.0
+        #    self.k_lat = 10.0
 
-        # direction planning parameter
-        self.d_deviation = 2
-        self.d_N = 5
+        #    self.k_jerk_lat = 5.0  # 1.0
+        #    self.k_jerk_lon = 5.0
+        #    self.k_time = 10.0
+        #    self.k_distance = 10.0  # 2.0
 
-    def parameter_velocity_reaching(self):
+        #    # time planning parameters: t_N * t_step_size = prediction_horizon
+        #    self.prediction_horizon = 3.0  # s
+        #    self.t_N = 30
+        #    self.t_step_size = .2  # s
+        #    self.t_min = 0.6
 
-        self.k_long = .1
-        self.k_lat = 1.0
+        #    # direction planning parameter
+        #    self.d_deviation = 2
+        #    self.d_N = 5
 
-        self.k_jerk_lat = 5.0
-        self.k_jerk_lon = 5.0
-        self.k_time = 10.0
-        self.k_distance = 2.0
+    #def parameter_velocity_reaching(self):
 
-        # time planning parameters: t_N * t_step_size = prediction_horizon
-        self.prediction_horizon = 6.0  # s
-        self.t_N = 3
-        self.t_step_size = .2  # s
-        self.t_min = 0.1
+        #    self.k_long = .1
+        #    self.k_lat = 1.0
 
-        # direction planning parameter
-        self.d_deviation = 2
-        self.d_N = 5
+        #    self.k_jerk_lat = 5.0
+        #    self.k_jerk_lon = 5.0
+        #    self.k_time = 10.0
+        #    self.k_distance = 2.0
+
+        #    # time planning parameters: t_N * t_step_size = prediction_horizon
+        #    self.prediction_horizon = 6.0  # s
+        #    self.t_N = 3
+        #    self.t_step_size = .2  # s
+        #    self.t_min = 0.1
+
+        #    # direction planning parameter
+        #    self.d_deviation = 2
+        #    self.d_N = 5
 
 
 # vehicle parameter

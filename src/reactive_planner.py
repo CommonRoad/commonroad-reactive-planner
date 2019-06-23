@@ -31,8 +31,7 @@ __status__ = "Alpha"
 class ReactivePlanner(object):
     def __init__(self, v_desired=14, collision_check_in_cl: bool = False, lanelet_network:LaneletNetwork=None):
 
-        params = PlanningParameter()
-        params.parameter_velocity_reaching()
+        params = PlanningParameter(velocity_reaching = True)
 
         vehicle_params = VehicleParameter()
 
@@ -284,8 +283,7 @@ class ReactivePlanner(object):
         """
 
         # get parameters for planning
-        params = PlanningParameter()
-        params.parameter_velocity_reaching()
+        params = PlanningParameter(velocity_reaching = True)
 
         # create trajectory bundle object
         trajectory_bundle = TrajectoryBundle()
