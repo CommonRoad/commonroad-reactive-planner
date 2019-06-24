@@ -8,7 +8,7 @@ import numpy as np
 
 import xml.etree.ElementTree as ET
 from reactive_planner import ReactivePlanner
-
+from parameter import PlanningParameter, VehicleParameter
 
 if __name__ == '__main__':
     print('Creating velocity reaching bundle....')
@@ -37,7 +37,13 @@ if __name__ == '__main__':
     x, y = curvilinear_cosy.convert_to_cartesian_coords(25, 0)
     x_0 = State(**{'position':np.array([x, y]),'orientation':0.04, 'velocity':10, 'acceleration':0,'yaw_rate':0})
 
-    planner:ReactivePlanner = ReactivePlanner()
+    # Set planning parameters and vehicle parameters
+    params_planning = PlanningParameter(velocity_reaching=True)
+    params_vehicle = VehicleParameter()
+
+    planner: ReactivePlanner = ReactivePlanner()
+    planner.set_parameters(params_planning)
+    planner.set_parameters(params_vehicle)
     planner.set_reference_path(reference_path)
 
     x_cl = None
