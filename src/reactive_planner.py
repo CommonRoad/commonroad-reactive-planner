@@ -25,6 +25,7 @@ import numpy as np
 import time, warnings
 """fabian change"""
 import xml.etree.ElementTree as ET
+
 """ende"""
 
 
@@ -37,6 +38,92 @@ __version__ = "1.0"
 __maintainer__ = "Christian Pek"
 __email__ = "Christian.Pek@tum.de"
 __status__ = "Alpha"
+
+# Fabian
+
+def boundary_not_on_other_lanes(p, own_ID, total_IDs):
+    total_IDs.remove(own_ID)
+    for i in total_IDs:
+        if scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[0]:
+            if (scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[0] not in scenario.lanelet_network.find_lanelet_by_id(i).left_vertices) and (scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[0] not in scenario.lanelet_network.find_lanelet_by_id(i).right_vertices):
+                return False
+        if scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[1]:
+            if (scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[1] not in scenario.lanelet_network.find_lanelet_by_id(i).left_vertices) and (scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[1] not in scenario.lanelet_network.find_lanelet_by_id(i).right_vertices):
+                return False
+    return True
+
+
+def add_obstacles_at_lanelet_edges(scenario, xml_file):
+    from commonroad.common.util import Interval
+    # find all lanelet IDs
+    tree = ET.parse(xml_file)
+    root = tree.getroot()
+    IDs = []
+    for child in root:
+        if child.tag == "lanelet":
+            IDs.append(int(child.attrib["id"]))
+    # add obstacles
+    e=1e-6 # avoid numerical errors
+    for i in IDs:
+        if scenario.lanelet_network.find_lanelet_by_id(i).adj_left is None:
+            old = scenario.lanelet_network.find_lanelet_by_id(i).left_vertices[0];
+            for element in scenario.lanelet_network.find_lanelet_by_id(i).left_vertices:
+                delta_x = element[0] - old[0]
+                delta_y = element[1] - old[1]
+                ang = np.arctan(delta_y / (delta_x+e))
+                len_obj = np.sqrt(delta_x ** 2 + delta_y ** 2)
+                if delta_x >= 0:
+                    x_obj = element[0] - 0.5 * len_obj * np.cos(np.arctan(np.abs(delta_y / (delta_x + e))))
+                    y_obj = element[1] - 0.5 * len_obj * np.sin(np.arctan(delta_y / (delta_x + e)))
+                else:
+                    x_obj = element[0] + 0.5 * len_obj * np.cos(np.arctan(np.abs(delta_y / (delta_x + e))))
+                    y_obj = element[1] + 0.5 * len_obj * np.sin(np.arctan(delta_y / (delta_x + e)))
+                obj = Rectangle(length=len_obj, width=0.05)
+                state = State(position=np.array([x_obj, y_obj]), orientation=ang, velocity=0,
+                              time_step=Interval(0, 30))
+                o_type = ObstacleType
+                obj = StaticObstacle(obstacle_shape=obj, initial_state=state, obstacle_type=o_type.ROAD_BOUNDARY,
+                                     obstacle_id=scenario.generate_object_id())
+                if boundary_not_on_other_lanes(np.array([element, old]), i, IDs[:]):
+                    scenario.add_objects(obj)
+                #scenario.add_objects(obj)
+                old = element
+                print("here")
+                print(scenario.lanelet_network.find_lanelet_by_id(i).left_vertices)
+        if scenario.lanelet_network.find_lanelet_by_id(i).adj_right is None:
+            old = scenario.lanelet_network.find_lanelet_by_id(i).right_vertices[0];
+            for element in scenario.lanelet_network.find_lanelet_by_id(i).right_vertices:
+                delta_x = element[0] - old[0]
+                delta_y = element[1] - old[1]
+                ang = np.arctan(delta_y / (delta_x+e))
+                len_obj = np.sqrt(delta_x ** 2 + delta_y ** 2)
+                if delta_x >= 0:
+                    x_obj = element[0] - 0.5 * len_obj * np.cos(np.arctan(np.abs(delta_y / (delta_x+e))))
+                    y_obj = element[1] - 0.5 * len_obj * np.sin(np.arctan(delta_y / (delta_x + e)))
+                else:
+                    x_obj = element[0] + 0.5 * len_obj * np.cos(np.arctan(np.abs(delta_y / (delta_x+e))))
+                    y_obj = element[1] + 0.5 * len_obj * np.sin(np.arctan(delta_y / (delta_x + e)))
+                #y_obj = element[1] - 0.5 * len_obj * np.sin(np.arctan(delta_y / (delta_x+e)))
+                obj = Rectangle(length=len_obj, width=-0.05)
+                state = State(position=np.array([x_obj, y_obj]), orientation=ang, velocity=0,
+                              time_step=Interval(0, 30))
+                o_type = ObstacleType
+                obj = StaticObstacle(obstacle_shape=obj, initial_state=state, obstacle_type=o_type.ROAD_BOUNDARY,
+                                     obstacle_id=scenario.generate_object_id())
+
+                if boundary_not_on_other_lanes(np.array([element, old]), i, IDs[:]):
+                    scenario.add_objects(obj)
+
+                #x_end = x_obj+len_obj*np.cos(np.arctan(np.abs(delta_y/(delta_x+e))))
+                #y_end = y_obj+len_obj*np.sin(np.arctan(delta_y/(delta_x+e)))
+                #l = np.array([(x_obj, y_obj), (x_end, y_end)])
+                #print(scenario.lanelet_network.find_lanelet_by_id(i).contains_points(l))
+                #if not scenario.lanelet_network.find_lanelet_by_id(i).contains_points(l)[0] and not scenario.lanelet_network.find_lanelet_by_id(i).contains_points(l)[1]:
+                #scenario.add_objects(obj)
+                old = element
+
+
+    return scenario
 
 
 def compute_orientation_from_polyline(polyline: npy.ndarray) -> npy.ndarray:
@@ -931,11 +1018,15 @@ class ReactivePlanner(object):
 
 
 
+
 if __name__ == '__main__':
+    import cProfile
+
     print('Creating velocity reaching bundle....')
 
     """fabian: Option to pick one of all start positions"""
-    xml_file = "/home/fabian/Praktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Over-1_1.xml"
+    #xml_file = "/home/fabian/Praktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Over-1_1.xml" #/ZAM_Merge-1_1_T-1.xml"
+    xml_file = "/home/fabian/Praktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Merge-1_1_T-1.xml"
     tree = ET.parse(xml_file)
     root = tree.getroot()
     IDs = []
@@ -953,72 +1044,12 @@ if __name__ == '__main__':
     crfr = CommonRoadFileReader(xml_file)
     scenario, _ = crfr.open()
 
-
     plt.figure(figsize=(25, 10))
 
+    pr = cProfile.Profile()
+    pr.enable()
 
-    '''Fabian'''
-    from commonroad.common.util import Interval
-
-    for i in IDs:
-        i = int(i)
-        if scenario.lanelet_network.find_lanelet_by_id(i).adj_left is None:
-            old = scenario.lanelet_network.find_lanelet_by_id(i).right_vertices[0];
-            for element in scenario.lanelet_network.find_lanelet_by_id(i).left_vertices:
-                delta_x = element[0] - old[0] + 0.0001
-                delta_y = element[1] - old[1] + 0.0001
-                ang = np.arctan(delta_y / delta_x)
-                obj = Rectangle(length=np.sqrt(delta_x**2+delta_y**2), width=0.05)
-                state = State(position=np.array([element[0], element[1]]), orientation=ang, velocity=0,
-                              time_step=Interval(0, 30))
-                o_type = ObstacleType
-                obj = StaticObstacle(obstacle_shape=obj, initial_state=state, obstacle_type=o_type.ROAD_BOUNDARY,
-                                     obstacle_id=scenario.generate_object_id())
-                scenario.add_objects(obj)
-                old = element
-        if scenario.lanelet_network.find_lanelet_by_id(i).adj_right is None:
-            old = scenario.lanelet_network.find_lanelet_by_id(i).right_vertices[0];
-            for element in scenario.lanelet_network.find_lanelet_by_id(i).right_vertices:
-                delta_x = element[0] - old[0] + 0.0001
-                delta_y = element[1] - old[1] + 0.0001
-                ang = np.arctan(delta_y / delta_x)
-                obj = Rectangle(length=np.sqrt(delta_x**2+delta_y**2), width=0.05)
-                state = State(position=np.array([element[0], element[1]]), orientation=ang, velocity=0,
-                              time_step=Interval(0, 30))
-                o_type = ObstacleType
-                obj = StaticObstacle(obstacle_shape=obj, initial_state=state, obstacle_type=o_type.ROAD_BOUNDARY,
-                                     obstacle_id=scenario.generate_object_id())
-                scenario.add_objects(obj)
-                old = element
-
-    # print(scenario.lanelet_network.find_lanelet_by_id(ID).left_vertices);
-
-    """
-    old = scenario.lanelet_network.find_lanelet_by_id(ID).right_vertices[0];
-    print("start")
-    for element in scenario.lanelet_network.find_lanelet_by_id(ID).right_vertices:
-        delta_x = element[0] - old[0] + 0.0001
-        delta_y = element[1] - old[1] + 0.0001
-        ang = np.arctan(delta_y/delta_x)
-        obj = Rectangle(length=delta_x, width=0.05)
-        state = State(position=np.array([element[0], element[1]]), orientation=ang, velocity=0, time_step = Interval(0,30))
-        o_type = ObstacleType
-        obj = StaticObstacle(obstacle_shape=obj, initial_state=state, obstacle_type=o_type.ROAD_BOUNDARY, obstacle_id=scenario.generate_object_id())
-        scenario.add_objects(obj)
-        old = element
-    for element in scenario.lanelet_network.find_lanelet_by_id(1001).right_vertices:
-        print(scenario.lanelet_network.find_lanelet_by_id(ID).adj_left_same_direction)
-        delta_x = element[0] - old[0] + 0.0001
-        delta_y = element[1] - old[1] + 0.0001
-        ang = np.arctan(delta_y/delta_x)
-        obj = Rectangle(length=delta_x, width=0.05)
-        state = State(position=np.array([element[0], element[1]]), orientation=ang, velocity=0, time_step = Interval(0,30))
-        o_type = ObstacleType
-        obj = StaticObstacle(obstacle_shape=obj, initial_state=state, obstacle_type=o_type.ROAD_BOUNDARY, obstacle_id=scenario.generate_object_id())
-        scenario.add_objects(obj)
-        old = element
-        """
-    '''ende'''
+    scenario = add_obstacles_at_lanelet_edges(scenario, xml_file) #fabian
     draw_object(scenario)
     plt.axis('equal')
     plt.show(block=False)
@@ -1028,7 +1059,8 @@ if __name__ == '__main__':
     reference_path = scenario.lanelet_network.find_lanelet_by_id(ID).center_vertices
     curvilinear_cosy = create_coordinate_system_from_polyline(reference_path)
 
-    '''fabian'''
+
+    '''fabian
 
     l = scenario.lanelet_network.find_lanelet_by_id(ID)
     draw_object(l, draw_params={'lanelet': {
@@ -1046,7 +1078,7 @@ if __name__ == '__main__':
         'facecolor': 'yellow',
         'zorder': 45}})
 
-    '''ende'''
+    ende'''
 
 
 
@@ -1058,6 +1090,7 @@ if __name__ == '__main__':
     # convert coordinates and create initial state
     x, y = curvilinear_cosy.convert_to_cartesian_coords(25, 0)
     x_0 = State(**{'position':np.array([x,y]),'orientation':0.04, 'velocity':10, 'acceleration':0,'yaw_rate':0})
+
 
     planner:ReactivePlanner = ReactivePlanner(0.2, 6, 30)
     planner.set_reference_path(reference_path)
@@ -1077,6 +1110,8 @@ if __name__ == '__main__':
         x_cl = (optimal[2][1], optimal[3][1])
 
         print("Goal state is: {}".format(optimal[1].state_list[-1]))
+    pr.disable()
+    pr.print_stats(sort='time')
 
     print('Done')
     plt.show(block=True)
