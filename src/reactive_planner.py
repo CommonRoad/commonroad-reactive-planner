@@ -1,34 +1,22 @@
-from parameter import VehicleParameter
+from parameter import VehicleParameter, PlanningParameter
 from trajectory_bundle import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample
-from parameter import parameter_velocity_reaching
 from polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
-from parameter import PlanningParameter
-
 from commonroad.common.validity import *
-from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType, StaticObstacle
+from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 from commonroad.scenario.lanelet import LaneletNetwork, Lanelet
-from commonroad.common.file_reader import CommonRoadFileReader
-from commonroad.visualization.draw_dispatch_cr import draw_object
 from commonroad.prediction.prediction import TrajectoryPrediction
 from commonroad.geometry.shape import Rectangle
 from commonroad.scenario.trajectory import Trajectory,State
 import pycrcc
 from pycrccosy import TrapezoidCoordinateSystem
 from commonroad_ccosy.geometry.trapezoid_coordinate_system import create_coordinate_system_from_polyline
-from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_checker
-from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_object
-import commonroad_ccosy.visualization.draw_dispatch
-from commonroad_cc.visualization.draw_dispatch import draw_object as draw_cc
 from typing import List
 import matplotlib.pyplot as plt
 import numpy as np
 import time, warnings
-"""fabian change"""
-import xml.etree.ElementTree as ET
-
-"""ende"""
-
-
+from parameter_classes import VehModelParameters, SamplingParameters
+from polyline import compute_curvature_from_polyline, compute_orientation_from_polyline, compute_pathlength_from_polyline
+from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType, StaticObstacle
 
 
 __author__ = "Christian Pek"
@@ -39,222 +27,39 @@ __maintainer__ = "Christian Pek"
 __email__ = "Christian.Pek@tum.de"
 __status__ = "Alpha"
 
-# Fabian
-
-def boundary_not_on_other_lanes(p, own_ID, total_IDs):
-    total_IDs.remove(own_ID)
-    for i in total_IDs:
-        if scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[0]:
-            if (scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[0] not in scenario.lanelet_network.find_lanelet_by_id(i).left_vertices) and (scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[0] not in scenario.lanelet_network.find_lanelet_by_id(i).right_vertices):
-                return False
-        if scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[1]:
-            if (scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[1] not in scenario.lanelet_network.find_lanelet_by_id(i).left_vertices) and (scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[1] not in scenario.lanelet_network.find_lanelet_by_id(i).right_vertices):
-                return False
-    return True
-
-
-def add_obstacles_at_lanelet_edges(scenario, xml_file):
-    from commonroad.common.util import Interval
-    # find all lanelet IDs
-    tree = ET.parse(xml_file)
-    root = tree.getroot()
-    IDs = []
-    for child in root:
-        if child.tag == "lanelet":
-            IDs.append(int(child.attrib["id"]))
-    # add obstacles
-    e=1e-6 # avoid numerical errors
-    for i in IDs:
-        if scenario.lanelet_network.find_lanelet_by_id(i).adj_left is None:
-            old = scenario.lanelet_network.find_lanelet_by_id(i).left_vertices[0];
-            for element in scenario.lanelet_network.find_lanelet_by_id(i).left_vertices:
-                delta_x = element[0] - old[0]
-                delta_y = element[1] - old[1]
-                ang = np.arctan(delta_y / (delta_x+e))
-                len_obj = np.sqrt(delta_x ** 2 + delta_y ** 2)
-                if delta_x >= 0:
-                    x_obj = element[0] - 0.5 * len_obj * np.cos(np.arctan(np.abs(delta_y / (delta_x + e))))
-                    y_obj = element[1] - 0.5 * len_obj * np.sin(np.arctan(delta_y / (delta_x + e)))
-                else:
-                    x_obj = element[0] + 0.5 * len_obj * np.cos(np.arctan(np.abs(delta_y / (delta_x + e))))
-                    y_obj = element[1] + 0.5 * len_obj * np.sin(np.arctan(delta_y / (delta_x + e)))
-                obj = Rectangle(length=len_obj, width=0.05)
-                state = State(position=np.array([x_obj, y_obj]), orientation=ang, velocity=0,
-                              time_step=Interval(0, 30))
-                o_type = ObstacleType
-                obj = StaticObstacle(obstacle_shape=obj, initial_state=state, obstacle_type=o_type.ROAD_BOUNDARY,
-                                     obstacle_id=scenario.generate_object_id())
-                if boundary_not_on_other_lanes(np.array([element, old]), i, IDs[:]):
-                    scenario.add_objects(obj)
-                #scenario.add_objects(obj)
-                old = element
-                print("here")
-                print(scenario.lanelet_network.find_lanelet_by_id(i).left_vertices)
-        if scenario.lanelet_network.find_lanelet_by_id(i).adj_right is None:
-            old = scenario.lanelet_network.find_lanelet_by_id(i).right_vertices[0];
-            for element in scenario.lanelet_network.find_lanelet_by_id(i).right_vertices:
-                delta_x = element[0] - old[0]
-                delta_y = element[1] - old[1]
-                ang = np.arctan(delta_y / (delta_x+e))
-                len_obj = np.sqrt(delta_x ** 2 + delta_y ** 2)
-                if delta_x >= 0:
-                    x_obj = element[0] - 0.5 * len_obj * np.cos(np.arctan(np.abs(delta_y / (delta_x+e))))
-                    y_obj = element[1] - 0.5 * len_obj * np.sin(np.arctan(delta_y / (delta_x + e)))
-                else:
-                    x_obj = element[0] + 0.5 * len_obj * np.cos(np.arctan(np.abs(delta_y / (delta_x+e))))
-                    y_obj = element[1] + 0.5 * len_obj * np.sin(np.arctan(delta_y / (delta_x + e)))
-                #y_obj = element[1] - 0.5 * len_obj * np.sin(np.arctan(delta_y / (delta_x+e)))
-                obj = Rectangle(length=len_obj, width=-0.05)
-                state = State(position=np.array([x_obj, y_obj]), orientation=ang, velocity=0,
-                              time_step=Interval(0, 30))
-                o_type = ObstacleType
-                obj = StaticObstacle(obstacle_shape=obj, initial_state=state, obstacle_type=o_type.ROAD_BOUNDARY,
-                                     obstacle_id=scenario.generate_object_id())
-
-                if boundary_not_on_other_lanes(np.array([element, old]), i, IDs[:]):
-                    scenario.add_objects(obj)
-
-                #x_end = x_obj+len_obj*np.cos(np.arctan(np.abs(delta_y/(delta_x+e))))
-                #y_end = y_obj+len_obj*np.sin(np.arctan(delta_y/(delta_x+e)))
-                #l = np.array([(x_obj, y_obj), (x_end, y_end)])
-                #print(scenario.lanelet_network.find_lanelet_by_id(i).contains_points(l))
-                #if not scenario.lanelet_network.find_lanelet_by_id(i).contains_points(l)[0] and not scenario.lanelet_network.find_lanelet_by_id(i).contains_points(l)[1]:
-                #scenario.add_objects(obj)
-                old = element
-
-
-    return scenario
-
-
-def compute_orientation_from_polyline(polyline: npy.ndarray) -> npy.ndarray:
-    """
-    Computes the orientations along a given polyline
-    :param polyline: The polyline to check
-    :return: The orientations along the polyline
-    """
-    assert isinstance(polyline, npy.ndarray) and len(polyline) > 1 and polyline.ndim == 2 and len(
-        polyline[0, :]) == 2, '<Math>: not a valid polyline. polyline = {}'.format(polyline)
-
-    if (len(polyline) < 2):
-        raise NameError('Cannot create orientation from polyline of length < 2')
-
-    orientation = [0]
-    for i in range(1, len(polyline)):
-        pt1 = polyline[i - 1]
-        pt2 = polyline[i]
-        tmp = pt2 - pt1
-        orientation.append(np.arctan2(tmp[1], tmp[0]))
-
-    return orientation
-
-
-def compute_curvature_from_polyline(polyline: npy.ndarray) -> npy.ndarray:
-    """
-    Computes the curvature of a given polyline
-    :param polyline: The polyline for the curvature computation
-    :return: The curvature of the polyline
-    """
-    assert isinstance(polyline, npy.ndarray) and polyline.ndim == 2 and len(
-        polyline[:, 0]) > 2, 'Polyline malformed for curvature computation p={}'.format(polyline)
-    x_d = np.gradient(polyline[:, 0])
-    x_dd = np.gradient(x_d)
-    y_d = np.gradient(polyline[:, 1])
-    y_dd = np.gradient(y_d)
-
-    return (x_d * y_dd - x_dd * y_d) / ((x_d ** 2 + y_d ** 2) ** (3. / 2.))
-
-
-def compute_pathlength_from_polyline(polyline: npy.ndarray) -> npy.ndarray:
-    """
-    Computes the pathlength of a given polyline
-    :param polyline: The polyline
-    :return: The pathlength of the polyline
-    """
-    assert isinstance(polyline, npy.ndarray) and polyline.ndim == 2 and len(
-        polyline[:, 0]) > 2, 'Polyline malformed for pathlenth computation p={}'.format(polyline)
-    distance = np.zeros((len(polyline),))
-    for i in range(1, len(polyline)):
-        distance[i] = distance[i - 1] + npy.linalg.norm(polyline[i] - polyline[i - 1])
-
-    return npy.array(distance)
-
-
-class SamplingParameters(object):
-    """
-    Class that represents the sampling parameters for planning
-    """
-
-    def __init__(self, low: float, up: float, n_samples: int):
-        # Check validity of input
-        assert is_real_number(low), '<SamplingParameters>: Lower sampling bound not valid! low = {}'.format(low)
-        assert is_real_number(up), '<SamplingParameters>: Upper sampling bound not valid! up = {}'.format(up)
-        assert np.greater(up,
-                          low), '<SamplingParameters>: Upper sampling bound is not greater than lower bound! up = {} , low = {}'.format(
-            up, low)
-        assert is_positive(n_samples), '<SamplingParameters>: Step size is not valid! step size = {}'.format(step)
-        assert isinstance(n_samples, int)
-        assert n_samples > 0
-
-        self.low = low
-        self.up = up
-        self.n_samples = n_samples
-
-    def to_range(self, sampling_factor: int=1) -> np.ndarray:
-        """
-        Convert to numpy range object as [center-low,center+up] in "step" steps
-        :param sampling_factor: Multiplicative factor for number of samples
-        :return: The range [low,up] in "n_samples*sampling_factor" steps
-        """
-        if divmod(self.n_samples*sampling_factor,2) == 0:
-            samples = self.n_samples*sampling_factor + 1
-        else:
-            samples = self.n_samples * sampling_factor + 1
-
-        if sampling_factor == 0:
-            return np.array([(self.up+self.low)/2])
-        else:
-            return np.linspace(self.low, self.up, samples)
-
-    def no_of_samples(self) -> int:
-        """
-        Returns the number of elements in the range of this sampling parameters object
-        :return: The number of elements in the range
-        """
-        return len(self.to_range())
-
-
-class VehModelParameters:
-    """
-    Class that represents the vehicle's constraints
-    """
-    def __init__(self, a_max, theta_dot_max, kappa_max, kappa_dot_max):
-        self.a_max = a_max
-        self.theta_dot_max = theta_dot_max
-        self.kappa_max = kappa_max
-        self.kappa_dot_max = kappa_dot_max
 
 
 class ReactivePlanner(object):
-    def __init__(self, dt: float, t_h: float, N: int, width: float = 2.0, length: float = 5.2,
-                 v_desired=14, collision_check_in_cl: bool = False, lanelet_network:LaneletNetwork=None):
-        assert is_positive(dt), '<ReactivePlanner>: provided dt is not correct! dt = {}'.format(dt)
-        assert is_positive(N) and is_natural_number(N), '<ReactivePlanner>: provided N is not correct! dt = {}'.format(
-            N)
-        assert is_positive(t_h), '<ReactivePlanner>: provided t_h is not correct! dt = {}'.format(dt)
-        assert np.isclose(t_h, N * dt), '<ReactivePlanner>: Provided time horizon information is not correct!'
-        assert np.isclose(N*dt,t_h)
+    def __init__(self, v_desired=14, collision_check_in_cl: bool = False, lanelet_network:LaneletNetwork=None):
 
-        # Set horizon variables
-        self.horizon = t_h
-        self.N = N
-        self.dT = dt
+        params = PlanningParameter()
+        params.parameter_velocity_reaching()
+
+        vehicle_params = VehicleParameter()
+
+        # Set time sampling variables
+        self.horizon = params.prediction_horizon
+        self.dT = params.t_step_size
+        self.N = params.t_N
+
+        assert is_positive(self.dT), '<ReactivePlanner>: provided dt is not correct! dt = {}'.format(self.dT)
+        assert is_positive(self.horizon), '<ReactivePlanner>: provided t_h is not correct! dt = {}'.format(self.dT)
+
+        assert is_positive(self.N) and is_natural_number(self.N), '<ReactivePlanner>: provided N is not correct! dt = {}'.format(
+            self.N)
+        #assert np.isclose(self.horizon, self.N * self.dT), '<ReactivePlanner>: Provided time horizon information is not correct!'
+        #assert np.isclose(self.N * self.dT, self.horizon)
+
+        # Set direction sampling options
+        self.d_deviation = params.d_deviation
+        self.d_N = params.d_N
 
         # Set width and length
-        self._width = width
-        self._length = length
+        self._width = vehicle_params.width
+        self._length = vehicle_params.length
 
         # Create default VehModelParameters
-        self.constraints = VehModelParameters(VehicleParameter.acceleration_max, 0.2, 0.2, 10)
+        self.constraints = VehModelParameters(vehicle_params.acceleration_max, vehicle_params.acceleration_dot_max, vehicle_params.kappa_max, vehicle_params.kappa_dot_max)
 
         # Current State
         self.x_0:State = None
@@ -285,18 +90,23 @@ class ReactivePlanner(object):
 
         # store desired velocity
         self._desired_speed = v_desired
-        self._desired_d = 0.
+        self._desired_d = 0
         self._desired_t = self.horizon
 
         # Default sampling -> [desired - min,desired + max,initial step]
-        self._sampling_d = SamplingParameters(-5, 5, 10)          # lower limit, upper limit, number of trajectories
-        self._sampling_t = SamplingParameters(3 * self.dT, self.horizon, 3)  # ll, ul, NoT
+        self._sampling_d = SamplingParameters(-self.d_deviation, self.d_deviation, self.d_N)
+        self._sampling_t = SamplingParameters(params.t_min, self.horizon, self.N)
         self._sampling_v = self.set_desired_speed(v_desired)
 
         # compute sampling sets
         self._setup_sampling_sets()
 
     def set_desired_speed(self, v_desired):
+        """
+        Sets desired velocity and calculates velocity for each sample
+        :param v_desired: velocity in m/s
+        :return: velocity in m/s
+        """
         self._desired_speed = v_desired
         if self.x_0 is not None:
             reference_speed = self.x_0.velocity
@@ -312,6 +122,11 @@ class ReactivePlanner(object):
         return self._sampling_v
 
     def set_reference_path(self, reference_path:np.ndarray):
+        """
+        Sets internal parameters for reference path
+        :param reference_path: reference path
+        :return: none
+        """
         cosy: TrapezoidCoordinateSystem = create_coordinate_system_from_polyline(reference_path)
         # Set reference
         self._cosy = cosy
@@ -322,55 +137,56 @@ class ReactivePlanner(object):
         self._theta_ref = theta_ref
         self._ref_curv_d = np.gradient(self._ref_curv, self._ref_pos)
 
-    # def set_reference_lane(self, lane_direction: int) -> None:
-    #     """
-    #     compute new reference path based on relative lane position.
-    #     :param lane_direction: 0=curernt lane >0=right lanes, <0=left lanes
-    #     :return:
-    #     """
-    #     assert self.lanelet_network is not None,\
-    #         'lanelet network must be provided during initialization for using get_reference_of_lane().'
-    #
-    #     current_ids = self.lanelet_network.find_lanelet_by_position([self.x_0.position])[0]
-    #     if len(current_ids) > 0:
-    #         current_lanelet = self.lanelet_network.find_lanelet_by_id(current_ids[0])
-    #     else:
-    #         if self._cosy is not None:
-    #             warnings.warn('set_reference_lane: x0 is not located on any lane, use previous reference.', stacklevel=2)
-    #         else:
-    #             raise ValueError('set_reference_lane: x0 is not located on any lane and no previous reference available.')
-    #         return
-    #
-    #     # determine target lane
-    #     target_lanelet = None
-    #     if lane_direction==-1:
-    #         if current_lanelet.adj_left_same_direction not in (False,None):
-    #             target_lanelet = self.lanelet_network.find_lanelet_by_id(current_lanelet.adj_left)
-    #     elif lane_direction == 1:
-    #         if current_lanelet.adj_right_same_direction not in (False,None):
-    #             try:
-    #                 target_lanelet = self.lanelet_network.find_lanelet_by_id(current_lanelet.adj_right)
-    #             except:
-    #                 i=0
-    #     elif lane_direction == 0:
-    #         target_lanelet = current_lanelet
-    #
-    #     if target_lanelet is None:
-    #         warnings.warn('set_reference_lane: No adjacent lane in direction {}, stay in current lane.'.format(lane_direction), stacklevel=2)
-    #         target_lanelet = current_lanelet
-    #     else:
-    #         print('<reactive_planner> Changed reference lanelet from {} to {}.'.format(current_lanelet.lanelet_id, target_lanelet.lanelet_id))
-    #
-    #     #TODO: currently only using first lane, integrate high level planner
-    #     lanes = Lanelet.all_lanelets_by_merging_successors_from_lanelet(target_lanelet,self.lanelet_network)
-    #     if len(lanes) > 1:
-    #         reference = lanes[0].center_vertices
-    #     elif len(lanes) > 0:
-    #         reference = lanes[0].center_vertices
-    #     else:
-    #         reference = target_lanelet.center_vertices
-    #
-    #     self.set_reference_path(reference)
+    # TODO ?! High level planner
+    def set_reference_lane(self, lane_direction: int) -> None:
+        """
+        compute new reference path based on relative lane position.
+        :param lane_direction: 0=curernt lane >0=right lanes, <0=left lanes
+        :return:
+        """
+        assert self.lanelet_network is not None,\
+            'lanelet network must be provided during initialization for using get_reference_of_lane().'
+
+        current_ids = self.lanelet_network.find_lanelet_by_position([self.x_0.position])[0]
+        if len(current_ids) > 0:
+            current_lanelet = self.lanelet_network.find_lanelet_by_id(current_ids[0])
+        else:
+            if self._cosy is not None:
+                warnings.warn('set_reference_lane: x0 is not located on any lane, use previous reference.', stacklevel=2)
+            else:
+                raise ValueError('set_reference_lane: x0 is not located on any lane and no previous reference available.')
+            return
+
+        # determine target lane
+        target_lanelet = None
+        if lane_direction==-1:
+            if current_lanelet.adj_left_same_direction not in (False,None):
+                target_lanelet = self.lanelet_network.find_lanelet_by_id(current_lanelet.adj_left)
+        elif lane_direction == 1:
+            if current_lanelet.adj_right_same_direction not in (False,None):
+                try:
+                    target_lanelet = self.lanelet_network.find_lanelet_by_id(current_lanelet.adj_right)
+                except:
+                    i=0
+        elif lane_direction == 0:
+            target_lanelet = current_lanelet
+
+        if target_lanelet is None:
+            warnings.warn('set_reference_lane: No adjacent lane in direction {}, stay in current lane.'.format(lane_direction), stacklevel=2)
+            target_lanelet = current_lanelet
+        else:
+            print('<reactive_planner> Changed reference lanelet from {} to {}.'.format(current_lanelet.lanelet_id, target_lanelet.lanelet_id))
+
+        #TODO: currently only using first lane, integrate high level planner
+        lanes = Lanelet.all_lanelets_by_merging_successors_from_lanelet(target_lanelet,self.lanelet_network)
+        if len(lanes) > 1:
+            reference = lanes[0].center_vertices
+        elif len(lanes) > 0:
+            reference = lanes[0].center_vertices
+        else:
+            reference = target_lanelet.center_vertices
+
+        self.set_reference_path(reference)
 
 
     def _setup_sampling_sets(self):
@@ -459,20 +275,21 @@ class ReactivePlanner(object):
         Plans trajectory samples that try to reach a certain velocity and samples in this domain.
         Sample in time (duration) and velocity domain. Initial state is given. Longitudinal end state (s) is sampled.
         Lateral end state (d) is always set to 0.
-        :param desired_speed:   Reference velocity. Deviations from that are penalized in the cost function
-        :param x_0_lon:         np.array([s, s_dot, s_ddot])
-        :param x_0_lat:         np.array([d, d_dot, d_ddot])
-        :param samp_level:      index of the sampling parameter set to use
-        :return:                trajectory bundle with all sample trajectories.
+        :param desired_speed: Reference velocity. Deviations from that are penalized in the cost function
+        :param x_0_lon: np.array([s, s_dot, s_ddot])
+        :param x_0_lat: np.array([d, d_dot, d_ddot])
+        :param samp_level: index of the sampling parameter set to use
+        :return: trajectory bundle with all sample trajectories.
 
         NOTE: Here, no collision or feasibility check is done!
         """
 
         # get parameters for planning
-        params = parameter_velocity_reaching()
+        params = PlanningParameter()
+        params.parameter_velocity_reaching()
 
         # create trajectory bundle object
-        trajectory_bundle = TrajectoryBundle(params)
+        trajectory_bundle = TrajectoryBundle()
 
         # reset cost statistic
         self._min_cost = 10 ** 9
@@ -789,10 +606,9 @@ class ReactivePlanner(object):
     def plan(self, x_0: State, cc: object, cl_states=None) -> tuple:
         """
         Plans an optimal trajectory
-        :param x_0: Initial state as CR state
+        :param x_0: Initial state as CR state (CR = cartesian)
         :param cc:  CollisionChecker object
         :param cl_states: Curvilinear state if replanning is used
-        :param lane_change_direction: 0=current lane >0=right lanes, <0=left lanes
         :return: Optimal trajectory as tuple
         """
         self.x_0 = x_0
@@ -803,10 +619,11 @@ class ReactivePlanner(object):
         else:
             x_0_lon, x_0_lat = self._compute_initial_states(x_0)
 
+
         print('<Reactive Planner>: initial state is: lon = {} / lat = {}'.format(x_0_lon, x_0_lat))
 
         # create empty bundle
-        bundle = TrajectoryBundle(None)
+        bundle = TrajectoryBundle()
         # initial index of sampling set to use
         i = 0
 
@@ -833,10 +650,10 @@ class ReactivePlanner(object):
                 # create artifical standstill trajectory
                 print('Adding standstill trajectory')
                 traj_lon = QuarticTrajectory(t_start_s=0, duration_s=self.horizon, desired_horizon=self.horizon,
-                                                    start_state=x_0_lon, target_velocity=v,
+                                                    start_state=x_0_lon,
                                                     desired_velocity=self._desired_speed)
-                traj_lat = QuinticTrajectory(t_start_s=0, duration_s=s_lon_goal, desired_horizon=self.horizon,
-                                                       start_state=x_0_lat, end_state=end_state_lat)
+                traj_lat = QuinticTrajectory(t_start_s=0, desired_horizon=self.horizon,
+                                                       start_state=x_0_lat)
                 p = TrajectorySample(0, traj_lon, traj_lat, 0)
                 p.cartesian = CartesianSample(np.repeat(x_0.position[0], self.N), np.repeat(x_0.position[1], self.N),
                                               np.repeat(x_0.orientation, self.N), np.repeat(0, self.N),
@@ -916,7 +733,7 @@ class ReactivePlanner(object):
     def _get_feasible_trajectories(self, trajectory_bundle: TrajectoryBundle, cc: object,
                                    x_0: State) -> TrajectoryBundle:
         """
-        Checks the feasibility of the trajectories within a trajectory bundle
+        Checks the feasibility of the trajectories within a trajectory bundle for collisions and vehicle kinematics
         :param trajectory_bundle: The trajectory bundle to check
         :return: The set of feasible trajectories
         """
@@ -924,7 +741,7 @@ class ReactivePlanner(object):
         trajectories = trajectory_bundle.trajectory_bundle
 
         # Create new trajectory bundle
-        feasible_trajectories = TrajectoryBundle(trajectory_bundle.params)
+        feasible_trajectories = TrajectoryBundle()
 
         print('<ReactivePlanner>: Checking {} trajectories for feasibility!'.format(len(trajectories)))
 
@@ -1015,104 +832,112 @@ class ReactivePlanner(object):
 
         return DynamicObstacle(42, ObstacleType.CAR,shape, trajectory.state_list[0],prediction)
 
+    '''
+    def _2boundary_not_intersecting(self, scenario, p, own_ID, total_IDs):
+        total_IDs.remove(own_ID)
+        print(p[0][0])
+        for i in total_IDs:
 
 
 
-
-if __name__ == '__main__':
-    import cProfile
-
-    print('Creating velocity reaching bundle....')
-
-    """fabian: Option to pick one of all start positions"""
-    #xml_file = "/home/fabian/Praktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Over-1_1.xml" #/ZAM_Merge-1_1_T-1.xml"
-    xml_file = "/home/fabian/Praktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Merge-1_1_T-1.xml"
-    tree = ET.parse(xml_file)
-    root = tree.getroot()
-    IDs = []
-    print("Available lanelet id's:")
-    for child in root:
-        if child.tag == "lanelet":
-            print(child.attrib["id"])
-            IDs.append(child.attrib["id"])
-    ID = input("Pick the demanded lanelet ID\n")
-    while ID not in IDs:
-        ID = input("ID not available. \nPick the demanded lanelet ID\n")
-    ID = int(ID)
-    """fabian ende"""
-
-    crfr = CommonRoadFileReader(xml_file)
-    scenario, _ = crfr.open()
-
-    plt.figure(figsize=(25, 10))
-
-    pr = cProfile.Profile()
-    pr.enable()
-
-    scenario = add_obstacles_at_lanelet_edges(scenario, xml_file) #fabian
-    draw_object(scenario)
-    plt.axis('equal')
-    plt.show(block=False)
-    plt.pause(0.1)
-
-    # create coordinate system
-    reference_path = scenario.lanelet_network.find_lanelet_by_id(ID).center_vertices
-    curvilinear_cosy = create_coordinate_system_from_polyline(reference_path)
+            if scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[0]:
+                if p[0] not in scenario.lanelet_network.find_lanelet_by_id(i).left_vertices and p[0] not in scenario.lanelet_network.find_lanelet_by_id(i).right_vertices:
+                    return False
+            if scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[1]:
+                if p[1] not in scenario.lanelet_network.find_lanelet_by_id(i).left_vertices and p[1] not in scenario.lanelet_network.find_lanelet_by_id(i).right_vertices:
+                    return False
 
 
-    '''fabian
+            # element on other lane
+            #if scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[0]:
+            #    if (scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[0] not in scenario.lanelet_network.find_lanelet_by_id(i).left_vertices) \
+            #            and (scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[0] not in scenario.lanelet_network.find_lanelet_by_id(i).right_vertices):
+            #        return False
+            #if scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[1]:
+            #    if (scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[1] not in scenario.lanelet_network.find_lanelet_by_id(i).left_vertices) \
+            #            and (scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[1] not in scenario.lanelet_network.find_lanelet_by_id(i).right_vertices):
+            #        return False
+        return True
+    '''
 
-    l = scenario.lanelet_network.find_lanelet_by_id(ID)
-    draw_object(l, draw_params={'lanelet': {
-        'left_bound_color': 'yellow',
-        'right_bound_color': 'yellow',
-        'center_bound_color': 'red',
-        'draw_left_bound': False,
-        'draw_right_bound': False,
-        'draw_center_bound': True,
-        'draw_border_vertices': False,
-        'draw_start_and_direction': False,
-        'show_label': False,
-        'draw_linewidth': 4,
-        'fill_lanelet': False,
-        'facecolor': 'yellow',
-        'zorder': 45}})
+    def _boundary_not_intersecting(self, scenario, p, own_ID, total_IDs):
+        n = 50
 
-    ende'''
+        total_IDs.remove(own_ID)
+        #create list of n-1 points between p[0] and p[1]
+        delta_x = p[1][0]-p[0][0]
+        delta_y = p[1][1]-p[0][1]
+        points = np.array([[p[0][0]+1/n*delta_x, p[0][1]+1/n*delta_y]])
+        for i in range(2,n):
+            points = np.append(points, np.array([[p[0][0]+i/n*delta_x, p[0][1]+i/n*delta_y]]), axis= 0)
 
-
-
-
-
-    # create collision checker for scenario
-    collision_checker = create_collision_checker(scenario)
-
-    # convert coordinates and create initial state
-    x, y = curvilinear_cosy.convert_to_cartesian_coords(25, 0)
-    x_0 = State(**{'position':np.array([x,y]),'orientation':0.04, 'velocity':10, 'acceleration':0,'yaw_rate':0})
+        # checks whether a point between p[0] and p[1] is on other lanelet
+        for i in total_IDs:
+            if True in scenario.lanelet_network.find_lanelet_by_id(i).contains_points(points):
+                return False
+        return True
 
 
-    planner:ReactivePlanner = ReactivePlanner(0.2, 6, 30)
-    planner.set_reference_path(reference_path)
+    def add_obstacles_at_lanelet_edges(self, scenario, xml_file):
 
-    x_cl = None
+        from commonroad.common.util import Interval
+        import xml.etree.ElementTree as ET
+        # find all lanelet IDs
+        tree = ET.parse(xml_file)
+        root = tree.getroot()
+        IDs = []
+        for child in root:
+            if child.tag == "lanelet":
+                IDs.append(int(child.attrib["id"]))
+        # add obstacles
+        e = 1e-6  # avoid numerical errors
+        for i in IDs:
+            if scenario.lanelet_network.find_lanelet_by_id(i).adj_left is None:
+                old = scenario.lanelet_network.find_lanelet_by_id(i).left_vertices[0];
+                for element in scenario.lanelet_network.find_lanelet_by_id(i).left_vertices:
+                    delta_x = element[0] - old[0]
+                    delta_y = element[1] - old[1]
+                    ang = np.arctan(delta_y / (delta_x + e))
+                    len_obj = np.sqrt(delta_x ** 2 + delta_y ** 2)
+                    if delta_x >= 0:
+                        x_obj = element[0] - 0.5 * len_obj * np.cos(np.arctan(np.abs(delta_y / (delta_x + e))))
+                        y_obj = element[1] - 0.5 * len_obj * np.sin(np.arctan(delta_y / (delta_x + e)))
+                    else:
+                        x_obj = element[0] + 0.5 * len_obj * np.cos(np.arctan(np.abs(delta_y / (delta_x + e))))
+                        y_obj = element[1] + 0.5 * len_obj * np.sin(np.arctan(delta_y / (delta_x + e)))
+                    obj = Rectangle(length=len_obj, width=0.05)
+                    state = State(position=np.array([x_obj, y_obj]), orientation=ang, velocity=0,
+                                  time_step=Interval(0, 30))
+                    o_type = ObstacleType
+                    obj = StaticObstacle(obstacle_shape=obj, initial_state=state, obstacle_type=o_type.ROAD_BOUNDARY,
+                                         obstacle_id=scenario.generate_object_id())
+                    if self._boundary_not_intersecting(self, scenario, np.array([element, old]), i, IDs[:]):
+                        scenario.add_objects(obj)
+                    old = element
+            if scenario.lanelet_network.find_lanelet_by_id(i).adj_right is None:
+                old = scenario.lanelet_network.find_lanelet_by_id(i).right_vertices[0];
+                for element in scenario.lanelet_network.find_lanelet_by_id(i).right_vertices:
+                    delta_x = element[0] - old[0]
+                    delta_y = element[1] - old[1]
+                    ang = np.arctan(delta_y / (delta_x + e))
+                    len_obj = np.sqrt(delta_x ** 2 + delta_y ** 2)
+                    if delta_x >= 0:
+                        x_obj = element[0] - 0.5 * len_obj * np.cos(np.arctan(np.abs(delta_y / (delta_x + e))))
+                        y_obj = element[1] - 0.5 * len_obj * np.sin(np.arctan(delta_y / (delta_x + e)))
+                    else:
+                        x_obj = element[0] + 0.5 * len_obj * np.cos(np.arctan(np.abs(delta_y / (delta_x + e))))
+                        y_obj = element[1] + 0.5 * len_obj * np.sin(np.arctan(delta_y / (delta_x + e)))
+                    # y_obj = element[1] - 0.5 * len_obj * np.sin(np.arctan(delta_y / (delta_x+e)))
+                    obj = Rectangle(length=len_obj, width=-0.05)
+                    state = State(position=np.array([x_obj, y_obj]), orientation=ang, velocity=0,
+                                  time_step=Interval(0, 30))
+                    o_type = ObstacleType
+                    obj = StaticObstacle(obstacle_shape=obj, initial_state=state, obstacle_type=o_type.ROAD_BOUNDARY,
+                                         obstacle_id=scenario.generate_object_id())
+                    if self._boundary_not_intersecting(self, scenario, np.array([element, old]), i, IDs[:]):
+                        scenario.add_objects(obj)
+                    old = element
 
-    for k in range(0, 50):
-        optimal = planner.plan(x_0, collision_checker, cl_states=x_cl)
-        # convert to CR obstacle
-        ego = planner.convert_cr_trajectory_to_object(optimal[0])
-        draw_object(ego)
+        return scenario
 
-        draw_object(ego.prediction.occupancy_at_time_step(1))
-        plt.pause(0.1)
-
-        x_0 = optimal[0].state_list[1]
-        x_cl = (optimal[2][1], optimal[3][1])
-
-        print("Goal state is: {}".format(optimal[1].state_list[-1]))
-    pr.disable()
-    pr.print_stats(sort='time')
-
-    print('Done')
-    plt.show(block=True)
 
