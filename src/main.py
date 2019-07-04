@@ -13,7 +13,8 @@ from reactive_planner import ReactivePlanner
 if __name__ == '__main__':
     print('Creating velocity reaching bundle....')
 
-    crfr = CommonRoadFileReader('/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Over-1_1.xml')
+    file = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Over-1_1.xml'
+    crfr = CommonRoadFileReader(file)
     scenario, _ = crfr.open()
     plt.figure(figsize=(25, 10))
     draw_object(scenario)
@@ -21,7 +22,7 @@ if __name__ == '__main__':
     plt.show(block=False)
     plt.pause(0.1)
 
-    root = ET.parse('/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Over-1_1.xml').getroot()
+    root = ET.parse(file).getroot()
     for lane in root.findall('lanelet'):
         laneletid= lane.get('id')
         break
