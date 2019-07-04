@@ -16,6 +16,7 @@ import numpy as np
 import time, warnings
 from parameter_classes import VehModelParameters, SamplingParameters
 from polyline import compute_curvature_from_polyline, compute_orientation_from_polyline, compute_pathlength_from_polyline
+from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType, StaticObstacle
 
 
 __author__ = "Christian Pek"
@@ -626,6 +627,7 @@ class ReactivePlanner(object):
         else:
             x_0_lon, x_0_lat = self._compute_initial_states(x_0)
 
+
         print('<Reactive Planner>: initial state is: lon = {} / lat = {}'.format(x_0_lon, x_0_lat))
 
         # create empty bundle
@@ -837,4 +839,113 @@ class ReactivePlanner(object):
         prediction = TrajectoryPrediction(trajectory,shape)
 
         return DynamicObstacle(42, ObstacleType.CAR,shape, trajectory.state_list[0],prediction)
+
+    '''
+    def _2boundary_not_intersecting(self, scenario, p, own_ID, total_IDs):
+        total_IDs.remove(own_ID)
+        print(p[0][0])
+        for i in total_IDs:
+
+
+
+            if scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[0]:
+                if p[0] not in scenario.lanelet_network.find_lanelet_by_id(i).left_vertices and p[0] not in scenario.lanelet_network.find_lanelet_by_id(i).right_vertices:
+                    return False
+            if scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[1]:
+                if p[1] not in scenario.lanelet_network.find_lanelet_by_id(i).left_vertices and p[1] not in scenario.lanelet_network.find_lanelet_by_id(i).right_vertices:
+                    return False
+
+
+            # element on other lane
+            #if scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[0]:
+            #    if (scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[0] not in scenario.lanelet_network.find_lanelet_by_id(i).left_vertices) \
+            #            and (scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[0] not in scenario.lanelet_network.find_lanelet_by_id(i).right_vertices):
+            #        return False
+            #if scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[1]:
+            #    if (scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[1] not in scenario.lanelet_network.find_lanelet_by_id(i).left_vertices) \
+            #            and (scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[1] not in scenario.lanelet_network.find_lanelet_by_id(i).right_vertices):
+            #        return False
+        return True
+    '''
+
+    def _boundary_not_intersecting(self, scenario, p, own_ID, total_IDs):
+        n = 50
+
+        total_IDs.remove(own_ID)
+        #create list of n-1 points between p[0] and p[1]
+        delta_x = p[1][0]-p[0][0]
+        delta_y = p[1][1]-p[0][1]
+        points = np.array([[p[0][0]+1/n*delta_x, p[0][1]+1/n*delta_y]])
+        for i in range(2,n):
+            points = np.append(points, np.array([[p[0][0]+i/n*delta_x, p[0][1]+i/n*delta_y]]), axis= 0)
+
+        # checks whether a point between p[0] and p[1] is on other lanelet
+        for i in total_IDs:
+            if True in scenario.lanelet_network.find_lanelet_by_id(i).contains_points(points):
+                return False
+        return True
+
+
+    def add_obstacles_at_lanelet_edges(self, scenario, xml_file):
+
+        from commonroad.common.util import Interval
+        import xml.etree.ElementTree as ET
+        # find all lanelet IDs
+        tree = ET.parse(xml_file)
+        root = tree.getroot()
+        IDs = []
+        for child in root:
+            if child.tag == "lanelet":
+                IDs.append(int(child.attrib["id"]))
+        # add obstacles
+        e = 1e-6  # avoid numerical errors
+        for i in IDs:
+            if scenario.lanelet_network.find_lanelet_by_id(i).adj_left is None:
+                old = scenario.lanelet_network.find_lanelet_by_id(i).left_vertices[0];
+                for element in scenario.lanelet_network.find_lanelet_by_id(i).left_vertices:
+                    delta_x = element[0] - old[0]
+                    delta_y = element[1] - old[1]
+                    ang = np.arctan(delta_y / (delta_x + e))
+                    len_obj = np.sqrt(delta_x ** 2 + delta_y ** 2)
+                    if delta_x >= 0:
+                        x_obj = element[0] - 0.5 * len_obj * np.cos(np.arctan(np.abs(delta_y / (delta_x + e))))
+                        y_obj = element[1] - 0.5 * len_obj * np.sin(np.arctan(delta_y / (delta_x + e)))
+                    else:
+                        x_obj = element[0] + 0.5 * len_obj * np.cos(np.arctan(np.abs(delta_y / (delta_x + e))))
+                        y_obj = element[1] + 0.5 * len_obj * np.sin(np.arctan(delta_y / (delta_x + e)))
+                    obj = Rectangle(length=len_obj, width=0.05)
+                    state = State(position=np.array([x_obj, y_obj]), orientation=ang, velocity=0,
+                                  time_step=Interval(0, 30))
+                    o_type = ObstacleType
+                    obj = StaticObstacle(obstacle_shape=obj, initial_state=state, obstacle_type=o_type.ROAD_BOUNDARY,
+                                         obstacle_id=scenario.generate_object_id())
+                    if self._boundary_not_intersecting(self, scenario, np.array([element, old]), i, IDs[:]):
+                        scenario.add_objects(obj)
+                    old = element
+            if scenario.lanelet_network.find_lanelet_by_id(i).adj_right is None:
+                old = scenario.lanelet_network.find_lanelet_by_id(i).right_vertices[0];
+                for element in scenario.lanelet_network.find_lanelet_by_id(i).right_vertices:
+                    delta_x = element[0] - old[0]
+                    delta_y = element[1] - old[1]
+                    ang = np.arctan(delta_y / (delta_x + e))
+                    len_obj = np.sqrt(delta_x ** 2 + delta_y ** 2)
+                    if delta_x >= 0:
+                        x_obj = element[0] - 0.5 * len_obj * np.cos(np.arctan(np.abs(delta_y / (delta_x + e))))
+                        y_obj = element[1] - 0.5 * len_obj * np.sin(np.arctan(delta_y / (delta_x + e)))
+                    else:
+                        x_obj = element[0] + 0.5 * len_obj * np.cos(np.arctan(np.abs(delta_y / (delta_x + e))))
+                        y_obj = element[1] + 0.5 * len_obj * np.sin(np.arctan(delta_y / (delta_x + e)))
+                    # y_obj = element[1] - 0.5 * len_obj * np.sin(np.arctan(delta_y / (delta_x+e)))
+                    obj = Rectangle(length=len_obj, width=-0.05)
+                    state = State(position=np.array([x_obj, y_obj]), orientation=ang, velocity=0,
+                                  time_step=Interval(0, 30))
+                    o_type = ObstacleType
+                    obj = StaticObstacle(obstacle_shape=obj, initial_state=state, obstacle_type=o_type.ROAD_BOUNDARY,
+                                         obstacle_id=scenario.generate_object_id())
+                    if self._boundary_not_intersecting(self, scenario, np.array([element, old]), i, IDs[:]):
+                        scenario.add_objects(obj)
+                    old = element
+
+        return scenario
+
 
