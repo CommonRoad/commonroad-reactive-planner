@@ -1,14 +1,55 @@
 import networkx as nx
 import numpy as np
-import matplotlib.pyplot as plt
-
+import xml.etree.ElementTree as ET
 from commonroad.common.file_reader import CommonRoadFileReader
-from commonroad.planning.planning_problem import PlanningProblem
+from polyline import compute_curvature_from_polyline, chaikins_corner_cutting, resample_polyline
 from commonroad.visualization.draw_dispatch_cr import draw_object
+import matplotlib.pyplot as plt
 
 
 class RoutePlanner:
-    def __init__(self, lanelet_network):
+    def __init__(self, lanelet_network, scenario_path):
+
+        self.scenario, planning_problem_set = CommonRoadFileReader(scenario_path).open()
+
+        # Find planning problem or select initial state
+        if not planning_problem_set:
+            root = ET.parse(scenario_path).getroot()
+            for lane in root.findall('lanelet'):
+                laneletid = lane.get('id')
+                print("Lanelet ID" + laneletid)
+                break
+
+            print('No Planning Problem specified for this scenario! Lanelet ', laneletid, ' is chosen.')
+
+        else:
+            root = ET.parse(scenario_path).getroot()
+            for problem in root.findall('planningProblem'):
+                problemid = problem.get('id')
+                print("Planning Prob ID" + problemid)
+                break
+
+            self.planning_problem = planning_problem_set.find_planning_problem_by_id(int(problemid))
+
+        # find goal region
+        if hasattr(self.planning_problem.goal.state_list[0], 'position'):
+            if self.planning_problem.goal.lanelets_of_goal_position:
+                goal_lanelet = self.planning_problem.goal.lanelets_of_goal_position
+                print ("Goal lanelets" + str(goal_lanelet))
+                self.goal_lanelet_id = goal_lanelet[0][0]
+            else:
+                goal_lanelet = self.scenario.lanelet_network.lanelets_in_proximity(
+                    self.planning_problem.goal.state_list[0].position.center, 10)
+                self.goal_lanelet_id = list(goal_lanelet)[-1].lanelet_id
+        else:
+            # set initial lanelet as goal lanelet if not other specified
+            goal_lanelet = self.scenario.lanelet_network.lanelets_in_proximity(
+                self.planning_problem.initial_state.position, 10)
+            self.goal_lanelet_id = list(goal_lanelet)[0].lanelet_id
+            print('No Goal Region defined: Driving on initial lanelet.')
+
+        print("goal lanelet ID" + str(self.goal_lanelet_id))
+
         self.lanelet_network = lanelet_network
         self.create_graph_from_lanelet_network()
 
@@ -48,9 +89,9 @@ class RoutePlanner:
                                         source=source_lanelet_id,
                                         target=target_lanelet_id))
 
-    def find_all_lanelets_leading_to_goal(self, source_lanelet_id, target_lanelet_id, allow_overtaking=True):
+    def find_all_lanelets_leading_to_goal(self, source_lanelet_id, allow_overtaking=True):
         lanelet_ids_leading_to_goal = set()
-        if source_lanelet_id == target_lanelet_id:
+        if source_lanelet_id == self.goal_lanelet_id:
             cur_lanelet = self.lanelet_network.find_lanelet_by_id(source_lanelet_id)
             lanelet_ids_leading_to_goal.add(source_lanelet_id)
             if cur_lanelet.adj_left:
@@ -60,7 +101,7 @@ class RoutePlanner:
             if cur_lanelet.adj_right and cur_lanelet.adj_right_same_direction:
                 lanelet_ids_leading_to_goal.add(cur_lanelet.adj_right)
         else:
-            simple_paths = self.find_all_simple_paths(source_lanelet_id, target_lanelet_id)
+            simple_paths = self.find_all_simple_paths(source_lanelet_id, self.goal_lanelet_id)
             for p in simple_paths:
                 flag = True
                 pre_lanelet = self.lanelet_network.find_lanelet_by_id(p[0])
@@ -85,12 +126,20 @@ class RoutePlanner:
                 lanelet_ids_leading_to_goal = lanelet_ids_leading_to_goal.union(overtaking_lanelets)
         return lanelet_ids_leading_to_goal
 
-    def find_reference_path_to_goal(self, source_lanelet_id, target_lanelet_id):
+    def find_reference_path_to_goal(self, source_lanelet_id):
         """ Not working in many situations."""
-        shortest_path = self.find_all_shortest_paths(source_lanelet_id,
-                                                     target_lanelet_id)
+
+        obstacle_map = self.lanelet_network.map_obstacles_to_lanelets(self.scenario.dynamic_obstacles)
+        shortest_paths = self.find_all_shortest_paths(source_lanelet_id, self.goal_lanelet_id)
         # take the first shortest path (there might be more than one)
-        shortest_path = shortest_path[0]
+
+        obstacles = []
+        shortest_path = shortest_paths[0]
+        for path in shortest_path:
+            if path in obstacle_map:
+                for elem in obstacle_map[path]:
+                    obstacles.append(elem)
+
         reference_lanelets = [self.lanelet_network.find_lanelet_by_id(shortest_path[0])]
         for i, id in enumerate(shortest_path[1:]):
             lanelet = self.lanelet_network.find_lanelet_by_id(id)
@@ -101,7 +150,6 @@ class RoutePlanner:
                 adjacent_lanelets.add(preceding_lanelet.adj_left)
             if preceding_lanelet.adj_right:
                 adjacent_lanelets.add(preceding_lanelet.adj_right)
-
             if id in adjacent_lanelets:
                 del reference_lanelets[-1]
                 reference_lanelets.append(lanelet)
@@ -110,110 +158,56 @@ class RoutePlanner:
 
         center_vertices = reference_lanelets[0].center_vertices
         for i in range(1, len(reference_lanelets)):
-            if np.isclose(center_vertices[-1],
-                          reference_lanelets[i].center_vertices[0]).all():
-                idx = 1
-            else:
-                idx = 0
-            center_vertices = np.concatenate((center_vertices,
-                                              reference_lanelets[i].center_vertices[idx:]))
+                if np.isclose(center_vertices[-1],
+                              reference_lanelets[i].center_vertices[0]).all():
+                    idx = 1
+                else:
+                    idx = 0
+                center_vertices = np.concatenate((center_vertices,
+                                                  reference_lanelets[i].center_vertices[idx:]))
+
         return center_vertices
 
+    def find_reference_path_and_lanelets_leading_to_goal(
+            self,
+            allow_overtaking: bool,
+            source_position=None,
+            resampling_step_reference_path: float = 0.5,
+            max_curvature_reference_path: float = 0.2):
 
-def compute_curvature_from_polyline(polyline: np.ndarray) -> np.ndarray:
-    """
-    Computes the curvature of a given polyline
-    :param polyline: The polyline for the curvature computation
-    :return: The curvature of the polyline
-    """
-    assert isinstance(polyline, np.ndarray) and polyline.ndim == 2 and len(polyline[:,0]) > 2, \
-        'Polyline malformed for curvature computation p={}'.format(polyline)
-    x_d = np.gradient(polyline[:,0])
-    x_dd = np.gradient(x_d)
-    y_d = np.gradient(polyline[:,1])
-    y_dd = np.gradient(y_d)
+        if source_position is None:
+            source_position = self.planning_problem.initial_state.position
+        sourcelanelets = self.lanelet_network.find_lanelet_by_position(np.array([source_position]))
+        source_lanelet = self.lanelet_network.find_lanelet_by_id(sourcelanelets[0][0])
 
-    # compute curvature
-    curvature = (x_d*y_dd - x_dd*y_d) / ((x_d**2 + y_d**2)**(3./2.))
+        start_lanelet = source_lanelet
+        if source_lanelet.predecessor:
+            start_lanelet = self.lanelet_network.find_lanelet_by_id(source_lanelet.predecessor[0])
+        reference_path = self.find_reference_path_to_goal(
+            start_lanelet.lanelet_id)
+        lanelets_leading_to_goal = self.find_all_lanelets_leading_to_goal(
+            start_lanelet.lanelet_id, allow_overtaking)
 
-    return curvature
-
-
-def chaikins_corner_cutting(polyline):
-    new_polyline = list()
-    new_polyline.append(polyline[0])
-    for i in range(0, len(polyline)-1):
-        new_polyline.append((3/4)*polyline[i] + (1/4)*polyline[i+1])
-        new_polyline.append((1/4)*polyline[i] + (3/4)*polyline[i+1])
-    new_polyline.append(polyline[-1])
-    return new_polyline
-
-
-def resample_polyline(polyline, step=2.0):
-    new_polyline = [polyline[0]]
-    current_position = 0 + step
-    current_length = np.linalg.norm(polyline[0] - polyline[1])
-    current_idx = 0
-    while current_idx < len(polyline) - 1:
-        if current_position >= current_length:
-            current_position = current_position - current_length
-            current_idx += 1
-            if current_idx > len(polyline) - 2:
-                break
-            current_length = np.linalg.norm(polyline[current_idx + 1]
-                                            - polyline[current_idx])
-        else:
-            rel = current_position/current_length
-            new_polyline.append((1-rel) * polyline[current_idx] +
-                                rel * polyline[current_idx + 1])
-            current_position += step
-    new_polyline.append(polyline[-1])
-    return np.array(new_polyline)
-
-
-def find_reference_path_and_lanelets_leading_to_goal(
-        route_planner: RoutePlanner, planning_problem: PlanningProblem,
-        target_lanelet_id: int, allow_overtaking: bool,
-        resampling_step_reference_path: float = 0.5,
-        max_curvature_reference_path: float = 0.2):
-    source_lanelet = route_planner.lanelet_network.lanelets_in_proximity(
-        planning_problem.initial_state.position, 100)
-
-    if len(source_lanelet) < 1:
-        raise ValueError('Expected exactly one source lanelet. Found no source lanelet.')
-    else:
-        #print(list(source_lanelet)[0])
-        source_lanelet = list(source_lanelet)[0]
-
-    start_lanelet = source_lanelet
-    if source_lanelet.predecessor:
-        start_lanelet = route_planner.lanelet_network.find_lanelet_by_id(source_lanelet.predecessor[0])
-    reference_path = route_planner.find_reference_path_to_goal(
-        start_lanelet.lanelet_id, target_lanelet_id)
-    lanelets_leading_to_goal = route_planner.find_all_lanelets_leading_to_goal(
-        start_lanelet.lanelet_id, target_lanelet_id, allow_overtaking)
-
-    # smooth reference path until curvature is smaller or equal max_curvature_reference_path
-    max_curvature = max_curvature_reference_path + 0.2
-    while max_curvature > max_curvature_reference_path:
-        reference_path = np.array(chaikins_corner_cutting(reference_path))
-        reference_path = resample_polyline(reference_path, resampling_step_reference_path)
-        max_curvature = max(abs(compute_curvature_from_polyline(reference_path)))
-    return reference_path, lanelets_leading_to_goal
+        # smooth reference path until curvature is smaller or equal max_curvature_reference_path
+        max_curvature = max_curvature_reference_path + 0.2
+        while max_curvature > max_curvature_reference_path:
+            reference_path = np.array(chaikins_corner_cutting(reference_path))
+            reference_path = resample_polyline(reference_path, resampling_step_reference_path)
+            max_curvature = max(abs(compute_curvature_from_polyline(reference_path)))
+        return reference_path, lanelets_leading_to_goal
 
 
 if __name__ == '__main__':
-    scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_2_T-1.xml'
+    scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_2_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Urban-1_1_S-1.xml'
     scenario, planning_problem_set = CommonRoadFileReader(scenario_path).open()
 
-    route_planner = RoutePlanner(scenario.lanelet_network)
-    reference_path, lanelets_leading_to_goal = find_reference_path_and_lanelets_leading_to_goal(
-        route_planner=route_planner,
-        planning_problem=planning_problem_set.find_planning_problem_by_id(11425),
-        target_lanelet_id=3492,
+    route_planner = RoutePlanner(scenario.lanelet_network, scenario_path)
+    reference_path, lanelets_leading_to_goal = route_planner.find_reference_path_and_lanelets_leading_to_goal(
         allow_overtaking=False,
         resampling_step_reference_path=1.5,
-        max_curvature_reference_path=0.15)
+        max_curvature_reference_path=0.15,
+        source_position = None)
 
     draw_object(scenario.lanelet_network, draw_params={'lanelet_network': {'lanelet': {'show_label': True}}})
     draw_object(planning_problem_set)
@@ -233,7 +227,9 @@ if __name__ == '__main__':
             'draw_linewidth': 4,
             'fill_lanelet': True,
             'facecolor': 'yellow',
-            'zorder': 45}})
+            'zorder': 45}
+       })
+        #draw_object(scenario)
 
         plt.plot(reference_path[:, 0], reference_path[:, 1], '-*g', linewidth=4, zorder=50)
 

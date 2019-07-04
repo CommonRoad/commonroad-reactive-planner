@@ -6,17 +6,16 @@ from commonroad_ccosy.geometry.trapezoid_coordinate_system import create_coordin
 import matplotlib.pyplot as plt
 import numpy as np
 
-import xml.etree.ElementTree as ET
 from reactive_planner import ReactivePlanner
 from route_planner import RoutePlanner
-from route_planner import find_reference_path_and_lanelets_leading_to_goal
 
 
 if __name__ == '__main__':
     print('Creating velocity reaching bundle....')
 
     # Please set the path to your scenario here
-    scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/hand-crafted/ZAM_Urban-1_1_S-1.xml'
+    scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_2_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Urban-1_1_S-1.xml'
 
     # Initialize reactive planner
     scenario, planning_problem_set = CommonRoadFileReader(scenario_path).open()
@@ -26,45 +25,10 @@ if __name__ == '__main__':
     plt.show(block=False)
     plt.pause(0.1)
 
-    # Find planning problem or select initial state
-    if not planning_problem_set:
-        root = ET.parse(scenario_path).getroot()
-        for lane in root.findall('lanelet'):
-            laneletid = lane.get('id')
-            break
-
-        print('No Planning Problem specified for this scenario! Lanelet ', laneletid, ' is chosen.')
-
-    else:
-        root = ET.parse(scenario_path).getroot()
-        for problem in root.findall('planningProblem'):
-            problemid = problem.get('id')
-            break
-
-        planning_problem = planning_problem_set.find_planning_problem_by_id(int(problemid))
-
-    # find goal region
-    if hasattr(planning_problem.goal.state_list[0],'position'):
-        if planning_problem.goal.lanelets_of_goal_position:
-            goal_lanelet = planning_problem.goal.lanelets_of_goal_position
-            goal_lanelet_id = goal_lanelet[0][0]
-        else:
-            goal_lanelet = scenario.lanelet_network.lanelets_in_proximity(
-                planning_problem.goal.state_list[0].position.center, 100)
-            goal_lanelet_id = list(goal_lanelet)[0].lanelet_id
-    else:
-        # set initial lanelet as goal lanelet if not other specified
-        goal_lanelet = scenario.lanelet_network.lanelets_in_proximity(
-            planning_problem.initial_state.position, 100)
-        goal_lanelet_id = list(goal_lanelet)[0].lanelet_id
-        print('No Goal Region defined: Driving on initial lanelet.')
 
     # set reference path
-    route_planner = RoutePlanner(scenario.lanelet_network)
-    reference_path, lanelets_leading_to_goal = find_reference_path_and_lanelets_leading_to_goal(
-        route_planner=route_planner,
-        planning_problem=planning_problem,
-        target_lanelet_id=goal_lanelet_id,
+    route_planner = RoutePlanner(scenario.lanelet_network, scenario_path)
+    reference_path, lanelets_leading_to_goal = route_planner.find_reference_path_and_lanelets_leading_to_goal(
         allow_overtaking=False,
         resampling_step_reference_path=1.5,
         max_curvature_reference_path=0.15)
@@ -76,8 +40,8 @@ if __name__ == '__main__':
     collision_checker = create_collision_checker(scenario)
 
     # create initial state
-    x, y = planning_problem.initial_state.position
-    heading = planning_problem.initial_state.orientation
+    x, y = route_planner.planning_problem.initial_state.position
+    heading = route_planner.planning_problem.initial_state.orientation
     x_0 = State(**{'position':np.array([x,y]),'orientation':heading, 'velocity':10, 'acceleration':0,'yaw_rate':0})
 
     planner:ReactivePlanner = ReactivePlanner()
