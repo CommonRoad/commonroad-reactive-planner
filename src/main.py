@@ -13,15 +13,18 @@ from parameter import PlanningParameter, VehicleParameter
 if __name__ == '__main__':
     print('Creating velocity reaching bundle....')
 
-    crfr = CommonRoadFileReader('/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Over-1_1.xml')
+    scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/hand-crafted/ZAM_Over-1_1.xml'
+
+    crfr = CommonRoadFileReader(scenario_path)
     scenario, _ = crfr.open()
     plt.figure(figsize=(25, 10))
     draw_object(scenario)
     plt.axis('equal')
     plt.show(block=False)
     plt.pause(0.1)
+    scenario = ReactivePlanner.add_obstacles_at_lanelet_edges(ReactivePlanner, scenario, scenario_path)
 
-    root = ET.parse('/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Over-1_1.xml').getroot()
+    root = ET.parse(scenario_path).getroot()
     for lane in root.findall('lanelet'):
         laneletid= lane.get('id')
         break
@@ -63,4 +66,3 @@ if __name__ == '__main__':
 
     print('Done')
     plt.show(block=True)
-    scenario = ReactivePlanner.add_obstacles_at_lanelet_edges(ReactivePlanner, scenario, file)  # fabian

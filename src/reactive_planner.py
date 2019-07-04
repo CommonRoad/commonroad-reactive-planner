@@ -840,34 +840,6 @@ class ReactivePlanner(object):
 
         return DynamicObstacle(42, ObstacleType.CAR,shape, trajectory.state_list[0],prediction)
 
-    '''
-    def _2boundary_not_intersecting(self, scenario, p, own_ID, total_IDs):
-        total_IDs.remove(own_ID)
-        print(p[0][0])
-        for i in total_IDs:
-
-
-
-            if scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[0]:
-                if p[0] not in scenario.lanelet_network.find_lanelet_by_id(i).left_vertices and p[0] not in scenario.lanelet_network.find_lanelet_by_id(i).right_vertices:
-                    return False
-            if scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[1]:
-                if p[1] not in scenario.lanelet_network.find_lanelet_by_id(i).left_vertices and p[1] not in scenario.lanelet_network.find_lanelet_by_id(i).right_vertices:
-                    return False
-
-
-            # element on other lane
-            #if scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[0]:
-            #    if (scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[0] not in scenario.lanelet_network.find_lanelet_by_id(i).left_vertices) \
-            #            and (scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[0] not in scenario.lanelet_network.find_lanelet_by_id(i).right_vertices):
-            #        return False
-            #if scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[1]:
-            #    if (scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[1] not in scenario.lanelet_network.find_lanelet_by_id(i).left_vertices) \
-            #            and (scenario.lanelet_network.find_lanelet_by_id(i).contains_points(p)[1] not in scenario.lanelet_network.find_lanelet_by_id(i).right_vertices):
-            #        return False
-        return True
-    '''
-
     def _boundary_not_intersecting(self, scenario, p, own_ID, total_IDs):
         n = 50
 

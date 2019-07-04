@@ -20,7 +20,7 @@ class PlanningParameter:
             self.t_min = 0.1
 
             # direction planning parameter
-            self.d_deviation = 2
+            self.d_deviation = 5
             self.d_N = 5
 
         else:
