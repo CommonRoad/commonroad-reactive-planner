@@ -11,11 +11,18 @@ from reactive_planner import ReactivePlanner
 
 
 if __name__ == '__main__':
+    #fabian
+    import cProfile
     print('Creating velocity reaching bundle....')
 
     file = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Over-1_1.xml'
     crfr = CommonRoadFileReader(file)
     scenario, _ = crfr.open()
+
+    # fabian
+    pr = cProfile.Profile()
+    pr.enable()
+
     plt.figure(figsize=(25, 10))
     draw_object(scenario)
     plt.axis('equal')
@@ -55,6 +62,10 @@ if __name__ == '__main__':
         x_cl = (optimal[2][1], optimal[3][1])
 
         print("Goal state is: {}".format(optimal[1].state_list[-1]))
+
+    # fabian
+    pr.disable()
+    pr.print_stats(sort='time')
 
     print('Done')
     plt.show(block=True)
