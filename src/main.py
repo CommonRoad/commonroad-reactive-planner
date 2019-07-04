@@ -44,7 +44,7 @@ if __name__ == '__main__':
     params_planning = PlanningParameter(velocity_reaching=True)
     params_vehicle = VehicleParameter()
 
-    planner: ReactivePlanner = ReactivePlanner()
+    planner:ReactivePlanner = ReactivePlanner(lanelet_network=scenario.lanelet_network)
     planner.set_parameters(params_planning)
     planner.set_parameters(params_vehicle)
     planner.set_reference_path(reference_path)

@@ -756,6 +756,7 @@ class ReactivePlanner(object):
         # reset statistics
         self._infeasible_count_collision = 0
         self._infeasible_count_kinematics = 0
+        self._infeasible_count_behavior = 0
 
 
         t0 = time.time()
@@ -786,6 +787,12 @@ class ReactivePlanner(object):
         if not feas:
             self._infeasible_count_kinematics += 1
 
+        if feas:
+            # check trajectory for traffic rule violation
+            feas &= self._check_driving_behavior(trajectory)
+            if not feas:
+                self._infeasible_count_behavior += 1
+
         # only check for collisions (expensive operation) if trajectory is kinematically feasible
         if feas:
             # check trajectory for collisions
@@ -794,6 +801,42 @@ class ReactivePlanner(object):
                 self._infeasible_count_collision += 1
 
         return feas
+
+    def _check_driving_behavior(self, trajectory: TrajectorySample) -> bool:
+        """
+        Checks a given trajectory for violation of traffic rules and behavior (e.g. roadkeeping, velcoity)
+        :param trajectory: The trajectory to check
+        :return: True if appropriate driving behavior, False otherwise
+        """
+
+        assert self.lanelet_network is not None, \
+            'lanelet network must be provided during initialization for using get_reference_of_lane().'
+
+        violation = False
+
+        # Pos to check leaving lanelet in cartesian space
+        traj_pos_cart = np.column_stack((trajectory.cartesian.x, trajectory.cartesian.y))
+        tray_in_any_lanelet = np.full(len(traj_pos_cart), False)
+
+        v_max = np.max(trajectory.cartesian.v)
+        cart_course = trajectory.cartesian.theta
+        adj_candidate = list(self.lanelet_network.lanelets_in_proximity(traj_pos_cart[0, :], 10))
+
+        # Check if every point of trajectory is inside any lanelet
+        for k in range(len(adj_candidate)):
+            tray_in_any_lanelet = np.logical_or(tray_in_any_lanelet, adj_candidate[k].contains_points(traj_pos_cart))
+        boundary_crossed = not all(tray_in_any_lanelet)
+
+
+        # TODO: check speedlimit on lanelet with: self.lanelet_network.find_lanelet_by_id(lanelet_id).speed_limit
+        for k in range(len(adj_candidate)):
+            if v_max > adj_candidate[k].speed_limit * 1.1:
+                print(v_max)
+                print('Please slow down!')
+
+        violation = boundary_crossed | violation
+
+        return not violation
 
     def _check_for_collisions(self, trajectory: TrajectorySample, cc: object) -> bool:
         """
