@@ -917,7 +917,6 @@ class ReactivePlanner(object):
         # initial index of sampling set to use
         i = 0
 
-        #feas = TrajectoryBundle()
         # sample until trajectory has been found or sampling sets are empty
         while i < self._sampling_level:
             print('<ReactivePlanner>: Starting at sampling density {} of {}'.format(i + 1, self._sampling_level))
@@ -929,18 +928,18 @@ class ReactivePlanner(object):
 
             i = i+1
 
-            feas = TrajectoryBundle()
+            val = TrajectoryBundle()
 
             if not bundle.empty():
                 for traj in bundle.trajectory_bundle:
                     tmp = self._compute_cartesian_trajectory(traj)
                     if tmp is not None:
                         tmp.reevaluate_costs()
-                        feas.add_trajectory(tmp)
+                        val.add_trajectory(tmp)
 
-            feas.trajectory_bundle = sorted(feas.trajectory_bundle, key=lambda traj: traj.total_cost)
+            val.trajectory_bundle = sorted(val.trajectory_bundle, key=lambda traj: traj.total_cost)
 
-            for traj in feas.trajectory_bundle:
+            for traj in val.trajectory_bundle:
                 if self._feasible_trajectory(traj, cc):
                     self._min_cost=bundle_old.min_costs()
                     self._max_cost=bundle_old.max_costs()
@@ -949,6 +948,36 @@ class ReactivePlanner(object):
                             traj.total_cost,
                             ((traj.total_cost - self._min_cost) / (self._max_cost - self._min_cost))))
                     return self._compute_trajectory_pair(traj)
+
+            if x_0.velocity <= 0.1:
+                bundle = TrajectoryBundle()
+                # create artifical standstill trajectory
+                print('Adding standstill trajectory')
+                traj_lon = QuarticTrajectory(t_start_s=0, duration_s=self.horizon, desired_horizon=self.horizon,
+                                                    start_state=x_0_lon,
+                                                    desired_velocity=self._desired_speed)
+                traj_lat = QuinticTrajectory(t_start_s=0, desired_horizon=self.horizon,
+                                                       start_state=x_0_lat)
+                p = TrajectorySample(0, traj_lon, traj_lat, 0)
+                p.cartesian = CartesianSample(np.repeat(x_0.position[0], self.N), np.repeat(x_0.position[1], self.N),
+                                              np.repeat(x_0.orientation, self.N), np.repeat(0, self.N),
+                                              np.repeat(0, self.N), np.repeat(0, self.N), np.repeat(0, self.N))
+                p.curvilinear = CurviLinearSample(np.repeat(x_0_lon[0], self.N), np.repeat(x_0_lat[0], self.N),
+                                                  np.repeat(x_0.orientation, self.N), np.repeat(x_0_lat[1], self.N),
+                                                  np.repeat(x_0_lat[2], self.N), np.repeat(x_0_lon[1], self.N),
+                                                  np.repeat(x_0_lon[2], self.N))
+                p = self._compute_cartesian_trajectory(p)
+                p.reevaluate_costs()
+                bundle.add_trajectory(p)
+                bundle_old = bundle
+                if self._feasible_trajectory(p, cc):
+                    self._min_cost=bundle_old.min_costs()
+                    self._max_cost=bundle_old.max_costs()
+                    print(
+                        'Found optimal trajectory with costs = {}, which corresponds to {} percent of seen costs'.format(
+                            p.total_cost,
+                            ((p.total_cost - self._min_cost) / (self._max_cost - self._min_cost))))
+                    return self._compute_trajectory_pair(p)
 
         # check if feasible trajectory exists -> emergency mode
         if bundle.empty():
@@ -1054,7 +1083,8 @@ class ReactivePlanner(object):
         feas = True
 
         # check kinematic constraints
-        feas &= self._check_kinematics(trajectory)
+        # Problem check_kinematics2 fehler
+        feas &= self._check_kinematics2(trajectory)
         if not feas:
             self._infeasible_count_kinematics += 1
 
