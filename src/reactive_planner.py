@@ -451,7 +451,7 @@ class ReactivePlanner(object):
                 ddot = d_acceleration[i] - dp * s_acceleration[i]
 
                 if s_velocity[i] > 0.001:
-                    d_pp = ddot / (s_velocity[i] ** 2)
+                    dpp = ddot / (s_velocity[i] ** 2)
                 else:
                     if np.abs(ddot) > 0.00003:
                         dpp = None
@@ -524,7 +524,6 @@ class ReactivePlanner(object):
                 except Exception as e:
                     print(e)
                     return False
-
             # store curvilinear extension
             trajectory.ext_curvilinear = CurviLinearSample(s_n, d_n, theta_n)
             # store Cartesian extension
@@ -540,6 +539,203 @@ class ReactivePlanner(object):
 
         # Trajectory is feasible
         return True
+
+    def _check_kinematics2(self, trajectory: TrajectorySample) -> bool:
+        v = trajectory.cartesian.v
+        a = trajectory.cartesian.a
+        theta_gl = trajectory.cartesian.theta
+        kappa_gl = trajectory.cartesian.kappa
+        s = trajectory.curvilinear.s
+        d = trajectory.curvilinear.d
+        theta_cl = trajectory.curvilinear.theta
+        s_velocity = trajectory.curvilinear.ss
+
+        for i in range(0, len(s)):
+            #compute Global position
+            try:
+                pos = self._cosy.convert_to_cartesian_coords(s[i], d[i])
+            except ValueError:
+                # outside of projection domain
+                return False
+
+        if not self._check_vehicle_model(v[-1], a[-1],
+                                         (theta_gl[-1] - theta_gl[-2]) / self.dT if len(theta_gl) > 1 else 0.,
+                                         kappa_gl[-1],
+                                         (kappa_gl[-1] - kappa_gl[-2]) / self.dT if len(kappa_gl) > 1 else 0.):
+            return False
+
+        if trajectory.trajectory_long.desired_horizon > trajectory.trajectory_long.duration_s:
+            # extend trajectory
+            s_n, d_n, theta_n, v_n, a_n = self._extend_trajectory(s[-1], d[-1], s_velocity[-1], theta_cl[-1], v[-1],
+                                                                  a[-1],
+                                                                  trajectory.trajectory_long.desired_horizon - trajectory.trajectory_long.duration_s,
+                                                                  self.dT)
+            # transform to cartesian
+            for i in range(len(s_n)):
+                try:
+                    pos = self._cosy.convert_to_cartesian_coords(s_n[i], d_n[i])
+                except Exception as e:
+                    print(e)
+                    return False
+        return True
+    #Fabian
+    def _compute_cartesian_trajectory(self, trajectory: TrajectorySample) -> bool:
+        """
+        Checks the kinematics of given trajectory and computes the cartesian trajectory information
+        :param trajectory: The trajectory to check
+        :return: True if the trajectory is feasible and false otherwise
+        """
+
+        # constants
+        _LOW_VEL_MODE = True
+
+        # create time array
+        t = np.arange(0, trajectory.trajectory_long.duration_s + self.dT, self.dT)
+
+        # precompute time interval information
+        t2 = np.square(t)
+        t3 = t2 * t
+        t4 = np.square(t2)
+        t5 = t4 * t
+        # compute position, velocity, acceleration
+        s = trajectory.trajectory_long.calc_position(t, t2, t3, t4, t5)  # lon pos
+        s_velocity = trajectory.trajectory_long.calc_velocity(t, t2, t3, t4)  # lon velocity
+        s_acceleration = trajectory.trajectory_long.calc_acceleration(t, t2, t3)  # lon acceleration
+
+        s1 = s - s[0]
+        s2 = np.square(s1)
+        s3 = s2 * s1
+        s4 = np.square(s2)
+        s5 = s4 * s1
+
+        # d = trajectory.trajectory_lat.calc_position(t, t2, t3, t4, t5)  # lat pos
+        d = trajectory.trajectory_lat.calc_position(s1, s2, s3, s4, s5)  # lat pos
+        # d_velocity = trajectory.trajectory_lat.calc_velocity(t, t2, t3, t4)  # lat velocity
+        d_velocity = trajectory.trajectory_lat.calc_velocity(s1, s2, s3, s4)  # lat velocity
+        # d_acceleration = trajectory.trajectory_lat.calc_acceleration(t, t2, t3)  # lat acceleration
+        d_acceleration = trajectory.trajectory_lat.calc_acceleration(s1, s2, s3)  # lat acceleration
+
+        x = list()  # [x_0.position[0]]
+        y = list()  # [x_0.position[1]]
+        theta_gl = list()  # [x_0.orientation]
+        theta_cl = list()  # [x_0.orientation - np.interp(s[0], self._ref_pos, self._theta_ref)]
+        v = list()  # [x_0.v]
+        a = list()  # [x_0.a]
+        kappa_gl = list()  # [x_0.kappa]
+        #kappa_cl = list()  # [x_0.kappa - np.interp(s[0], self._ref_pos, self._ref_curv)]
+        for i in range(0, len(s)):
+            # compute Global position
+            try:
+                pos = self._cosy.convert_to_cartesian_coords(s[i], d[i])
+            except ValueError:
+                # outside of projection domain
+                return None
+            x.append(pos[0])
+            y.append(pos[1])
+
+            # compute orientations
+            dp = None
+            dpp = None
+            if not _LOW_VEL_MODE:
+                if s_velocity[i] > 0.001:
+                    dp = d_velocity[i] / s_velocity[i]
+                else:
+                    if d_velocity[i] > 0.001:
+                        dp = None
+                    else:
+                        dp = 0.
+                ddot = d_acceleration[i] - dp * s_acceleration[i]
+
+                if s_velocity[i] > 0.001:
+                    dpp = ddot / (s_velocity[i] ** 2)
+                else:
+                    if np.abs(ddot) > 0.00003:
+                        dpp = None
+                    else:
+                        dpp = 0.
+            else:
+                dp = d_velocity[i]
+                dpp = d_acceleration[i]
+
+            # add cl orientation
+            if s_velocity[i] > 0.005:
+                if _LOW_VEL_MODE:
+                    theta_cl.append(np.arctan2(dp, 1.0))
+                else:
+                    theta_cl.append(np.arctan2(d_velocity[i], s_velocity[i]))
+            else:
+                theta_cl.append(np.interp(s[i],self._ref_pos,self._theta_ref))
+
+            # add global orientation
+            theta_gl.append(theta_cl[-1] + np.interp(s[i], self._ref_pos, self._theta_ref))
+
+            # Kappa
+            k_r = np.interp(s[i], self._ref_pos, self._ref_curv)
+            k_r_d = np.interp(s[i], self._ref_pos, self._ref_curv_d)
+            # ref_curv_prime = np.gradient(self._ref_curv, self._ref_pos)
+            oneKrD = (1 - k_r * d[i])
+            cosTheta = np.cos(theta_cl[-1])
+            tanTheta = np.tan(theta_cl[-1])
+            kappa = (dpp + k_r * dp * tanTheta) * cosTheta * (cosTheta / oneKrD) ** 2 + (cosTheta / oneKrD) * k_r
+            kappa_gl.append(kappa)
+            #kappa_cl.append(kappa_gl[-1] - k_r)
+
+            # velocity
+            v.append(s_velocity[i] * (oneKrD / (np.cos(theta_cl[-1]))))
+            if v[-1] <= 10 ** -1:
+                v[-1] = 0
+
+            # a.append((v[-1] - v[-2]) / self.dT)
+
+            a.append(s_acceleration[i] * oneKrD / cosTheta + ((s_velocity[i] ** 2) / cosTheta) * (
+                        oneKrD * tanTheta * (kappa_gl[-1] * oneKrD / cosTheta - k_r) - (
+                            k_r_d * d[i] + k_r * d_velocity[i])))
+
+            # check kinematics to already discard infeasible trajectories
+            #if not self._check_vehicle_model(v[-1], a[-1],
+            #                                 (theta_gl[-1] - theta_gl[-2]) / self.dT if len(theta_gl) > 1 else 0.,
+            #                                 kappa_gl[-1],
+            #                                 (kappa_gl[-1] - kappa_gl[-2]) / self.dT if len(kappa_gl) > 1 else 0.):
+            #    return False
+
+        # convert to array
+        v = np.array(v)
+        a = np.array(a)
+
+        # check if trajectories planning horizon is shorter than expected
+        if trajectory.trajectory_long.desired_horizon > trajectory.trajectory_long.duration_s:
+            # extend trajectory
+            s_n, d_n, theta_n, v_n, a_n = self._extend_trajectory(s[-1], d[-1], s_velocity[-1], theta_cl[-1], v[-1],
+                                                                  a[-1],
+                                                                  trajectory.trajectory_long.desired_horizon - trajectory.trajectory_long.duration_s,
+                                                                  self.dT)
+            # transform to cartesian
+            x_n = list()
+            y_n = list()
+            for i in range(len(s_n)):
+                try:
+                    pos = self._cosy.convert_to_cartesian_coords(s_n[i], d_n[i])
+                    x_n.append(pos[0])
+                    y_n.append(pos[1])
+                except Exception as e:
+                    #print(e)
+                    return None
+            # store curvilinear extension
+            trajectory.ext_curvilinear = CurviLinearSample(s_n, d_n, theta_n)
+            # store Cartesian extension
+            trajectory.ext_cartesian = CartesianSample(x_n, y_n, np.repeat(theta_gl[-1], len(s_n)), v_n, a_n, 0, 0)
+
+        # store Cartesian trajectory
+        trajectory.cartesian = CartesianSample(x, y, theta_gl, v, a, kappa_gl, np.append([0], np.diff(kappa_gl)))
+
+        # store Curvilinear trajectory
+        # theta_cl = trajectory.cartesian.theta - np.interp(trajectory.curvilinear.s, self._ref_pos, self._ref_curv)
+        trajectory.curvilinear = CurviLinearSample(s, d, theta_cl, ss=s_velocity, sss=s_acceleration, dd=d_velocity,
+                                                   ddd=d_acceleration)
+
+        # Trajectory is feasible
+        return trajectory
+
 
     def draw_trajectory_set(self, trajectory_bundle: List[TrajectorySample], step=2):
         """
@@ -629,19 +825,25 @@ class ReactivePlanner(object):
         while bundle.empty() and i < self._sampling_level:
             print('<ReactivePlanner>: Starting at sampling density {} of {}'.format(i + 1, self._sampling_level))
             print('<ReactivePlanner>: Sampling {} trajectories'.format(self.no_of_samples(i)))
+            # 1 Start
             # plan trajectory bundle
+            # return: trajectory bundle with all sample trajectories.
             bundle = self._create_trajectory_bundle(self._desired_speed, x_0_lon, x_0_lat, samp_level=i)
 
-            bundle_old = bundle
 
+            bundle_old = bundle
+            # 1 Ende
+            # 2 Start
             # check feasibility
             bundle = self._get_feasible_trajectories(bundle, cc, x_0)
+            # geht nur mit feasible trajectorien:   optimal_trajectory = bundle.updated_optimal_trajectory() if not bundle.empty() else None
 
             # print statistics
             print('<ReactivePlanner>: Rejected {} infeasible trajectories due to kinematics'.format(
                 self.no_of_infeasible_trajectories_kinematics()))
             print('<ReactivePlanner>: Rejected {} infeasible trajectories due to collisions'.format(
                 self.no_of_infeasible_trajectories_collision()))
+            # 2 Ende
 
             i = i + 1
             if bundle.empty() and x_0.velocity <= 0.1:
@@ -677,14 +879,94 @@ class ReactivePlanner(object):
         # find optimal trajectory
         optimal_trajectory = bundle.updated_optimal_trajectory() if not bundle.empty() else None
         if not bundle.empty():
+            #print("here")
             self._min_cost = bundle_old.min_costs()
             self._max_cost = bundle_old.max_costs()
+            print(self._min_cost, self._max_cost)
+            #self._min_cost = bundle.min_costs()
+            #self._max_cost = bundle.max_costs()
+            #print(self._min_cost, self._max_cost)
             # self.draw_trajectory_set(self._feasible_trajectories)
             print('Found optimal trajectory with costs = {}, which corresponds to {} percent of seen costs'.format(
                 optimal_trajectory.total_cost,
                 ((optimal_trajectory.total_cost - self._min_cost) / (self._max_cost - self._min_cost))))
 
         return self._compute_trajectory_pair(optimal_trajectory) if not bundle.empty() else None
+
+    #Fabian Lazy evaluation
+    def plan2(self, x_0: State, cc: object, cl_states=None) -> tuple:
+        """
+        Plans an optimal trajectory
+        :param x_0: Initial state as CR state (CR = cartesian)
+        :param cc:  CollisionChecker object
+        :param cl_states: Curvilinear state if replanning is used
+        :return: Optimal trajectory as tuple
+        """
+        self.x_0 = x_0
+
+        # compute initial states
+        if cl_states is not None:
+            x_0_lon, x_0_lat = cl_states
+        else:
+            x_0_lon, x_0_lat = self._compute_initial_states(x_0)
+
+        print('<Reactive Planner>: initial state is: lon = {} / lat = {}'.format(x_0_lon, x_0_lat))
+
+        # create empty bundle
+        bundle = TrajectoryBundle()
+        # initial index of sampling set to use
+        i = 0
+
+        #feas = TrajectoryBundle()
+        # sample until trajectory has been found or sampling sets are empty
+        while i < self._sampling_level:
+            print('<ReactivePlanner>: Starting at sampling density {} of {}'.format(i + 1, self._sampling_level))
+            print('<ReactivePlanner>: Sampling {} trajectories'.format(self.no_of_samples(i)))
+
+            bundle = self._create_trajectory_bundle(self._desired_speed, x_0_lon, x_0_lat, samp_level=i)
+
+            bundle_old = bundle
+
+            i = i+1
+
+            feas = TrajectoryBundle()
+
+            if not bundle.empty():
+                for traj in bundle.trajectory_bundle:
+                    tmp = self._compute_cartesian_trajectory(traj)
+                    if tmp is not None:
+                        tmp.reevaluate_costs()
+                        feas.add_trajectory(tmp)
+
+            feas.trajectory_bundle = sorted(feas.trajectory_bundle, key=lambda traj: traj.total_cost)
+
+            for traj in feas.trajectory_bundle:
+                if self._feasible_trajectory(traj, cc):
+                    self._min_cost=bundle_old.min_costs()
+                    self._max_cost=bundle_old.max_costs()
+                    print(
+                        'Found optimal trajectory with costs = {}, which corresponds to {} percent of seen costs'.format(
+                            traj.total_cost,
+                            ((traj.total_cost - self._min_cost) / (self._max_cost - self._min_cost))))
+                    return self._compute_trajectory_pair(traj)
+
+        # check if feasible trajectory exists -> emergency mode
+        if bundle.empty():
+            print('<ReactivePlanner>: Could not find any trajectory out of {} trajectories'.format(
+                sum([self.no_of_samples(i) for i in range(self._sampling_level)])))
+            self._feasible_trajectories = bundle_old.trajectory_bundle
+            print('<ReactivePlanner>: Cannot find trajectory with default sampling parameters. '
+                  'Switching to emergency mode!')
+
+        # store feasible trajectories (and trajectories with higher cost than optimal trajectory)
+        self._feasible_trajectories = bundle.trajectory_bundle if not bundle.empty() else None
+
+        return None
+
+    # Fabian Ende
+
+
+
 
     def _compute_trajectory_pair(self, trajectory: TrajectorySample) -> tuple:
         """
