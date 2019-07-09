@@ -382,7 +382,7 @@ class ReactivePlanner(object):
             return False
 
         return feasible
-
+    '''
     def _check_kinematics(self, trajectory: TrajectorySample) -> bool:
         """
         Checks the kinematics of given trajectory and computes the cartesian trajectory information
@@ -539,51 +539,33 @@ class ReactivePlanner(object):
 
         # Trajectory is feasible
         return True
+    '''
 
-    def _check_kinematics2(self, trajectory: TrajectorySample) -> bool:
+    def _check_kinematics(self, trajectory: TrajectorySample) -> bool:
+        """
+        Checks the kinematics of given trajectory
+        :param trajectory: The trajectory to check with cartesian information
+        :return: True if the trajectory is feasible and false otherwise
+        """
         v = trajectory.cartesian.v
         a = trajectory.cartesian.a
         theta_gl = trajectory.cartesian.theta
         kappa_gl = trajectory.cartesian.kappa
         s = trajectory.curvilinear.s
-        d = trajectory.curvilinear.d
-        theta_cl = trajectory.curvilinear.theta
-        s_velocity = trajectory.curvilinear.ss
-
         for i in range(0, len(s)):
-            #compute Global position
-            try:
-                pos = self._cosy.convert_to_cartesian_coords(s[i], d[i])
-            except ValueError:
-                # outside of projection domain
+            if not self._check_vehicle_model(v[i], a[i],
+                                             (theta_gl[i] - theta_gl[i - 1]) / self.dT if i + 1 > 1 else 0.,
+                                             kappa_gl[i],
+                                             (kappa_gl[i] - kappa_gl[i - 1]) / self.dT if i + 1 > 1 else 0.):
                 return False
-
-        if not self._check_vehicle_model(v[-1], a[-1],
-                                         (theta_gl[-1] - theta_gl[-2]) / self.dT if len(theta_gl) > 1 else 0.,
-                                         kappa_gl[-1],
-                                         (kappa_gl[-1] - kappa_gl[-2]) / self.dT if len(kappa_gl) > 1 else 0.):
-            return False
-
-        if trajectory.trajectory_long.desired_horizon > trajectory.trajectory_long.duration_s:
-            # extend trajectory
-            s_n, d_n, theta_n, v_n, a_n = self._extend_trajectory(s[-1], d[-1], s_velocity[-1], theta_cl[-1], v[-1],
-                                                                  a[-1],
-                                                                  trajectory.trajectory_long.desired_horizon - trajectory.trajectory_long.duration_s,
-                                                                  self.dT)
-            # transform to cartesian
-            for i in range(len(s_n)):
-                try:
-                    pos = self._cosy.convert_to_cartesian_coords(s_n[i], d_n[i])
-                except Exception as e:
-                    print(e)
-                    return False
         return True
-    #Fabian
-    def _compute_cartesian_trajectory(self, trajectory: TrajectorySample) -> bool:
+
+    # Fabian
+    def _compute_cartesian_trajectory(self, trajectory: TrajectorySample):
         """
-        Checks the kinematics of given trajectory and computes the cartesian trajectory information
-        :param trajectory: The trajectory to check
-        :return: True if the trajectory is feasible and false otherwise
+        Computes the cartesian trajectory information
+        :param trajectory: The trajectory to compute
+        :return: Computed trajectory
         """
 
         # constants
@@ -622,7 +604,6 @@ class ReactivePlanner(object):
         v = list()  # [x_0.v]
         a = list()  # [x_0.a]
         kappa_gl = list()  # [x_0.kappa]
-        #kappa_cl = list()  # [x_0.kappa - np.interp(s[0], self._ref_pos, self._ref_curv)]
         for i in range(0, len(s)):
             # compute Global position
             try:
@@ -664,7 +645,7 @@ class ReactivePlanner(object):
                 else:
                     theta_cl.append(np.arctan2(d_velocity[i], s_velocity[i]))
             else:
-                theta_cl.append(np.interp(s[i],self._ref_pos,self._theta_ref))
+                theta_cl.append(np.interp(s[i], self._ref_pos, self._theta_ref))
 
             # add global orientation
             theta_gl.append(theta_cl[-1] + np.interp(s[i], self._ref_pos, self._theta_ref))
@@ -678,7 +659,7 @@ class ReactivePlanner(object):
             tanTheta = np.tan(theta_cl[-1])
             kappa = (dpp + k_r * dp * tanTheta) * cosTheta * (cosTheta / oneKrD) ** 2 + (cosTheta / oneKrD) * k_r
             kappa_gl.append(kappa)
-            #kappa_cl.append(kappa_gl[-1] - k_r)
+            # kappa_cl.append(kappa_gl[-1] - k_r)
 
             # velocity
             v.append(s_velocity[i] * (oneKrD / (np.cos(theta_cl[-1]))))
@@ -688,15 +669,8 @@ class ReactivePlanner(object):
             # a.append((v[-1] - v[-2]) / self.dT)
 
             a.append(s_acceleration[i] * oneKrD / cosTheta + ((s_velocity[i] ** 2) / cosTheta) * (
-                        oneKrD * tanTheta * (kappa_gl[-1] * oneKrD / cosTheta - k_r) - (
-                            k_r_d * d[i] + k_r * d_velocity[i])))
-
-            # check kinematics to already discard infeasible trajectories
-            #if not self._check_vehicle_model(v[-1], a[-1],
-            #                                 (theta_gl[-1] - theta_gl[-2]) / self.dT if len(theta_gl) > 1 else 0.,
-            #                                 kappa_gl[-1],
-            #                                 (kappa_gl[-1] - kappa_gl[-2]) / self.dT if len(kappa_gl) > 1 else 0.):
-            #    return False
+                    oneKrD * tanTheta * (kappa_gl[-1] * oneKrD / cosTheta - k_r) - (
+                    k_r_d * d[i] + k_r * d_velocity[i])))
 
         # convert to array
         v = np.array(v)
@@ -718,7 +692,7 @@ class ReactivePlanner(object):
                     x_n.append(pos[0])
                     y_n.append(pos[1])
                 except Exception as e:
-                    #print(e)
+                    # print(e)
                     return None
             # store curvilinear extension
             trajectory.ext_curvilinear = CurviLinearSample(s_n, d_n, theta_n)
@@ -735,7 +709,6 @@ class ReactivePlanner(object):
 
         # Trajectory is feasible
         return trajectory
-
 
     def draw_trajectory_set(self, trajectory_bundle: List[TrajectorySample], step=2):
         """
@@ -797,7 +770,7 @@ class ReactivePlanner(object):
 
         return (x_0_lon, x_0_lat)
 
-
+    '''
     def plan(self, x_0: State, cc: object, cl_states=None) -> tuple:
         """
         Plans an optimal trajectory
@@ -892,15 +865,16 @@ class ReactivePlanner(object):
                 ((optimal_trajectory.total_cost - self._min_cost) / (self._max_cost - self._min_cost))))
 
         return self._compute_trajectory_pair(optimal_trajectory) if not bundle.empty() else None
+    '''
 
     #Fabian Lazy evaluation
-    def plan2(self, x_0: State, cc: object, cl_states=None) -> tuple:
+    def plan(self, x_0: State, cc: object, cl_states=None) -> tuple:
         """
         Plans an optimal trajectory
         :param x_0: Initial state as CR state (CR = cartesian)
         :param cc:  CollisionChecker object
         :param cl_states: Curvilinear state if replanning is used
-        :return: Optimal trajectory as tuple
+        :return: Optimal trajectory as tuple or None, if no trajectory is found.
         """
         self.x_0 = x_0
 
@@ -917,19 +891,17 @@ class ReactivePlanner(object):
         # initial index of sampling set to use
         i = 0
 
-        # sample until trajectory has been found or sampling sets are empty
+        # sample until trajectory has been found or sampling_level exceeds its limit
         while i < self._sampling_level:
             print('<ReactivePlanner>: Starting at sampling density {} of {}'.format(i + 1, self._sampling_level))
             print('<ReactivePlanner>: Sampling {} trajectories'.format(self.no_of_samples(i)))
 
             bundle = self._create_trajectory_bundle(self._desired_speed, x_0_lon, x_0_lat, samp_level=i)
-
             bundle_old = bundle
-
-            i = i+1
-
             val = TrajectoryBundle()
 
+            i = i+1
+            # store only valid trajectories with computed cartesian coordinates
             if not bundle.empty():
                 for traj in bundle.trajectory_bundle:
                     tmp = self._compute_cartesian_trajectory(traj)
@@ -937,8 +909,10 @@ class ReactivePlanner(object):
                         tmp.reevaluate_costs()
                         val.add_trajectory(tmp)
 
+            # sort valid trajectories by their costs
             val.trajectory_bundle = sorted(val.trajectory_bundle, key=lambda traj: traj.total_cost)
 
+            # iterate over valid trajectories and return first feasible trajectory
             for traj in val.trajectory_bundle:
                 if self._feasible_trajectory(traj, cc):
                     self._min_cost=bundle_old.min_costs()
@@ -949,8 +923,9 @@ class ReactivePlanner(object):
                             ((traj.total_cost - self._min_cost) / (self._max_cost - self._min_cost))))
                     return self._compute_trajectory_pair(traj)
 
+            # add standstill trajectory
+            bundle = TrajectoryBundle()
             if x_0.velocity <= 0.1:
-                bundle = TrajectoryBundle()
                 # create artifical standstill trajectory
                 print('Adding standstill trajectory')
                 traj_lon = QuarticTrajectory(t_start_s=0, duration_s=self.horizon, desired_horizon=self.horizon,
@@ -988,7 +963,8 @@ class ReactivePlanner(object):
                   'Switching to emergency mode!')
 
         # store feasible trajectories (and trajectories with higher cost than optimal trajectory)
-        self._feasible_trajectories = bundle.trajectory_bundle if not bundle.empty() else None
+        # Problem: not all trajectories are checked for feasibility
+        #self._feasible_trajectories = bundle.trajectory_bundle if not bundle.empty() else None
 
         return None
 
@@ -1084,7 +1060,7 @@ class ReactivePlanner(object):
 
         # check kinematic constraints
         # Problem check_kinematics2 fehler
-        feas &= self._check_kinematics2(trajectory)
+        feas &= self._check_kinematics(trajectory)
         if not feas:
             self._infeasible_count_kinematics += 1
 

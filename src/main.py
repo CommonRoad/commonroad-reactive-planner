@@ -51,7 +51,7 @@ if __name__ == '__main__':
     x_cl = None
 
     for k in range(0, 100):
-        optimal = planner.plan2(x_0, collision_checker, cl_states=x_cl)
+        optimal = planner.plan(x_0, collision_checker, cl_states=x_cl)
         # convert to CR obstacle
         ego = planner.convert_cr_trajectory_to_object(optimal[0])
         draw_object(ego)
