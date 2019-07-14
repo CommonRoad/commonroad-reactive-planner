@@ -13,14 +13,14 @@ import math
 
 
 # TODO:
-#  a) start lanelet besser festlegen
-#  b) Problem lane change mit Anfang ist Ziel Lanelet -> kein Pfad gefunden!
-#  evtl Lösung: Pfad zu rechter/linker Linie festlegen
 #  c) evtl: rechts/links?
 #  d) über verschiedene Ziel lanelets iterieren
-#  e) goal state: left/right vertices definieren?! -> nicht mehr gebraucht!
-#  f) über verschiedene Factoren iterieren, falls kein Pfad gefunden
-
+#  f) über verschiedene Faktoren iterieren, falls kein Pfad gefunden
+# DONE:
+# b) Problem lane change mit Anfang ist Ziel Lanelet -> kein Pfad gefunden!
+# Lösung: Pfad zu rechter/linker Linie festlegen
+# a) start lanelet besser festlegen -> in find_reference_path nicht für adj_left/right ersetzen lassen
+# e) goal state: left/right vertices definieren?! -> nicht mehr gebraucht, da goal anderweitig gefunden!
 class RoutePlanner:
     def __init__(self, lanelet_network, scenario_path):
 
@@ -325,9 +325,10 @@ class RoutePlanner:
         # if we allow overtaking, check for all lanelets to the left, if they drive in same direction
         # TODO: also consider predecessors/ successors?!
         revert_direction = []
-        if current_lanelet.adj_left:
-            if not current_lanelet.adj_left_same_direction:
-                revert_direction.append(current_lanelet.adj_left)
+        if allow_overtaking:
+            if current_lanelet.adj_left:
+                if not current_lanelet.adj_left_same_direction:
+                    revert_direction.append(current_lanelet.adj_left)
 
         lanelet_ids = []
         for lanelet in lanelet_list:
@@ -356,14 +357,12 @@ class RoutePlanner:
         distance, start_index = spatial.KDTree(current_lanelet.center_vertices).query(current_pos)
         offset = len(current_lanelet.center_vertices[start_index:]) % factor
         split = int(len(current_lanelet.center_vertices[start_index:]) / factor)
-        #if offset == 0:
-        #    split_array = np.arange(split, factor*split, split)
         if offset == 1 and split == 1:
-            # TODO: len < 2 -> just replan without splitting, so return original network
+            # len < 2 -> just replan without splitting, so return original network
             return self.lanelet_network
         else:
-            split_array = np.arange(split, factor*split, split)
-
+            #split_array = np.arange(split, factor*split, split)
+            split_array = np.arange(2, (factor-1) * split, split)
         lanes = []
         # split each lanelet
         for lanelet in lanelet_list:
@@ -371,7 +370,7 @@ class RoutePlanner:
             if lanelet.lanelet_id == current_id:
                 # only add fist lanelet part
                 # TODO: check if index + split out of bound!
-                lanes.append(lanelet.center_vertices[start_index: start_index + split])
+                lanes.append(lanelet.center_vertices[start_index: start_index + 2])
             elif lanelet.lanelet_id in adjacent_lanelets:
                 if lanelet.lanelet_id in revert_direction:
                     temp_l = list(lanelet.center_vertices[start_index:])
@@ -491,6 +490,8 @@ class RoutePlanner:
                     goal = lanelet_mapping[current_lanelet.adj_left][-1]
                 elif current_lanelet.adj_left in revert_direction:
                     goal = lanelet_mapping[current_lanelet.adj_left][-1]
+                elif current_lanelet.adj_left not in lanelet_mapping:
+                    goal = lanelet_mapping[current_id][0]
                 else:
                     goal = lanelet_mapping[current_lanelet.adj_left][0]
             elif current_lanelet.adj_right:
@@ -688,8 +689,8 @@ class RoutePlanner:
 if __name__ == '__main__':
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_2_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/cooperative/C-USA_Lanker-2_1_T-1.xml'
-    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Urban-1_1_S-1.xml'
-    scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_Gar-1_1_T-1.xml'
+    scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Urban-1_1_S-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_Gar-1_1_T-1.xml'
     scenario, planning_problem_set = CommonRoadFileReader(scenario_path).open()
 
     pr = cProfile.Profile()
