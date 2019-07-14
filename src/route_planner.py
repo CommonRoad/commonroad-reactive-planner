@@ -16,11 +16,13 @@ import math
 #  c) evtl: rechts/links?
 #  d) über verschiedene Ziel lanelets iterieren
 #  f) über verschiedene Faktoren iterieren, falls kein Pfad gefunden
+#  g) fix successor/predecessor for revert_lane
 # DONE:
 # b) Problem lane change mit Anfang ist Ziel Lanelet -> kein Pfad gefunden!
 # Lösung: Pfad zu rechter/linker Linie festlegen
 # a) start lanelet besser festlegen -> in find_reference_path nicht für adj_left/right ersetzen lassen
 # e) goal state: left/right vertices definieren?! -> nicht mehr gebraucht, da goal anderweitig gefunden!
+
 class RoutePlanner:
     def __init__(self, lanelet_network, scenario_path):
 
@@ -104,153 +106,6 @@ class RoutePlanner:
         graph.add_nodes_from(nodes)
         graph.add_edges_from(edges)
         return graph
-
-    def create_discrete_network(self, factor: int=1, lanelet_list: list=None, current_pos=None, current_id: int = -1):
-        """
-        Create a new discrete lanelet network from current scenario network
-        :param factor: how many new lanelets to split current lanelets
-        :param lanelet_list: list of lanelets to split (lanelets leading to goal)
-        :param current_pos: current vehicle position
-        :param current_id: current lanelet id of vehicle position
-        :return:
-        """
-        created_lanelets=[]
-        lanelet_mapping = {}
-        id = 0
-
-        if current_pos is None:
-            current_pos = self.planning_problem.initial_state.position
-
-        # map new discrete lanelets to scenario lanelets
-        num = 0
-        for lanelet in lanelet_list:
-            if lanelet.center_vertices.shape[0]/factor <= 1:
-                # factor is too big, we need min 2 center vertices per lanelet
-                factor = max(1, math.ceil(lanelet.center_vertices.shape[0] / 2))
-                break
-
-        for lanelet in lanelet_list:
-            if lanelet.lanelet_id == current_id:
-                lanelet_mapping[lanelet.lanelet_id] = list(range(num, num + 1))
-                # save new start lanelet id
-                start = num
-                num += 1
-            else:
-                lanelet_mapping[lanelet.lanelet_id] = list(range(num, num + factor))
-                num += factor
-
-        lanes = []
-        # split each lanelet
-        for lanelet in lanelet_list:
-            lanes.clear()
-            if lanelet.lanelet_id == current_id:
-                # compute start position: nearest center vertice to current position
-                distance, index = spatial.KDTree(lanelet.center_vertices).query(current_pos)
-                lanes.append(lanelet.center_vertices[index: index + 4])
-                #lane_length = lanelet.center_vertices.shape[0]
-
-            else:
-                # make sure that lanelet can be split into n new lanes
-                rest = len(lanelet.center_vertices) % factor
-                if rest > 0:
-                    mul = int((len(lanelet.center_vertices))/ (rest*factor))
-                    add_nodes = []
-                    # if center_vertices can not be split, add new point in middle of 2 points
-                    for i in range(mul):
-                        add_nodes.append(lanelet.center_vertices[i])
-                    for r in range(1,rest+1):
-                        x = (lanelet.center_vertices[r*mul][0]+ lanelet.center_vertices[r*mul+1][0])/2
-                        y = (lanelet.center_vertices[r * mul][1] + lanelet.center_vertices[r * mul + 1][1]) / 2
-                        add_nodes.append(lanelet.center_vertices[r*mul])
-                        add_nodes.append(np.array([x,y]))
-                        for i in range(mul):
-                            add_nodes.append(lanelet.center_vertices[r * mul + 1 + i])
-                    # created discrete lanelets from current lanelets
-                    lanes = np.split(np.array(add_nodes), factor)
-                else:
-                    lanes = np.split(np.array(lanelet.center_vertices), factor)
-
-            # get predecessor for first new lanelet
-            p_list = lanelet.predecessor
-            pred_list = []
-            for pred in p_list:
-                if pred in lanelet_mapping:
-                    for p in lanelet_mapping[pred]:
-                        pred_list.append(p)
-            if p_list == []:
-                pred_list = None
-
-            for i in range(len(lanes)):
-                # get successor from lanelet_mapping
-                s_list = lanelet.successor
-                suc_list = []
-                if i < (factor-1):
-                    suc_list.append((id + 1))
-                elif i == (factor - 1):
-                    for suc in s_list:
-                        if suc in lanelet_mapping:
-                            for s in lanelet_mapping[suc]:
-                                suc_list.append(s)
-                else:
-                    suc_list = None
-                if suc_list == []:
-                    suc_list = None
-
-                # get left and right adjacent from lanelet_mapping (attention: (not) same direction)
-                temp_right = None
-                temp_left = None
-                if lanelet.adj_right:
-                    right_lanelets = lanelet_mapping[lanelet.adj_right]
-                    if lanelet.adj_right == current_id:
-                        temp_right = right_lanelets[0]
-                    elif lanelet.adj_right_same_direction:
-                        temp_right = right_lanelets[i]
-                    else:
-                        if len(right_lanelets) == 1:
-                            temp_right = right_lanelets[0]
-                        else:
-                            temp_right = right_lanelets[-1 - i]
-                if lanelet.adj_left:
-                    left_lanelets = lanelet_mapping[lanelet.adj_left]
-                    if lanelet.adj_left == current_id:
-                        temp_left = left_lanelets[0]
-                    elif lanelet.adj_left_same_direction:
-                        temp_left = left_lanelets[i]
-                    else:
-                        if len(left_lanelets) == 1:
-                            temp_left = left_lanelets[0]
-                        else:
-                            temp_left = left_lanelets[-1 - i]
-
-                # create new lanelet: set successor, adjacent_left, adjacent_right are set according to lanelet_mapping
-                # in the graph generation we don't care about left and right_vertices: just assign center_vertices
-                new_lanelet = Lanelet(left_vertices=lanes[i], center_vertices=lanes[i], right_vertices=lanes[i],
-                 lanelet_id=id,
-                 predecessor=pred_list, successor=suc_list,
-                 adjacent_left=temp_left, adjacent_left_same_direction=lanelet.adj_left_same_direction,
-                 adjacent_right=temp_right, adjacent_right_same_direction=lanelet.adj_right_same_direction,
-                 speed_limit=lanelet.speed_limit)
-                id += 1
-                # store new lanelet
-                created_lanelets.append(new_lanelet)
-                # reset pred_list for next lanelet
-                pred_list = []
-                # append current lanelet as pred for next lanelet
-                pred_list.append(new_lanelet.lanelet_id)
-
-        # create new lanelet network for graph
-        new_network= LaneletNetwork()
-        new_network = new_network.create_from_lanelet_list(created_lanelets)
-
-        #if self.goal_lanelet_position is None:
-        # get new goal lanelet id (last element of split goal lanelet)
-        goal = lanelet_mapping[self.goal_lanelet_id][-1]
-        #else:
-            #goal_lanelets = new_network.find_lanelet_by_position(
-            #    np.array(self.goal_lanelet_position, ndmin=2))
-            #goal = goal_lanelets[0][0]
-
-        return new_network, start, goal
 
     def get_adjacent_lanelets(self, lanelet_id, right: bool = True, left: bool = True):
         """
@@ -501,16 +356,9 @@ class RoutePlanner:
                     goal = lanelet_mapping[current_lanelet.adj_right][0]
             else:
                 goal = lanelet_mapping[current_id][0]
-        #elif self.goal_lanelet_position is None:
         else:
             # get new goal lanelet id (last element of split goal lanelet)
             goal = lanelet_mapping[self.goal_lanelet_id][-1]
-        #else:
-        #    if self.goal_lanelet_id in lanelet_mapping:
-        #        goal_lanelet = self.lanelet_network.find_lanelet_by_id(self.goal_lanelet_id)
-        #        distance, goal_index = spatial.KDTree(goal_lanelet.center_vertices).query(self.goal_lanelet_position)
-        #        goal = lanelet_mapping[self.goal_lanelet_id][int(goal_index/factor)]
-
 
         return new_network, start, goal
 
