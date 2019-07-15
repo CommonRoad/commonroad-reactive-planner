@@ -13,9 +13,9 @@ import math
 
 
 # TODO:
-#  c) evtl: rechts/links?
+#  c) evtl zukünftig: ob rechts/links lane change?
 #  d) über verschiedene Ziel lanelets iterieren
-#  f) über verschiedene Faktoren iterieren, falls kein Pfad gefunden
+#  f) evtl zukünftig über verschiedene Faktoren iterieren, falls kein Pfad gefunden?
 #  g) fix successor/predecessor for revert_lane
 # DONE:
 # b) Problem lane change mit Anfang ist Ziel Lanelet -> kein Pfad gefunden!
@@ -46,35 +46,27 @@ class RoutePlanner:
                 break
 
             self.planning_problem = planning_problem_set.find_planning_problem_by_id(int(problemid))
-            # self.planning_problem = planning_problem_set.find_planning_problem_by_id(21188)
         # find goal region
         self.goal_lanelet_position = None
         if hasattr(self.planning_problem.goal.state_list[0], 'position'):
             if self.planning_problem.goal.lanelets_of_goal_position:
-                goal_lanelet = self.planning_problem.goal.lanelets_of_goal_position
-                print ("Goal lanelets" + str(goal_lanelet))
-                self.goal_lanelet_id = goal_lanelet[0][0]
+                self.goal_lanes = self.planning_problem.goal.lanelets_of_goal_position
+                print ("Goal lanelets" + str(self.goal_lanes))
+                self.goal_lanelet_id = self.goal_lanes[0][0]
             else:
                 self.goal_lanelet_position = self.planning_problem.goal.state_list[0].position.center
-                #goal_lanelet = self.scenario.lanelet_network.lanelets_in_proximity(
-                #    self.planning_problem.goal.state_list[0].position.center, 10)
-                #self.goal_lanelet_id = list(goal_lanelet)[-1].lanelet_id
-                goal_lane = self.scenario.lanelet_network.find_lanelet_by_position(np.array(self.goal_lanelet_position, ndmin=2))
-                self.goal_lanelet_id = goal_lane[0][0]
+                self.goal_lanes = self.scenario.lanelet_network.find_lanelet_by_position(np.array(self.goal_lanelet_position, ndmin=2))
+                self.goal_lanelet_id = self.goal_lanes[0][0]
         else:
             # set initial lanelet as goal lanelet if not other specified
             goal_lanelet = self.scenario.lanelet_network.find_lanelet_by_position(
                 np.array(self.planning_problem.initial_state.position, ndmin=2))
-            #goal_lanelet = self.scenario.lanelet_network.lanelets_in_proximity(
-            #    self.planning_problem.initial_state.position, 10)
-            #self.goal_lanelet_id = list(goal_lanelet)[0].lanelet_id
             self.goal_lanelet_id = goal_lanelet[0][0]
             print('No Goal Region defined: Driving on initial lanelet.')
 
         print("goal lanelet ID" + str(self.goal_lanelet_id))
 
-        self.lanelet_network = {}
-        self.lanelet_network = lanelet_network
+        self.lanelet_network = self.scenario.lanelet_network
         self.graph = self.create_graph_from_lanelet_network()
 
     def create_graph_from_lanelet_network(self, lanelet_network = None, allow_overtaking: bool = False):
@@ -109,8 +101,8 @@ class RoutePlanner:
 
     def get_adjacent_lanelets(self, lanelet_id, right: bool = True, left: bool = True):
         """
-        Get adj_left and adj_right lanelets of current lanelet id
-        :param lanelet: lanelet id
+        Recursively gets adj_left and adj_right lanelets of current lanelet id
+        :param lanelet: current lanelet id
         :return: List of adjacent lanelets, empty list if there are none
         """
         adj_list = []
@@ -148,12 +140,12 @@ class RoutePlanner:
     def discrete_network_lane_change(self, factor: int=1, lanelet_list: list=None, current_pos=None,
                                      current_id: int = -1, allow_overtaking: bool = False):
         """
-        Create a new discrete lanelet network from current scenario network
+        Create a new discrete lanelet network from current scenario network to enable lane changing
         :param factor: how many new lanelets to split current lanelets
         :param lanelet_list: list of lanelets to split (lanelets leading to goal)
         :param current_pos: current vehicle position
         :param current_id: current lanelet id of vehicle position
-        :return:
+        :return: tuple: (new_lanelet_network, start, goal)
         """
         created_lanelets=[]
         lanelet_mapping = {}
@@ -373,6 +365,13 @@ class RoutePlanner:
                                         target=target_lanelet_id))
 
     def find_all_lanelets_leading_to_goal(self, source_lanelet_id, allow_overtaking=True, graph=None):
+        """
+        Finds all lanelets connecting source to goal lanelet
+        :param source_lanelet_id: lanelet to start searching
+        :param allow_overtaking: True if overtaking on left opposite lanelets is allowed
+        :param graph: graph created from lanelet network to search
+        :return: list of lanelet ids
+        """
         if graph is None:
             graph = self.graph
         lanelet_ids_leading_to_goal = set()
@@ -471,6 +470,14 @@ class RoutePlanner:
             source_position=None,
             resampling_step_reference_path: float = 0.5,
             max_curvature_reference_path: float = 0.2):
+        """
+        Search for path from lanelet leading to goal + find all lanelets connecting start to goal
+        :param allow_overtaking:True if overtaking on left opposite lanelets is allowed
+        :param source_position: np.array containing vehicle position
+        :param resampling_step_reference_path: resampling step
+        :param max_curvature_reference_path: max curvature of reference path
+        :return:
+        """
 
         if source_position is None:
             source_position = self.planning_problem.initial_state.position
@@ -493,11 +500,20 @@ class RoutePlanner:
             max_curvature = max(abs(compute_curvature_from_polyline(reference_path)))
         return reference_path, lanelets_leading_to_goal
 
-    def change_lanelet(self, allow_overtaking: bool= True,
+    def change_lanelet(self, allow_overtaking: bool = True,
                        source_position=None,
                        resampling_step_reference_path: float = 0.5,
                        max_curvature_reference_path: float = 0.2,
                        factor: int = 1):
+        """
+        Finds a new reference path to perform a lane change
+        :param allow_overtaking:True if overtaking on left opposite lanelets is allowed
+        :param source_position: np.array[x,y]: current vehicle position
+        :param resampling_step_reference_path: resampling step
+        :param max_curvature_reference_path: max curvature of reference path
+        :param factor: (optional) in how many parts lanelet should be split in
+        :return:
+        """
 
         if source_position is None:
             source_position = self.planning_problem.initial_state.position
@@ -518,7 +534,7 @@ class RoutePlanner:
                                                                      factor=factor,
                                                                      current_pos=source_position,
                                                                      allow_overtaking=allow_overtaking)
-        graph = self.create_graph_from_lanelet_network(lanelet_network = new_network)
+        graph = self.create_graph_from_lanelet_network(lanelet_network=new_network)
 
         reference_path = self.find_reference_path_to_goal(
             start, goal, lanelet_network= new_network, graph= graph)
@@ -537,8 +553,9 @@ class RoutePlanner:
 if __name__ == '__main__':
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_2_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/cooperative/C-USA_Lanker-2_1_T-1.xml'
-    scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Urban-1_1_S-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Urban-1_1_S-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_Gar-1_1_T-1.xml'
+    scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_A9-2_1_T-1.xml'
     scenario, planning_problem_set = CommonRoadFileReader(scenario_path).open()
 
     pr = cProfile.Profile()
