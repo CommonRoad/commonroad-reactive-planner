@@ -22,7 +22,7 @@ if __name__ == '__main__':
     plt.axis('equal')
     plt.show(block=False)
     plt.pause(0.1)
-    scenario = ReactivePlanner.add_obstacles_at_lanelet_edges(ReactivePlanner, scenario, file_path)
+    #scenario = ReactivePlanner.add_obstacles_at_lanelet_edges(ReactivePlanner, scenario, file_path)
 
     if not PlanningProblemSet:
         root = ET.parse(file_path).getroot()
@@ -84,6 +84,8 @@ if __name__ == '__main__':
         x_cl = (optimal[2][1], optimal[3][1])
 
         print("Goal state is: {}".format(optimal[1].state_list[-1]))
+
+        planner.check_current_state(scenario, ego)
 
     print('Done')
     plt.show(block=True)

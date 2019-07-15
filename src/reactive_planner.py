@@ -6,7 +6,7 @@ from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 from commonroad.scenario.lanelet import LaneletNetwork, Lanelet
 from commonroad.prediction.prediction import TrajectoryPrediction
 from commonroad.geometry.shape import Rectangle
-from commonroad.scenario.trajectory import Trajectory,State
+from commonroad.scenario.trajectory import Trajectory, State
 import pycrcc
 from pycrccosy import TrapezoidCoordinateSystem
 from commonroad_ccosy.geometry.trapezoid_coordinate_system import create_coordinate_system_from_polyline
@@ -18,6 +18,7 @@ from parameter_classes import VehModelParameters, SamplingParameters
 from polyline import compute_curvature_from_polyline, compute_orientation_from_polyline, compute_pathlength_from_polyline
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType, StaticObstacle
 
+from State_Machine import CarHighlevelStates
 
 __author__ = "Christian Pek"
 __copyright__ = "TUM Cyber-Physical Systems Group"
@@ -101,6 +102,9 @@ class ReactivePlanner(object):
 
         # compute sampling sets
         self._setup_sampling_sets()
+
+        # State machine
+        self.statemachine = CarHighlevelStates()
 
     def set_parameters(self, parameters):
         if type(parameters).__name__ == PlanningParameter:
@@ -900,7 +904,6 @@ class ReactivePlanner(object):
                 return False
         return True
 
-
     def add_obstacles_at_lanelet_edges(self, scenario, xml_file):
 
         from commonroad.common.util import Interval
@@ -964,3 +967,197 @@ class ReactivePlanner(object):
         return scenario
 
 
+
+    def check_current_state(self, scenario, trajectory):
+
+        if self.statemachine.state == 'following':
+            if self.check_velocity_of_car_ahead_too_slow(scenario, trajectory):
+                if self.check_for_possible_overtaking_lanelet(scenario, trajectory):
+                    if self.check_lane_change_possible(scenario, trajectory, left=True):
+                        self.statemachine.Car_ahead_too_slow(
+                            self.get_laneletid_of_egocar(scenario, trajectory),
+                            scenario.lanelet_network.find_lanelet_by_id(self.get_laneletid_of_egocar(scenario, trajectory)).adj_left)
+
+                        left_obstacles = self.get_obstacles_on_neighboring_lane(trajectory, scenario, left=True)
+                        if left_obstacles is not None:
+                            for obstacle in left_obstacles:
+                                print("Obst on neighboring lane: ", obstacle.initial_state.position)
+
+                            print("Merging necessary")
+
+        if self.statemachine.state == 'lane_change_left':
+
+            position_ego = trajectory._initial_state.position
+            new_center_vertice = scenario.lanelet_network.find_lanelet_by_id(self.statemachine.new_lanelet).center_vertices
+
+            # Lane change is done, if car position corresponds to center of new line:
+            for point in new_center_vertice:
+                if point[0] - 2 < position_ego[0] < point[0] + 2:
+                    if point[1] - 2 < position_ego[1] < point[1] + 2:
+                        self.statemachine.on_new_centerline()
+                        break
+
+            #TODO: correct implementation of reference path
+            reference_path = new_center_vertice
+            self.set_reference_path(reference_path)
+
+        if self.statemachine.state == 'on_overtaking_line':
+            #TODO: Calculate time from Velocity
+            self.statemachine.set_timer_elapsed(time_for_overtaking = 5)
+
+            if self.statemachine.timer_elapsed == True:
+                print("Hurrayy!")
+
+        print(self.statemachine.state)
+
+    def check_velocity_of_car_ahead_too_slow(self, scenario, ego):
+
+        near_obstacles = self.get_near_obstacles(ego, scenario)
+
+        for obstacle in near_obstacles:
+            print("Near Obstacles ", obstacle.initial_state.position)
+        obstacles_ahead = self.check_for_obstacles_ahead(scenario, ego, near_obstacles)
+
+        return self.check_if_velocity_is_too_slow(ego, obstacles_ahead)
+
+    def check_if_velocity_is_too_slow(self, ego, obstacles_ahead):
+        allowed_velocity_difference = ego._initial_state.velocity / 10
+        for car in obstacles_ahead:
+            if not hasattr(car.initial_state, 'velocity'):
+                print("Static obstacle ahead!")
+                return True
+            elif car.initial_state.velocity < ego._initial_state.velocity + allowed_velocity_difference:
+                print("Car ahead is too slow! Difference: ",
+                      car.initial_state.velocity - (ego._initial_state.velocity + allowed_velocity_difference))
+                return True
+        return False
+
+    def get_near_obstacles(self, ego, scenario):
+
+        r = ego._initial_state.velocity * 2
+        near_obstacles = []
+
+        for static_obstacle in scenario.static_obstacles:
+
+            distance = np.linalg.norm(static_obstacle.initial_state.position - ego._initial_state.position) \
+                            - static_obstacle.obstacle_shape.length
+
+            if distance < r:
+                near_obstacles.append(static_obstacle)
+
+        for dynamic_obstacle in scenario.dynamic_obstacles:
+
+            distance = np.linalg.norm(dynamic_obstacle.initial_state.position - ego._initial_state.position) \
+                            - dynamic_obstacle.obstacle_shape.length
+
+            if distance < r:
+                near_obstacles.append(dynamic_obstacle)
+
+        return near_obstacles
+
+    def check_for_obstacles_ahead(self, scenario, ego, near_obstacles):
+        obstacles_ahead = []
+
+        # rounded_vehicle_orientation = round(ego._initial_state.orientation, 1)
+        vehicle_position = ego._initial_state.position
+
+        Rotation_Matrix = [[np.cos(ego._initial_state.orientation), -np.sin(ego._initial_state.orientation)],
+                           [np.sin(ego._initial_state.orientation), np.cos(ego._initial_state.orientation)]]
+
+        laneletid_ego = self.get_laneletid_of_egocar(scenario, ego)
+
+        for obstacle in near_obstacles:
+
+            laneletid_obstacle = self.get_laneletid_of_obstacle(scenario, obstacle)
+
+            if laneletid_ego == laneletid_obstacle:
+
+                obstacle_position = obstacle.initial_state.position
+                transformed_obstacle_position = np.matmul(obstacle_position - vehicle_position, Rotation_Matrix)
+
+                if transformed_obstacle_position[0] > 0:
+                    obstacles_ahead.append(obstacle)
+                    print("Ahead Obstales: ", obstacle.initial_state.position)
+#
+            #     hypotenuse_length = np.linalg.norm(transformed_obstacle_position)
+#
+            #     angel = np.arcsin(transformed_obstacle_position[1] / hypotenuse_length)
+#
+            #     print("Obst-Car vector angle: ", angel)
+            #     # print("Car orient: ", rounded_vehicle_orientation)
+#
+            #     if - 0.2 < angel < 0.2:
+            #         obstacles_ahead.append(obstacle)
+            #         print("Obstales that are ahead: ", obstacle.initial_state.position)
+
+        return obstacles_ahead
+
+    def check_for_possible_overtaking_lanelet(self, scenario, ego):
+
+        laneletid = self.get_laneletid_of_egocar(scenario, ego)
+
+        if scenario.lanelet_network.find_lanelet_by_id(laneletid).adj_left:
+            print('Overtaking lanelet exists')
+            return True
+
+        return False
+
+    def get_laneletid_of_egocar(self, scenario, ego):
+
+        x, y = ego._initial_state.position[0], ego._initial_state.position[1]
+        heading = ego._initial_state.orientation
+        x_1, y_1 = np.array([x, y]) + np.array([1, 1 * np.tan(heading)])
+        tmp = np.array([[x, y], [x_1, y_1]])
+
+        return scenario.lanelet_network.find_lanelet_by_position(tmp)[0][0]
+
+    def get_laneletid_of_obstacle(self, scenario, obstacle):
+
+        x, y = obstacle.initial_state.position[0], obstacle.initial_state.position[1]
+        heading = obstacle.initial_state.orientation
+        x_1, y_1 = np.array([x, y]) + np.array([1, 1 * np.tan(heading)])
+        tmp = np.array([[x, y], [x_1, y_1]])
+
+        return scenario.lanelet_network.find_lanelet_by_position(tmp)[0][0]
+
+    def get_obstacles_on_neighboring_lane(self, ego, scenario, left = True):
+
+        near_obstacles = self.get_near_obstacles(ego, scenario)
+
+        lanelet_ego = self.get_laneletid_of_egocar(scenario, ego)
+
+        if left:
+            neighboring_line = scenario.lanelet_network.find_lanelet_by_id(lanelet_ego).adj_left
+        else:
+            neighboring_line = scenario.lanelet_network.find_lanelet_by_id(lanelet_ego).adj_right
+
+        cars_on_left_lane = []
+        for obstacle in near_obstacles:
+            if self.get_laneletid_of_obstacle(scenario, obstacle) == neighboring_line:
+                cars_on_left_lane.append(obstacle)
+
+        return cars_on_left_lane
+
+    def check_lane_change_possible(self, scenario, ego, left = True):
+
+        obstacles_on_neigboring_lane = self.get_obstacles_on_neighboring_lane(ego, scenario, left)
+
+        vehicle_position = ego._initial_state.position
+        rotation_matrix = [[np.cos(ego._initial_state.orientation), -np.sin(ego._initial_state.orientation)],
+                           [np.sin(ego._initial_state.orientation), np.cos(ego._initial_state.orientation)]]
+
+        for obstacle in obstacles_on_neigboring_lane:
+
+            obstacle_position = obstacle.initial_state.position
+            transformed_obstacle_position_rounded = np.round(np.matmul(obstacle_position - vehicle_position, rotation_matrix), 1)
+
+            if -obstacle.obstacle_shape.length/2 < abs(ego._initial_state.velocity) - transformed_obstacle_position_rounded[0]  \
+                    < obstacle.obstacle_shape.length/2:
+                if left:
+                    if 0 < transformed_obstacle_position_rounded[1] < 3:
+                        return False
+                else:
+                    if -3 < transformed_obstacle_position_rounded[1] < 0:
+                        return False
+
+        return True
