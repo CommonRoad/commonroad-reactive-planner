@@ -682,8 +682,7 @@ class RoutePlanner:
             reference_path = np.array(chaikins_corner_cutting(reference_path))
             reference_path = resample_polyline(reference_path, resampling_step_reference_path)
             max_curvature = max(abs(compute_curvature_from_polyline(reference_path)))
-        #return reference_path, lanelets_leading_to_goal
-        return reference_path, None
+        return reference_path, lanelets_leading_to_goal
 
     def change_lanelet(self, allow_overtaking: bool = True,
                        source_position=None,
