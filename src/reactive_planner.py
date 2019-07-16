@@ -1,6 +1,6 @@
 from parameter import VehicleParameter, PlanningParameter
 from trajectory_bundle import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample
-from polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
+from polynomial_trajectory import QuinticTrajectory#, QuarticTrajectory
 from commonroad.common.validity import *
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 from commonroad.scenario.lanelet import LaneletNetwork, Lanelet
@@ -308,12 +308,23 @@ class ReactivePlanner(object):
 
             # Longitudinal sampling for all possible velocities
             for v in self._v_sets[samp_level]:
-                trajectory_long = QuarticTrajectory(t_start_s=0, duration_s=t, desired_horizon=self.horizon,
-                                                    start_state=x_0_lon, target_velocity=v,
-                                                    desired_velocity=self._desired_speed)
-                jerk_cost = trajectory_long.squared_jerk_integral(t) / t
                 time_cost = 1.0 / t
                 distance_cost = (desired_speed - v) ** 2
+
+                # Version 1
+                # trajectory_long = QuarticTrajectory(t_start_s=0, duration_s=t, desired_horizon=self.horizon,
+                #                                     start_state=x_0_lon, target_velocity=v,
+                #                                     desired_velocity=self._desired_speed)
+                # jerk_cost = trajectory_long.squared_jerk_integral(t) / t
+                # trajectory_long.set_cost(jerk_cost, time_cost, distance_cost,
+                #                          params.k_jerk_lon, params.k_time, params.k_distance)
+
+                # Version 2
+                end_state_lon = np.array([t*v + x_0_lon[0], v, 0.0])
+                trajectory_long = QuinticTrajectory(t_start_s=0, duration_s=t, desired_horizon=self.horizon,
+                                                     start_state=x_0_lon, end_state=end_state_lon,
+                                                    desired_velocity=self._desired_speed)
+                jerk_cost = trajectory_long.squared_jerk_integral(t) / t
                 trajectory_long.set_cost(jerk_cost, time_cost, distance_cost,
                                          params.k_jerk_lon, params.k_time, params.k_distance)
 

@@ -215,9 +215,10 @@ class PolynomialTrajectory(ABC):
 
 
 class QuinticTrajectory(PolynomialTrajectory):
-    def __init__(self, t_start_s=0, duration_s=0, desired_horizon=0, start_state=np.zeros([3, 1]), end_state=np.zeros([3, 1])):
+    def __init__(self, t_start_s=0, duration_s=0, desired_horizon=0, start_state=np.zeros([3, 1]), end_state=np.zeros([3, 1]), desired_velocity=0):
         super(QuinticTrajectory, self).__init__(t_start_s=t_start_s, duration_s=duration_s, desired_horizon=desired_horizon,
                                                 start_state=start_state, end_state=end_state)
+        self._desired_velocity = desired_velocity
 
     def calc_coeffs(self):
         """
@@ -232,10 +233,10 @@ class QuinticTrajectory(PolynomialTrajectory):
         p_final_d = self.end_state[1]
         p_final_dd = self.end_state[2]
 
-        t2 = self.duration_s * self.duration_s
-        t3 = t2 * self.duration_s
-        t4 = t3 * self.duration_s
-        t5 = t4 * self.duration_s
+        t2 = self.duration_s * self.duration_s  # s²
+        t3 = t2 * self.duration_s               # s³
+        t4 = t3 * self.duration_s               # s⁴
+        t5 = t4 * self.duration_s               # s⁵
 
         a = np.array([[t3, t4, t5],
                       [3.*t2, 4.*t3, 5.*t4],
@@ -254,27 +255,27 @@ class QuinticTrajectory(PolynomialTrajectory):
 
 
 
-class QuarticTrajectory(PolynomialTrajectory):
-    def __init__(self, t_start_s=0, duration_s=0, desired_horizon=0, start_state=np.zeros([3, 1]), target_velocity=0, desired_velocity=0):
-        super(QuarticTrajectory, self).__init__(t_start_s=t_start_s, duration_s=duration_s, desired_horizon=desired_horizon,
-                                                target_velocity=target_velocity, start_state=start_state)
-        self._desired_velocity = desired_velocity
-
-    def calc_coeffs(self):
-        p_init = self.start_state[0]
-        p_init_d = self.start_state[1]
-        p_init_dd = self.start_state[2]
-
-        t2 = self.duration_s * self.duration_s
-        t3 = t2 * self.duration_s
-
-        a = np.array([[3. * t2, 4. * t3],
-                      [6. * self.duration_s, 12. * t2]])
-
-        b = np.array([self.target_velocity - p_init_d - p_init_dd * self.duration_s,
-                      - p_init_dd])
-
-        x = np.linalg.solve(a, b)
-
-        return np.array([p_init, p_init_d, .5 * p_init_dd, x[0], x[1], 0.])
+# class QuarticTrajectory(PolynomialTrajectory):
+#     def __init__(self, t_start_s=0, duration_s=0, desired_horizon=0, start_state=np.zeros([3, 1]), target_velocity=0, desired_velocity=0):
+#         super(QuarticTrajectory, self).__init__(t_start_s=t_start_s, duration_s=duration_s, desired_horizon=desired_horizon,
+#                                                 target_velocity=target_velocity, start_state=start_state)
+#         self._desired_velocity = desired_velocity
+#
+#     def calc_coeffs(self):
+#         p_init = self.start_state[0]
+#         p_init_d = self.start_state[1]
+#         p_init_dd = self.start_state[2]
+#
+#         t2 = self.duration_s * self.duration_s
+#         t3 = t2 * self.duration_s
+#
+#         a = np.array([[3. * t2, 4. * t3],
+#                       [6. * self.duration_s, 12. * t2]])
+#
+#         b = np.array([self.target_velocity - p_init_d - p_init_dd * self.duration_s,
+#                       - p_init_dd])
+#
+#         x = np.linalg.solve(a, b)
+#
+#         return np.array([p_init, p_init_d, .5 * p_init_dd, x[0], x[1], 0.])
 
