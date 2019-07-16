@@ -58,7 +58,7 @@ if __name__ == '__main__':
     else:
         heading = init_state.orientation
 
-    x_0 = State(**{'position': np.array([x, y]), 'orientation': heading, 'velocity': 10, 'acceleration': 0, 'yaw_rate': 0})
+    x_0 = State(**{'position': np.array([x, y]), 'orientation': heading, 'velocity': 0, 'acceleration': 0, 'yaw_rate': 0})
     print(x_0.position)
 
     # Set planning parameters and vehicle parameters
