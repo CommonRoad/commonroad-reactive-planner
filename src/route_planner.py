@@ -109,12 +109,29 @@ class RoutePlanner:
         split_factor = max(len(left_lanes), len(right_lanes)) - 1
         split_factor = max(1, split_factor)
 
+        if goal_index < (split_factor+1) * 2:
+            # goal lanelet part has not enough center vertices -> choose preceding one if possible
+            if goal_lanelet.predecessor:
+                goal_lanelet = lanelet_network.find_lanelet_by_id(goal_lanelet.predecessor[0])
+                goal_index = len(goal_lanelet.center_vertices[:]) - 1
+                left_lanes, right_lanes = self.get_adjacent_lanelets_list(self.goal_lanelet_id)
+
+                # compute split factor (subtract 1, because source lanelet is in list)
+                split_factor = max(len(left_lanes), len(right_lanes)) - 1
+                split_factor = max(1, split_factor)
+
         split_lanelets = (np.concatenate((left_lanes, right_lanes), axis=0)).tolist()
         split_lanelets.append(self.goal_lanelet_id)
         split_lanelets = list(set(split_lanelets))
+        split_lanelets = [int(l) for l in split_lanelets]
+
+
+        map_ids = list(range(0, (split_factor + 2) * len(lanelet_network.lanelets)))
+        for lanelet in lanelet_network.lanelets:
+            if lanelet.lanelet_id in map_ids:
+                map_ids.remove(lanelet.lanelet_id)
 
         num = 0
-        map_ids = list(range(0, (split_factor + 2) * len(lanelet_network.lanelets)))
         for lanelet in split_lanelets:
             lanelet_mapping[lanelet] = map_ids[num: num + split_factor + 1]
             num += split_factor + 1
@@ -164,8 +181,6 @@ class RoutePlanner:
                     other_lanelets.append(temp_lane)
                 else:
                     other_lanelets.append(lanelet)
-                if lanelet.lanelet_id in map_ids:
-                    map_ids.remove(lanelet.lanelet_id)
 
         # TODO same length all lanelets
         lanes = []
@@ -361,10 +376,10 @@ class RoutePlanner:
             return None
         shortest_path = shortest_paths[0]
 
-        reference_lanelets = [lanelet_network.find_lanelet_by_id(shortest_path[0])]
+        reference_lanelets = [lanelet_network.find_lanelet_by_id(int(shortest_path[0]))]
         for i, id in enumerate(shortest_path[1:]):
             lanelet = lanelet_network.find_lanelet_by_id(id)
-            preceding_lanelet = lanelet_network.find_lanelet_by_id(shortest_path[i])
+            preceding_lanelet = lanelet_network.find_lanelet_by_id(int(shortest_path[i]))
 
             adjacent_lanelets = set()
             if preceding_lanelet.lanelet_id == source_lanelet_id:
@@ -504,10 +519,10 @@ if __name__ == '__main__':
     #zu kurze goal lanelet -> pred?!
     ###scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-22_1_T-1.xml'
     # cannot be reached?!
-    ###scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-10_1_T-1.xml'
+    scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-10_1_T-1.xml'
 
 
-    scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-24_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-24_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-4_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-27_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-20_1_T-1.xml'
