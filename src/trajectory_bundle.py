@@ -41,6 +41,9 @@ class TrajectorySample:
         # desired_time = self.trajectory_long.desired_horizon
         desired_speed = self.trajectory_long._desired_velocity
 
+        #fabian
+        #print(type(self.cartesian))
+
         a_u = np.append(self.cartesian.a,self.ext_cartesian.a) if self.ext_cartesian is not None else self.cartesian.a
         v_u = np.append(self.cartesian.v, self.ext_cartesian.v) if self.ext_cartesian is not None else self.cartesian.v
         d_u = np.append(self.curvilinear.d, self.ext_curvilinear.d) if self.ext_cartesian is not None else self.curvilinear.d
@@ -94,6 +97,8 @@ class TrajectoryBundle:
         """
         :return: trajectory in trajectory_bundle with minimal cost. None, if trajectory bundle is empty.
         """
+        #print(self.trajectory_bundle)
+        #print("9")
         if not self.trajectory_bundle:
             return None
         return min(self.trajectory_bundle, key=lambda x: x.reevaluate_costs())
