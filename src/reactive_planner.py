@@ -79,6 +79,7 @@ class ReactivePlanner(object):
         # store feasible trajectories of last run
         self._feasible_trajectories = None
         self._infeasible_count_collision = 0
+        self._infeasible_count_behavior = 0
         self._infeasible_count_kinematics = 0
         self._min_cost = None
         self._max_cost = None
