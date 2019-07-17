@@ -9,19 +9,7 @@ import matplotlib.pyplot as plt
 import cProfile
 import time
 from scipy import spatial
-import math
 
-
-# TODO:
-#  c) evtl zukünftig: ob rechts/links lane change?
-#  d) über verschiedene Ziel lanelets iterieren
-#  f) evtl zukünftig über verschiedene Faktoren iterieren, falls kein Pfad gefunden?
-#  g) fix successor/predecessor for revert_lane
-# DONE:
-# b) Problem lane change mit Anfang ist Ziel Lanelet -> kein Pfad gefunden!
-# Lösung: Pfad zu rechter/linker Linie festlegen
-# a) start lanelet besser festlegen -> in find_reference_path nicht für adj_left/right ersetzen lassen
-# e) goal state: left/right vertices definieren?! -> nicht mehr gebraucht, da goal anderweitig gefunden!
 
 class RoutePlanner:
     def __init__(self, lanelet_network, scenario_path):
@@ -64,10 +52,15 @@ class RoutePlanner:
             self.goal_lanelet_id = goal_lanelet[0][0]
             print('No Goal Region defined: Driving on initial lanelet.')
 
+        if self.goal_lanelet_position is None:
+            goal_lanelet = self.scenario.lanelet_network.find_lanelet_by_id(self.goal_lanelet_id)
+            self.goal_lanelet_position = goal_lanelet.center_vertices[-1]
+
         print("goal lanelet ID" + str(self.goal_lanelet_id))
 
         self.lanelet_network = self.scenario.lanelet_network
         self.graph = self.create_graph_from_lanelet_network()
+
 
     def create_graph_from_lanelet_network(self, lanelet_network = None, allow_overtaking: bool = False):
         """ Build a graph from the lanelet network. The length of a lanelet is assigned as weight to
@@ -99,358 +92,116 @@ class RoutePlanner:
         graph.add_edges_from(edges)
         return graph
 
-    def get_adjacent_lanelets(self, lanelet_id, right: bool = True, left: bool = True):
-        """
-        Recursively gets adj_left and adj_right lanelets of current lanelet id
-        :param lanelet: current lanelet id
-        :return: List of adjacent lanelets, empty list if there are none
-        """
-        adj_list = []
-        current_lanelet = self.lanelet_network.find_lanelet_by_id(lanelet_id)
-        if (current_lanelet.adj_left is not None)  and (left is True):
-            adj_list.append(current_lanelet.adj_left)
-            if current_lanelet.adj_left_same_direction:
-                temp_left = self.get_adjacent_lanelets(current_lanelet.adj_left, right=False, left=True)
-                if temp_left != []:
-                    for elem in temp_left:
-                        adj_list.append(elem)
-                    return adj_list
-            else:
-                temp_left = self.get_adjacent_lanelets(current_lanelet.adj_left, right=True, left=False)
-                if temp_left != []:
-                    for elem in temp_left:
-                        adj_list.append(elem)
-                    return adj_list
-        if (current_lanelet.adj_right is not None) and (right is True):
-            adj_list.append(current_lanelet.adj_right)
-            if current_lanelet.adj_right_same_direction:
-                temp_right = self.get_adjacent_lanelets(current_lanelet.adj_right, right=True, left=False)
-                if temp_right != []:
-                    for elem in temp_right:
-                        adj_list.append(elem)
-                    return adj_list
-            else:
-                temp_right = self.get_adjacent_lanelets(current_lanelet.adj_right, right=False, left=True)
-                if temp_right != []:
-                    for elem in temp_right:
-                        adj_list.append(elem)
-                    return adj_list
-        return adj_list
+    def create_reference_path_network(self, lanelet_network:LaneletNetwork = None, initial_pos=None):
 
-    def discrete_network_lane_change(self, factor: int=1, lanelet_list: list=None, current_pos=None,
-                                     current_id: int = -1, allow_overtaking: bool = False):
-        """
-        Create a new discrete lanelet network from current scenario network to enable lane changing
-        :param factor: how many new lanelets to split current lanelets
-        :param lanelet_list: list of lanelets to split (lanelets leading to goal)
-        :param current_pos: current vehicle position
-        :param current_id: current lanelet id of vehicle position
-        :return: tuple: (new_lanelet_network, start, goal)
-        """
-        created_lanelets=[]
+        if lanelet_network is None:
+            lanelet_network = self.lanelet_network
+
+        created_lanelets = []
         lanelet_mapping = {}
-        id = 0
+        goal_lanelet = lanelet_network.find_lanelet_by_id((self.goal_lanelet_id))
+        distance, goal_index = spatial.KDTree(goal_lanelet.center_vertices).query(self.goal_lanelet_position)
 
-        if current_pos is None:
-            current_pos = self.planning_problem.initial_state.position
+        left_lanes, right_lanes = self.get_adjacent_lanelets_list(self.goal_lanelet_id)
 
-        # map new discrete lanelets to scenario lanelets
+        # TODO check if enough center vertices in goal lanelet left?! (vgl split_factor mit goal_index)
+        # compute split factor (subtract 1, because source lanelet is in list)
+        split_factor = max(len(left_lanes), len(right_lanes)) - 1
+        split_factor = max(1, split_factor)
+
+        split_lanelets = (np.concatenate((left_lanes, right_lanes), axis=0)).tolist()
+        split_lanelets.append(self.goal_lanelet_id)
+        split_lanelets = list(set(split_lanelets))
+
         num = 0
-        for lanelet in lanelet_list:
-            if lanelet.center_vertices.shape[0]/factor <= 1:
-                # factor is too big, we need min 2 center vertices per lanelet
-                # TODO trigger new factor
-                factor = max(1, math.ceil(lanelet.center_vertices.shape[0] / 2))
-                break
+        map_ids = list(range(0, (split_factor + 2) * len(lanelet_network.lanelets)))
+        for lanelet in split_lanelets:
+            lanelet_mapping[lanelet] = map_ids[num: num + split_factor + 1]
+            num += split_factor + 1
 
-        # get all adjacent lanelets
-        adjacent_lanelets = self.get_adjacent_lanelets(current_id)
 
-        # calculation how to split current lane and adjacent lanes (should all have same length)
-        current_lanelet = self.lanelet_network.find_lanelet_by_id(current_id)
-
-        # if we allow overtaking, check for all lanelets to the left, if they drive in same direction
-        # TODO: also consider predecessors/ successors?!
-        revert_direction = []
-        if allow_overtaking:
-            if current_lanelet.adj_left:
-                if not current_lanelet.adj_left_same_direction:
-                    revert_direction.append(current_lanelet.adj_left)
-
-        lanelet_ids = []
-        for lanelet in lanelet_list:
-            lanelet_ids.append(lanelet.lanelet_id)
-
-        # only consider adjacent lanlets that are in lanelet_list
-        adjacent_lanelets = set(adjacent_lanelets).intersection(set(lanelet_ids))
-
-        # create dict to map new to current lanelet ids
-        for lanelet in lanelet_list:
-            # special case: we only save fist part of current lanelet
-            if lanelet.lanelet_id == current_id:
-                lanelet_mapping[lanelet.lanelet_id] = list(range(num, num + 1))
-                # save new start lanelet id
-                start = num
-                num += 1
-            # special case: for lane change we split adj lanelets in min 2 parts
-            elif factor == 1 and lanelet.lanelet_id in adjacent_lanelets:
-                lanelet_mapping[lanelet.lanelet_id] = list(range(num, num + 2))
-                num += 2
+        other_lanelets = []
+        # get all other lanelets
+        for lanelet in lanelet_network.lanelets:
+            if lanelet.lanelet_id in split_lanelets:
+                continue
             else:
-                lanelet_mapping[lanelet.lanelet_id] = list(range(num, num + factor))
-                num += factor
-
-        # compute start position: nearest center vertice to current position
-        distance, start_index = spatial.KDTree(current_lanelet.center_vertices).query(current_pos)
-        offset = len(current_lanelet.center_vertices[start_index:]) % factor
-        split = int(len(current_lanelet.center_vertices[start_index:]) / factor)
-        if offset == 1 and split == 1:
-            # len < 2 -> just replan without splitting, so return original network
-            return self.lanelet_network
-        elif factor == 1:
-            split_array = np.arange(2, split, split)
-        else:
-            #split_array = np.arange(split, factor*split, split)
-            split_array = np.arange(2, (factor-1) * split, split)
-        lanes = []
-        # split each lanelet
-        for lanelet in lanelet_list:
-            lanes.clear()
-            if lanelet.lanelet_id == current_id:
-                # only add fist lanelet part
-                # TODO: check if index + split out of bound!
-                lanes.append(lanelet.center_vertices[start_index: start_index + 2])
-            elif lanelet.lanelet_id in adjacent_lanelets:
-                if lanelet.lanelet_id in revert_direction:
-                    temp_l = list(lanelet.center_vertices[start_index:])
-                    temp_l.reverse()
-                    lanes = np.split(temp_l, split_array)
-                else:
-                    temp_l = np.array(lanelet.center_vertices[start_index:])
-                    lanes = np.split(temp_l, split_array)
-            else:
-                lanelet_offset = len(lanelet.center_vertices[:]) % factor
-                lanelet_split = int(len(lanelet.center_vertices[:]) / factor)
-                # we only split the other lanes, if factor >= 2
-                if factor == 1 or (lanelet_offset == 1 and lanelet_split == 1):
-                    # we just add complete lane
-                    lanes.append(lanelet.center_vertices)
-                elif lanelet_offset == 0:
-                    # TODO FIX split array
-                    split_array = np.full((1, factor), lanelet_split)
-                else:
-                    # TODO FIX split array
-                    split_array = np.full((1, factor - 1), split)
-                    list(split_array).append(split + offset)
-                    lanes = np.split(np.array(lanelet.center_vertices), split_array)
-
-            # get predecessor for first new lanelet
-            p_list = lanelet.predecessor
-            pred_list = []
-            for pred in p_list:
-                if pred in lanelet_mapping:
-                    for p in lanelet_mapping[pred]:
-                        pred_list.append(p)
-            if pred_list == []:
-                pred_list = None
-
-            for i in range(len(lanes)):
-                # get successor from lanelet_mapping
-                s_list = lanelet.successor
-                suc_list = []
-                if i < (factor-1) and (lanelet.lanelet_id != current_id):
-                    suc_list.append(id + 1)
-                elif i == 0 and factor == 1 and lanelet.lanelet_id in adjacent_lanelets:
-                    suc_list.append(id+1)
-                elif i == (factor - 1):
-                    for suc in s_list:
-                        if suc in lanelet_mapping:
-                            for s in lanelet_mapping[suc]:
-                                suc_list.append(s)
-                else:
-                    suc_list = None
-                # if suc_list is empty set it to None, otherwise problems with new lanelet
-                if suc_list == []:
-                    suc_list = None
-
-                # get left and right adjacent from lanelet_mapping (attention: (not) same direction)
-                temp_right = None
-                temp_left = None
+                temp_pred = []
+                temp_suc = []
+                temp_r = None
+                temp_l = None
+                new = False
+                # check if left in lanelet_mapping
+                if lanelet.predecessor:
+                    if lanelet.predecessor[0] in lanelet_mapping:
+                        temp_pred.append(lanelet_mapping[lanelet.predecessor[0]][-1])
+                        new = True
+                    else:
+                        temp_pred = lanelet.predecessor
+                if lanelet.successor:
+                    if lanelet.successor[0] in lanelet_mapping:
+                        temp_suc.append(lanelet_mapping[lanelet.successor[0]][0])
+                        new = True
+                    else:
+                        temp_suc = lanelet.successor
                 if lanelet.adj_right:
                     if lanelet.adj_right in lanelet_mapping:
-                        right_lanelets = lanelet_mapping[lanelet.adj_right]
-                        if lanelet.adj_right_same_direction:
-                            if lanelet.adj_right == current_id and i == 0:
-                                temp_right = right_lanelets[0]
-                            elif lanelet.adj_right != current_id:
-                                temp_right = right_lanelets[i]
-                        else:
-                            if len(right_lanelets) == 1:
-                                temp_right = right_lanelets[0]
-                            else:
-                                temp_right = right_lanelets[-1 - i]
+                        temp_r = lanelet_mapping[lanelet.adj_right][0]
+                        new = True
                 if lanelet.adj_left:
                     if lanelet.adj_left in lanelet_mapping:
-                        left_lanelets = lanelet_mapping[lanelet.adj_left]
-                        if lanelet.adj_left_same_direction:
-                            if lanelet.adj_left == current_id and i == 0:
-                                temp_left = left_lanelets[0]
-                            elif lanelet.adj_left != current_id:
-                                temp_left = left_lanelets[i]
-                        elif lanelet.adj_left in revert_direction:
-                            if lanelet.adj_left == current_id:
-                                temp_left = left_lanelets[0]
-                            elif lanelet.adj_left != current_id:
-                                temp_left = left_lanelets[i]
-                        else:
-                            if len(left_lanelets) == 1:
-                                temp_left = left_lanelets[0]
-                            else:
-                                temp_left = left_lanelets[-1 - i]
-
-                # create new lanelet: set successor, adjacent_left, adjacent_right are set according to lanelet_mapping
-                # in the graph generation we don't care about left and right_vertices: just assign center_vertices
-                if lanelet.adj_left in revert_direction:
-                    alsd = True
+                        temp_l = lanelet_mapping[lanelet.adj_left][0]
+                        new = True
+                if new:
+                    temp_lane = Lanelet(left_vertices=lanelet.left_vertices, center_vertices=lanelet.center_vertices,
+                                        right_vertices=lanelet.right_vertices,
+                                        lanelet_id=lanelet.lanelet_id,
+                                        predecessor=temp_pred, successor=temp_suc,
+                                        adjacent_left=temp_l, adjacent_left_same_direction=lanelet.adj_left_same_direction,
+                                        adjacent_right=temp_r,
+                                        adjacent_right_same_direction=lanelet.adj_right_same_direction,
+                                        speed_limit=lanelet.speed_limit)
+                    other_lanelets.append(temp_lane)
                 else:
-                    alsd = lanelet.adj_left_same_direction
+                    other_lanelets.append(lanelet)
+                if lanelet.lanelet_id in map_ids:
+                    map_ids.remove(lanelet.lanelet_id)
 
-                new_lanelet = Lanelet(left_vertices=lanes[i], center_vertices=lanes[i], right_vertices=lanes[i],
-                 lanelet_id=id,
-                 predecessor=pred_list, successor=suc_list,
-                 adjacent_left=temp_left, adjacent_left_same_direction=alsd,
-                 adjacent_right=temp_right, adjacent_right_same_direction=lanelet.adj_right_same_direction,
-                 speed_limit=lanelet.speed_limit)
-                id += 1
-                # store new lanelet
-                created_lanelets.append(new_lanelet)
-                # reset pred_list for next lanelet
-                pred_list = []
-                # append current lanelet as pred for next lanelet
-                pred_list.append(new_lanelet.lanelet_id)
-
-        # create new lanelet network for graph
-        new_network= LaneletNetwork()
-        new_network = new_network.create_from_lanelet_list(created_lanelets)
-
-        if self.goal_lanelet_position is not None and self.goal_lanelet_id != current_id:
-            goal_lanelet = self.lanelet_network.find_lanelet_by_id(self.goal_lanelet_id)
-            distance, goal_index = spatial.KDTree(goal_lanelet.center_vertices).query(self.goal_lanelet_position)
-            split = int(len(goal_lanelet.center_vertices[:]) / factor)
-            goal = lanelet_mapping[self.goal_lanelet_id][int(goal_index / split)]
-        elif self.goal_lanelet_id == current_id:
-            if current_lanelet.adj_left:
-                if current_lanelet.adj_left_same_direction:
-                    goal = lanelet_mapping[current_lanelet.adj_left][-1]
-                elif current_lanelet.adj_left in revert_direction:
-                    goal = lanelet_mapping[current_lanelet.adj_left][-1]
-                elif current_lanelet.adj_left not in lanelet_mapping:
-                    goal = lanelet_mapping[current_id][0]
-                else:
-                    goal = lanelet_mapping[current_lanelet.adj_left][0]
-            elif current_lanelet.adj_right:
-                if current_lanelet.adj_right_same_direction:
-                    goal = lanelet_mapping[current_lanelet.adj_right][-1]
-                else:
-                    goal = lanelet_mapping[current_lanelet.adj_right][0]
-            else:
-                goal = lanelet_mapping[current_id][0]
-        else:
-            # get new goal lanelet id (last element of split goal lanelet)
-            goal = lanelet_mapping[self.goal_lanelet_id][-1]
-
-        return new_network, start, goal
-
-    def plan_with_discrete_network(self, factor: int=2, lanelet_list: list=None, current_pos=None,
-                                     current_id: int = -1, allow_overtaking: bool = False):
-        """
-        Create a new discrete lanelet network from current scenario network to enable lane changing
-        :param factor: how many new lanelets to split current lanelets
-        :param lanelet_list: list of lanelets to split (lanelets leading to goal)
-        :param current_pos: current vehicle position
-        :param current_id: current lanelet id of vehicle position
-        :return: tuple: (new_lanelet_network, start, goal)
-        """
-        created_lanelets=[]
-        lanelet_mapping = {}
-        id = 0
-
-        if current_pos is None:
-            current_pos = self.planning_problem.initial_state.position
-
-        # map new discrete lanelets to scenario lanelets
-        num = 0
-        for lanelet in lanelet_list:
-            if lanelet.center_vertices.shape[0]/factor <= 1:
-                # factor is too big, we need min 2 center vertices per lanelet
-                # TODO trigger new factor
-                factor = max(1, math.ceil(lanelet.center_vertices.shape[0] / 2))
-                break
-
-        # calculation how to split current lane and adjacent lanes (should all have same length)
-        current_lanelet = self.lanelet_network.find_lanelet_by_id(current_id)
-        # if we allow overtaking, check for all lanelets to the left, if they drive in same direction
-        # TODO: also consider predecessors/ successors?!
-        revert_direction = []
-        if allow_overtaking:
-            if current_lanelet.adj_left:
-                if not current_lanelet.adj_left_same_direction:
-                    revert_direction.append(current_lanelet.adj_left)
-
-        lanelet_ids = []
-        for lanelet in lanelet_list:
-            lanelet_ids.append(lanelet.lanelet_id)
-
-        # create dict to map new to current lanelet ids
-        for lanelet in lanelet_list:
-            # special case: we only save fist part of current lanelet
-            if lanelet.lanelet_id == current_id:
-                # save new start lanelet id
-                start = num
-            lanelet_mapping[lanelet.lanelet_id] = list(range(num, num + factor))
-            num += factor
-
+        # TODO same length all lanelets
         lanes = []
+        id = 0
         # split each lanelet
-        for lanelet in lanelet_list:
+        for lanelet_id in split_lanelets:
+            lanelet = lanelet_network.find_lanelet_by_id(lanelet_id)
+            lanelet_length = len(lanelet.center_vertices[0:goal_index])
+            split_array = np.arange(lanelet_length - (2 * split_factor), lanelet_length, 2)
             lanes.clear()
-            lanelet_offset = len(lanelet.center_vertices[:]) % factor
-            lanelet_split = int(len(lanelet.center_vertices[:]) / factor)
-            split_array = np.arange(lanelet_split, factor * lanelet_split, lanelet_split)
-            # we only split the other lanes, if factor >= 2
-            if (lanelet_offset == 1 and lanelet_split == 1):
-                # we just add complete lane
-                lanes.append(lanelet.center_vertices)
-            elif lanelet.lanelet_id in revert_direction:
-                temp_l = list(lanelet.center_vertices[:])
-                temp_l.reverse()
-                lanes = np.split(temp_l, split_array)
-            else:
-                lanes = np.split(np.array(lanelet.center_vertices), split_array)
+            # split lanelet into sublanelets
+            lanes = np.split(np.array(lanelet.center_vertices[0:goal_index]), split_array)
 
             # get predecessor for first new lanelet
             p_list = lanelet.predecessor
             pred_list = []
             for pred in p_list:
                 if pred in lanelet_mapping:
-                    for p in lanelet_mapping[pred]:
-                        pred_list.append(p)
+                    if len(lanelet_mapping[pred]) > 1:
+                        pred_list.append(lanelet_mapping[pred][-1])
+                    else:
+                        pred_list.append(lanelet_mapping[pred][0])
+
             if pred_list == []:
                 pred_list = None
 
             for i in range(len(lanes)):
                 # get successor from lanelet_mapping
-                s_list = lanelet.successor
                 suc_list = []
-                if i < (factor-1) and (lanelet.lanelet_id != current_id):
-                    suc_list.append(id + 1)
-                elif i == (factor - 1):
+                if i == split_factor:
+                    s_list = lanelet.successor
                     for suc in s_list:
                         if suc in lanelet_mapping:
-                            for s in lanelet_mapping[suc]:
-                                suc_list.append(s)
+                            suc_list.append(lanelet_mapping[suc][0])
                 else:
-                    suc_list = None
+                    suc_list.append(map_ids[id+1])
                 # if suc_list is empty set it to None, otherwise problems with new lanelet
                 if suc_list == []:
                     suc_list = None
@@ -473,30 +224,21 @@ class RoutePlanner:
                         left_lanelets = lanelet_mapping[lanelet.adj_left]
                         if lanelet.adj_left_same_direction:
                             temp_left = left_lanelets[i]
-                        elif lanelet.adj_left in revert_direction:
-                            if lanelet.adj_left == current_id:
-                                temp_left = left_lanelets[0]
-                            elif lanelet.adj_left != current_id:
-                                temp_left = left_lanelets[i]
                         else:
                             if len(left_lanelets) == 1:
                                 temp_left = left_lanelets[0]
                             else:
                                 temp_left = left_lanelets[-1 - i]
 
-                if lanelet.adj_left in revert_direction:
-                    alsd = True
-                else:
-                    alsd = lanelet.adj_left_same_direction
-
                 # create new lanelet: set successor, adjacent_left, adjacent_right are set according to lanelet_mapping
                 # in the graph generation we don't care about left and right_vertices: just assign center_vertices
                 new_lanelet = Lanelet(left_vertices=lanes[i], center_vertices=lanes[i], right_vertices=lanes[i],
-                 lanelet_id=id,
-                 predecessor=pred_list, successor=suc_list,
-                 adjacent_left=temp_left, adjacent_left_same_direction=alsd,
-                 adjacent_right=temp_right, adjacent_right_same_direction=lanelet.adj_right_same_direction,
-                 speed_limit=lanelet.speed_limit)
+                                      lanelet_id=map_ids[id],
+                                      predecessor=pred_list, successor=suc_list,
+                                      adjacent_left=temp_left, adjacent_left_same_direction=lanelet.adj_left_same_direction,
+                                      adjacent_right=temp_right,
+                                      adjacent_right_same_direction=lanelet.adj_right_same_direction,
+                                      speed_limit=lanelet.speed_limit)
                 id += 1
                 # store new lanelet
                 created_lanelets.append(new_lanelet)
@@ -505,38 +247,44 @@ class RoutePlanner:
                 # append current lanelet as pred for next lanelet
                 pred_list.append(new_lanelet.lanelet_id)
 
+        # append all not split lanelets
+        all_lanelets = (np.concatenate((created_lanelets, other_lanelets), axis=0)).tolist()
+
         # create new lanelet network for graph
-        new_network= LaneletNetwork()
-        new_network = new_network.create_from_lanelet_list(created_lanelets)
+        new_network = LaneletNetwork()
+        new_network = new_network.create_from_lanelet_list(all_lanelets)
 
-        if self.goal_lanelet_position is not None and self.goal_lanelet_id != current_id:
-            # TODO Fix goal finding
-            goal_lanelet = self.lanelet_network.find_lanelet_by_id(self.goal_lanelet_id)
-            distance, goal_index = spatial.KDTree(goal_lanelet.center_vertices).query(self.goal_lanelet_position)
-            split = int(len(goal_lanelet.center_vertices[:])/factor)
-            goal = lanelet_mapping[self.goal_lanelet_id][int(goal_index/split)]
-        elif self.goal_lanelet_id == current_id:
-            if current_lanelet.adj_left:
-                if current_lanelet.adj_left_same_direction:
-                    goal = lanelet_mapping[current_lanelet.adj_left][-1]
-                elif current_lanelet.adj_left in revert_direction:
-                    goal = lanelet_mapping[current_lanelet.adj_left][-1]
-                elif current_lanelet.adj_left not in lanelet_mapping:
-                    goal = lanelet_mapping[current_id][0]
-                else:
-                    goal = lanelet_mapping[current_lanelet.adj_left][0]
-            elif current_lanelet.adj_right:
-                if current_lanelet.adj_right_same_direction:
-                    goal = lanelet_mapping[current_lanelet.adj_right][-1]
-                else:
-                    goal = lanelet_mapping[current_lanelet.adj_right][0]
+        #goal = lanelet_mapping[self.goal_lanelet_id][-1]
+
+        return new_network, lanelet_mapping
+
+    def get_adjacent_lanelets_list(self, lanelet_id):
+        """
+        Recursively gets adj_left and adj_right lanelets of current lanelet id
+        :param lanelet: current lanelet id
+        :return: List of adjacent lanelets, empty list if there are none
+        """
+        list_left = []
+        list_right = []
+        left = True
+        right = True
+        temp_id = lanelet_id
+        while left:
+            current_lanelet = self.lanelet_network.find_lanelet_by_id(lanelet_id)
+            if (current_lanelet.adj_left is not None) and current_lanelet.adj_left_same_direction:
+                list_left.append(current_lanelet.adj_left)
+                lanelet_id = current_lanelet.adj_left
             else:
-                goal = lanelet_mapping[current_id][0]
-        else:
-            # get new goal lanelet id (last element of split goal lanelet)
-            goal = lanelet_mapping[self.goal_lanelet_id][-1]
-
-        return new_network, start, goal
+                left = False
+        # reset lanelet_id for right while loop
+        while right:
+            current_lanelet = self.lanelet_network.find_lanelet_by_id(lanelet_id)
+            if (current_lanelet.adj_right is not None) and current_lanelet.adj_right_same_direction:
+                list_right.append(current_lanelet.adj_right)
+                lanelet_id = current_lanelet.adj_right
+            else:
+                right = False
+        return list_left, list_right
 
     def find_all_shortest_paths(self, graph, source_lanelet_id, target_lanelet_id):
         return list(nx.all_shortest_paths(graph,
@@ -684,18 +432,15 @@ class RoutePlanner:
             max_curvature = max(abs(compute_curvature_from_polyline(reference_path)))
         return reference_path, lanelets_leading_to_goal
 
-    def change_lanelet(self, allow_overtaking: bool = True,
-                       source_position=None,
+
+    def plan_all_reference_paths(self, source_position=None,
                        resampling_step_reference_path: float = 1.5,
-                       max_curvature_reference_path: float = 0.2,
-                       factor: int = 1):
+                       max_curvature_reference_path: float = 0.2):
         """
         Finds a new reference path to perform a lane change
-        :param allow_overtaking:True if overtaking on left opposite lanelets is allowed
         :param source_position: np.array[x,y]: current vehicle position
         :param resampling_step_reference_path: resampling step
         :param max_curvature_reference_path: max curvature of reference path
-        :param factor: (optional) in how many parts lanelet should be split in
         :return:
         """
 
@@ -704,90 +449,144 @@ class RoutePlanner:
         sourcelanelets = self.lanelet_network.find_lanelet_by_position(np.array([source_position]))
         source_lanelet = self.lanelet_network.find_lanelet_by_id(sourcelanelets[0][0])
 
-        laneletids_leading_to_goal = self.find_all_lanelets_leading_to_goal(
-            source_lanelet.lanelet_id, allow_overtaking)
-        lanelets_leading_to_goal = []
-        for id in laneletids_leading_to_goal:
-            lanelets_leading_to_goal.append(self.lanelet_network.find_lanelet_by_id(id))
+        left_lanes, right_lanes = self.get_adjacent_lanelets_list(source_lanelet.lanelet_id)
+        start_lanes = (np.concatenate((left_lanes, right_lanes), axis=0)).tolist()
+        start_lanes.append(source_lanelet.lanelet_id)
+        start_lanes = list(set(start_lanes))
 
-        if lanelets_leading_to_goal == []:
-            lanelets_leading_to_goal = self.lanelet_network.lanelets
+        lanelets_leading_to_goal = self.lanelet_network.lanelets
 
-        new_network, start, goal = self.discrete_network_lane_change(lanelet_list= lanelets_leading_to_goal,
-                                                                     current_id=source_lanelet.lanelet_id,
-                                                                     factor=factor,
-                                                                     current_pos=source_position,
-                                                                     allow_overtaking=allow_overtaking)
+        new_network, lanelet_mapping = self.create_reference_path_network(lanelet_network=self.lanelet_network,
+                                                               initial_pos=source_position)
         graph = self.create_graph_from_lanelet_network(lanelet_network=new_network)
 
-        reference_path = self.find_reference_path_to_goal(
-            start, goal, lanelet_network= new_network, graph= graph)
-        if reference_path is None:
-            reference_path = source_lanelet.center_vertices
+        goal = lanelet_mapping[self.goal_lanelet_id][-1]
 
-        # smooth reference path until curvature is smaller or equal max_curvature_reference_path
-        max_curvature = max_curvature_reference_path + 0.2
-        while max_curvature > max_curvature_reference_path:
-            reference_path = np.array(chaikins_corner_cutting(reference_path))
-            reference_path = resample_polyline(reference_path, resampling_step_reference_path)
-            max_curvature = max(abs(compute_curvature_from_polyline(reference_path)))
-        return reference_path, lanelets_leading_to_goal
+        reference_paths = {}
 
-    def plan_discrete(self, allow_overtaking: bool = True,
-                       source_position=None,
-                       resampling_step_reference_path: float = 1.5,
-                       max_curvature_reference_path: float = 0.2,
-                       factor: int = 1):
-        """
-        Finds a new reference path to perform a lane change
-        :param allow_overtaking:True if overtaking on left opposite lanelets is allowed
-        :param source_position: np.array[x,y]: current vehicle position
-        :param resampling_step_reference_path: resampling step
-        :param max_curvature_reference_path: max curvature of reference path
-        :param factor: (optional) in how many parts lanelet should be split in
-        :return:
-        """
+        for start in start_lanes:
+            start_id = start
+            if start in lanelet_mapping:
+                start_id = lanelet_mapping[start][0]
 
-        if source_position is None:
-            source_position = self.planning_problem.initial_state.position
-        sourcelanelets = self.lanelet_network.find_lanelet_by_position(np.array([source_position]))
-        source_lanelet = self.lanelet_network.find_lanelet_by_id(sourcelanelets[0][0])
+            reference_path = self.find_reference_path_to_goal(
+                start_id, goal, lanelet_network= new_network, graph=graph)
+            if reference_path is None:
+                reference_path = source_lanelet.center_vertices
+            # smooth reference path until curvature is smaller or equal max_curvature_reference_path
+            max_curvature = max_curvature_reference_path + 0.2
+            while max_curvature > max_curvature_reference_path:
+                reference_path = np.array(chaikins_corner_cutting(reference_path))
+                reference_path = resample_polyline(reference_path, resampling_step_reference_path)
+                max_curvature = max(abs(compute_curvature_from_polyline(reference_path)))
 
-        laneletids_leading_to_goal = self.find_all_lanelets_leading_to_goal(
-            source_lanelet.lanelet_id, allow_overtaking)
-        lanelets_leading_to_goal = []
-        for id in laneletids_leading_to_goal:
-            lanelets_leading_to_goal.append(self.lanelet_network.find_lanelet_by_id(id))
+            reference_paths[start] = reference_path
 
-        if lanelets_leading_to_goal == []:
-            lanelets_leading_to_goal = self.lanelet_network.lanelets
+        return reference_paths, lanelets_leading_to_goal
 
-        new_network, start, goal = self.plan_with_discrete_network(lanelet_list=lanelets_leading_to_goal,
-                                                                     current_id=source_lanelet.lanelet_id,
-                                                                     factor=factor,
-                                                                     current_pos=source_position,
-                                                                     allow_overtaking=allow_overtaking)
-        graph = self.create_graph_from_lanelet_network(lanelet_network=new_network)
-
-        reference_path = self.find_reference_path_to_goal(
-            start, goal, lanelet_network= new_network, graph= graph)
-        if reference_path is None:
-            reference_path = source_lanelet.center_vertices
-
-        # smooth reference path until curvature is smaller or equal max_curvature_reference_path
-        max_curvature = max_curvature_reference_path + 0.2
-        while max_curvature > max_curvature_reference_path:
-            reference_path = np.array(chaikins_corner_cutting(reference_path))
-            reference_path = resample_polyline(reference_path, resampling_step_reference_path)
-            max_curvature = max(abs(compute_curvature_from_polyline(reference_path)))
-        return reference_path, lanelets_leading_to_goal
 
 if __name__ == '__main__':
-    scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_2_T-1.xml'
-    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/cooperative/C-USA_Lanker-2_1_T-1.xml'
-    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Urban-1_1_S-1.xml'
-    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_Gar-1_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-3_2_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-3_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-1_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-4_4_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-4_2_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-4_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-2_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-4_3_T-1.xml'
+
+    #komische pfade
+    ###scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-21_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-25_1_T-1.xml'
+    #zu kurze goal lanelet -> pred?!
+    ###scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-22_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-10_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-15_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-24_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-4_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-27_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-20_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-3_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-23_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-2_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-6_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-19_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-1_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-12_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-29_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-14_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-17_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-16_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-9_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-5_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-7_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-8_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-11_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-26_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-18_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-13_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-28_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_7_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_8_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-2_2_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-2_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-2_5_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-2_12_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-2_7_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-2_13_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-2_9_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-2_15_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_13_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_12_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_6_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-2_14_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_3_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-2_8_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_2_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-2_6_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_11_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_4_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-2_10_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_9_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-2_4_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-2_3_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_10_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_5_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-2_11_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_A99-1_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Intersect-1_2_S-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_A9-2_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_Gar-1_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_Muc-4_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Merge-1_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Over-1_1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_Hhr-1_1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_Ffb-1_3_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_HW-1_1_S-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Intersect-1_1_S-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_A9-1_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_Muc-3_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_Ffb-1_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_Ffb-2_2_S-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_B471-1_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_Muc-2_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Urban-1_1_S-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_Ffb-2_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_Muc-1_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_Ffb-1_2_S-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/cooperative/C-USA_Lanker-2_3_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/cooperative/C-DEU_B471-2_1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/cooperative/C-USA_Lanker-2_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/cooperative/C-USA_Lanker-2_2_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/cooperative/C-USA_US101-30_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/cooperative/C-DEU_B471-1_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/cooperative/C-USA_Lanker-1_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/cooperative/C-USA_US101-32_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/cooperative/C-USA_Lanker-2_4_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/cooperative/C-USA_US101-31_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/cooperative/C-USA_US101-33_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/cooperative/C-USA_Lanker-1_2_T-1.xml'
     scenario, planning_problem_set = CommonRoadFileReader(scenario_path).open()
 
     pr = cProfile.Profile()
@@ -799,20 +598,13 @@ if __name__ == '__main__':
         resampling_step_reference_path=1.5,
         max_curvature_reference_path=0.15,
         source_position=None)
-    path_change1, lanelets1 = route_planner.plan_discrete(
-        allow_overtaking=True,
+
+    reference_path0, lanelets_leading_to_goal0 = route_planner.plan_all_reference_paths(
         resampling_step_reference_path=1.5,
-        max_curvature_reference_path=0.1,
-        source_position=None,
-        factor=2)
-    path_change2, lanelets2 = route_planner.change_lanelet(
-        allow_overtaking=True,
-        resampling_step_reference_path=1.5,
-        max_curvature_reference_path=0.1,
-        source_position=None,
-        factor=2)
+        max_curvature_reference_path=0.15)
+
     start = time.time()
-    draw_object(scenario.lanelet_network, draw_params={'lanelet_network': {'lanelet': {'show_label': False}}})
+    draw_object(scenario.lanelet_network, draw_params={'lanelet_network': {'lanelet': {'show_label': True}}})
     draw_object(planning_problem_set)
 
     for id in lanelets_leading_to_goal:
@@ -832,12 +624,11 @@ if __name__ == '__main__':
             'facecolor': 'yellow',
             'zorder': 45}
        })
-        #draw_object(scenario)
 
-        plt.plot(reference_path[:, 0], reference_path[:, 1], '-*g', linewidth=4, zorder=50)
-        #plt.plot(path_change[:,0], path_change[:,1], '-*r', linewidth=4, zorder=50)
-        plt.plot(path_change2[:,0], path_change2[:,1], '-*b', linewidth=4, zorder=50)
-        plt.plot(path_change1[:, 0], path_change1[:, 1], '-*r', linewidth=4, zorder=50)
+        for path in reference_path0.values():
+            plt.plot(path[:, 0], path[:, 1], '-*b', linewidth=4, zorder=50)
+
+        #plt.plot(reference_path[:, 0], reference_path[:, 1], '-*g', linewidth=4, zorder=50)
 
     print(time.time() - start)
     pr.disable()
@@ -847,4 +638,5 @@ if __name__ == '__main__':
     plt.axes().autoscale()
     plt.gca().set_aspect('equal')
     plt.axis()
+    print('Done')
     plt.show(block=True)
