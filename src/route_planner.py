@@ -277,6 +277,7 @@ class RoutePlanner:
             else:
                 left = False
         # reset lanelet_id for right while loop
+        lanelet_id = temp_id
         while right:
             current_lanelet = self.lanelet_network.find_lanelet_by_id(lanelet_id)
             if (current_lanelet.adj_right is not None) and current_lanelet.adj_right_same_direction:
@@ -496,13 +497,17 @@ if __name__ == '__main__':
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-4_3_T-1.xml'
 
     #komische pfade
-    ###scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-21_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-21_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-15_1_T-1.xml'
+
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-25_1_T-1.xml'
     #zu kurze goal lanelet -> pred?!
     ###scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-22_1_T-1.xml'
-    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-10_1_T-1.xml'
-    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-15_1_T-1.xml'
-    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-24_1_T-1.xml'
+    # cannot be reached?!
+    ###scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-10_1_T-1.xml'
+
+
+    scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-24_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-4_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-27_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-20_1_T-1.xml'
@@ -607,26 +612,28 @@ if __name__ == '__main__':
     draw_object(scenario.lanelet_network, draw_params={'lanelet_network': {'lanelet': {'show_label': True}}})
     draw_object(planning_problem_set)
 
-    for id in lanelets_leading_to_goal:
-        l = scenario.lanelet_network.find_lanelet_by_id(id)
-        draw_object(l, draw_params={'lanelet': {
-            'left_bound_color': 'yellow',
-            'right_bound_color': 'yellow',
-            'center_bound_color': '#dddddd',
-            'draw_left_bound': True,
-            'draw_right_bound': False,
-            'draw_center_bound': False,
-            'draw_border_vertices': False,
-            'draw_start_and_direction': False,
-            'show_label': False,
-            'draw_linewidth': 4,
-            'fill_lanelet': True,
-            'facecolor': 'yellow',
-            'zorder': 45}
-       })
+    for path in reference_path0.values():
+        plt.plot(path[:, 0], path[:, 1], '-*b', linewidth=4, zorder=50)
 
-        for path in reference_path0.values():
-            plt.plot(path[:, 0], path[:, 1], '-*b', linewidth=4, zorder=50)
+    #for id in lanelets_leading_to_goal:
+    #    l = scenario.lanelet_network.find_lanelet_by_id(id)
+    #    draw_object(l, draw_params={'lanelet': {
+    #        'left_bound_color': 'yellow',
+    #        'right_bound_color': 'yellow',
+    #        'center_bound_color': '#dddddd',
+    #        'draw_left_bound': True,
+    #        'draw_right_bound': False,
+    #        'draw_center_bound': False,
+    #        'draw_border_vertices': False,
+    #        'draw_start_and_direction': False,
+    #        'show_label': False,
+    #        'draw_linewidth': 4,
+    #        'fill_lanelet': True,
+    #        'facecolor': 'yellow',
+    #        'zorder': 45}
+    #   })
+
+
 
         #plt.plot(reference_path[:, 0], reference_path[:, 1], '-*g', linewidth=4, zorder=50)
 
