@@ -61,7 +61,6 @@ class RoutePlanner:
         self.lanelet_network = self.scenario.lanelet_network
         self.graph = self.create_graph_from_lanelet_network()
 
-
     def create_graph_from_lanelet_network(self, lanelet_network = None, allow_overtaking: bool = False):
         """ Build a graph from the lanelet network. The length of a lanelet is assigned as weight to
             its outgoing edges as in Bender P., Ziegler J., Stiller C., "Lanelets: Efficient Map
@@ -102,7 +101,7 @@ class RoutePlanner:
         goal_lanelet = lanelet_network.find_lanelet_by_id((self.goal_lanelet_id))
         distance, goal_index = spatial.KDTree(goal_lanelet.center_vertices).query(self.goal_lanelet_position)
 
-        left_lanes, right_lanes = self.get_adjacent_lanelets_list(self.goal_lanelet_id)
+        left_lanes, right_lanes, max_length = self.get_adjacent_lanelets_list(self.goal_lanelet_id)
 
         # TODO check if enough center vertices in goal lanelet left?! (vgl split_factor mit goal_index)
         # compute split factor (subtract 1, because source lanelet is in list)
@@ -114,7 +113,7 @@ class RoutePlanner:
             if goal_lanelet.predecessor:
                 goal_lanelet = lanelet_network.find_lanelet_by_id(goal_lanelet.predecessor[0])
                 goal_index = len(goal_lanelet.center_vertices[:]) - 1
-                left_lanes, right_lanes = self.get_adjacent_lanelets_list(self.goal_lanelet_id)
+                left_lanes, right_lanes, max_length = self.get_adjacent_lanelets_list(self.goal_lanelet_id)
 
                 # compute split factor (subtract 1, because source lanelet is in list)
                 split_factor = max(len(left_lanes), len(right_lanes)) - 1
@@ -125,7 +124,6 @@ class RoutePlanner:
         split_lanelets = list(set(split_lanelets))
         split_lanelets = [int(l) for l in split_lanelets]
 
-
         map_ids = list(range(0, (split_factor + 2) * len(lanelet_network.lanelets)))
         for lanelet in lanelet_network.lanelets:
             if lanelet.lanelet_id in map_ids:
@@ -135,7 +133,6 @@ class RoutePlanner:
         for lanelet in split_lanelets:
             lanelet_mapping[lanelet] = map_ids[num: num + split_factor + 1]
             num += split_factor + 1
-
 
         other_lanelets = []
         # get all other lanelets
@@ -182,6 +179,7 @@ class RoutePlanner:
                 else:
                     other_lanelets.append(lanelet)
 
+        split_array = np.arange(max_length - (2 * split_factor), max_length, 2)
         # TODO same length all lanelets
         lanes = []
         id = 0
@@ -284,8 +282,11 @@ class RoutePlanner:
         left = True
         right = True
         temp_id = lanelet_id
+        max_length = 0
         while left:
             current_lanelet = self.lanelet_network.find_lanelet_by_id(lanelet_id)
+            if len(current_lanelet.center_vertices[:]) > max_length:
+                max_length = len(current_lanelet.center_vertices[:])
             if (current_lanelet.adj_left is not None) and current_lanelet.adj_left_same_direction:
                 list_left.append(current_lanelet.adj_left)
                 lanelet_id = current_lanelet.adj_left
@@ -295,12 +296,14 @@ class RoutePlanner:
         lanelet_id = temp_id
         while right:
             current_lanelet = self.lanelet_network.find_lanelet_by_id(lanelet_id)
+            if len(current_lanelet.center_vertices[:]) > max_length:
+                max_length = len(current_lanelet.center_vertices[:])
             if (current_lanelet.adj_right is not None) and current_lanelet.adj_right_same_direction:
                 list_right.append(current_lanelet.adj_right)
                 lanelet_id = current_lanelet.adj_right
             else:
                 right = False
-        return list_left, list_right
+        return list_left, list_right, max_length
 
     def find_all_shortest_paths(self, graph, source_lanelet_id, target_lanelet_id):
         return list(nx.all_shortest_paths(graph,
@@ -465,12 +468,15 @@ class RoutePlanner:
         sourcelanelets = self.lanelet_network.find_lanelet_by_position(np.array([source_position]))
         source_lanelet = self.lanelet_network.find_lanelet_by_id(sourcelanelets[0][0])
 
-        left_lanes, right_lanes = self.get_adjacent_lanelets_list(source_lanelet.lanelet_id)
-        start_lanes = (np.concatenate((left_lanes, right_lanes), axis=0)).tolist()
-        start_lanes.append(source_lanelet.lanelet_id)
-        start_lanes = list(set(start_lanes))
+        lanelets_leading_to_goal = set()
+        for lanelet in self.lanelet_network.lanelets:
+            if lanelet.lanelet_id != self.goal_lanelet_id:
+                _lanelets = self.find_all_lanelets_leading_to_goal(lanelet.lanelet_id, allow_overtaking= True)
+                lanelets_leading_to_goal |= _lanelets
 
-        lanelets_leading_to_goal = self.lanelet_network.lanelets
+        lanelets_leading_to_goal = list(set(lanelets_leading_to_goal))
+
+        #lanelets_leading_to_goal = self.lanelet_network.lanelets
 
         new_network, lanelet_mapping = self.create_reference_path_network(lanelet_network=self.lanelet_network,
                                                                initial_pos=source_position)
@@ -480,7 +486,7 @@ class RoutePlanner:
 
         reference_paths = {}
 
-        for start in start_lanes:
+        for start in lanelets_leading_to_goal:
             start_id = start
             if start in lanelet_mapping:
                 start_id = lanelet_mapping[start][0]
@@ -515,12 +521,12 @@ if __name__ == '__main__':
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-21_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-15_1_T-1.xml'
 
-    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-25_1_T-1.xml'
+    scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-25_1_T-1.xml'
     #zu kurze goal lanelet -> pred?!
-    ###scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-22_1_T-1.xml'
+    #
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-22_1_T-1.xml'
     # cannot be reached?!
-    scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-10_1_T-1.xml'
-
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-10_1_T-1.xml'
 
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-24_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-4_1_T-1.xml'
@@ -614,7 +620,7 @@ if __name__ == '__main__':
 
     route_planner = RoutePlanner(scenario.lanelet_network, scenario_path)
     reference_path, lanelets_leading_to_goal = route_planner.find_reference_path_and_lanelets_leading_to_goal(
-        allow_overtaking=False,
+        allow_overtaking=True,
         resampling_step_reference_path=1.5,
         max_curvature_reference_path=0.15,
         source_position=None)
@@ -630,23 +636,23 @@ if __name__ == '__main__':
     for path in reference_path0.values():
         plt.plot(path[:, 0], path[:, 1], '-*b', linewidth=4, zorder=50)
 
-    #for id in lanelets_leading_to_goal:
-    #    l = scenario.lanelet_network.find_lanelet_by_id(id)
-    #    draw_object(l, draw_params={'lanelet': {
-    #        'left_bound_color': 'yellow',
-    #        'right_bound_color': 'yellow',
-    #        'center_bound_color': '#dddddd',
-    #        'draw_left_bound': True,
-    #        'draw_right_bound': False,
-    #        'draw_center_bound': False,
-    #        'draw_border_vertices': False,
-    #        'draw_start_and_direction': False,
-    #        'show_label': False,
-    #        'draw_linewidth': 4,
-    #        'fill_lanelet': True,
-    #        'facecolor': 'yellow',
-    #        'zorder': 45}
-    #   })
+    for id in lanelets_leading_to_goal:
+        l = scenario.lanelet_network.find_lanelet_by_id(id)
+        draw_object(l, draw_params={'lanelet': {
+            'left_bound_color': 'yellow',
+            'right_bound_color': 'yellow',
+            'center_bound_color': '#dddddd',
+            'draw_left_bound': True,
+            'draw_right_bound': False,
+            'draw_center_bound': False,
+            'draw_border_vertices': False,
+            'draw_start_and_direction': False,
+            'show_label': False,
+            'draw_linewidth': 4,
+            'fill_lanelet': True,
+            'facecolor': 'yellow',
+            'zorder': 45}
+       })
 
 
 
