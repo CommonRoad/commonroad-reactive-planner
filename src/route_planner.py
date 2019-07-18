@@ -54,7 +54,7 @@ class RoutePlanner:
 
         if self.goal_lanelet_position is None:
             goal_lanelet = self.scenario.lanelet_network.find_lanelet_by_id(self.goal_lanelet_id)
-            self.goal_lanelet_position = goal_lanelet.center_vertices[-1]
+            self.goal_lanelet_position = goal_lanelet.center_vertices[-5]
 
         print("goal lanelet ID" + str(self.goal_lanelet_id))
 
@@ -101,7 +101,6 @@ class RoutePlanner:
 
         left_lanes, right_lanes, max_length = self.get_adjacent_lanelets_list(self.goal_lanelet_id)
 
-        # TODO check if enough center vertices in goal lanelet left?! (vgl split_factor mit goal_index)
         # compute split factor (subtract 1, because source lanelet is in list)
         split_factor = max(len(left_lanes), len(right_lanes)) - 1
         split_factor = max(1, split_factor)
@@ -136,11 +135,20 @@ class RoutePlanner:
 
         num = 0
         for lanelet in split_lanelets:
-            lanelet_mapping[lanelet] = map_ids[num: num + split_factor + 1]
-            num += split_factor + 1
+            if lanelet == self.goal_lanelet_id:
+                lanelet_mapping[lanelet] = map_ids[num: num + split_factor + 2]
+                num += split_factor + 2
+            else:
+                lanelet_mapping[lanelet] = map_ids[num: num + split_factor + 1]
+                num += split_factor + 1
+
         for lanelet in goal_split_lanelets:
-            lanelet_mapping[lanelet] = map_ids[num: num + 2]
-            num += 2
+            if lanelet == self.goal_lanelet_id:
+                lanelet_mapping[lanelet] = map_ids[num: num + 3]
+                num += 3
+            else:
+                lanelet_mapping[lanelet] = map_ids[num: num + 2]
+                num += 2
 
         other_lanelets = []
         # get all other lanelets
@@ -189,17 +197,14 @@ class RoutePlanner:
                 else:
                     other_lanelets.append(lanelet)
 
-        split_array = np.arange(max_length - (2 * split_factor), max_length, 2)
-        goal_lanelet_len = goal_lanelet.center_vertices[0:goal_index+1]
-
-        created_lanelets, end_id = self.create_split_lanelets(split_lanelets, split_factor, lanelet_mapping, map_ids)
+        created_lanelets, end_id, lanelet_mapping= self.create_split_lanelets(split_lanelets, split_factor, lanelet_mapping, map_ids)
         # append all not split lanelets
         all_lanelets = (np.concatenate((created_lanelets, other_lanelets), axis=0)).tolist()
 
         goal_created_lanelets = []
         if goal_split_lanelets != []:
-            #split_factor = 2
-            goal_created_lanelets, end_id = self.create_split_lanelets(lanelets=goal_split_lanelets, split_factor=1,
+            # split_factor = 2
+            goal_created_lanelets, end_id, lanelet_mapping = self.create_split_lanelets(lanelets=goal_split_lanelets, split_factor=1,
                                                                        lanelet_mapping=lanelet_mapping, map_ids=map_ids,
                                                                        start_id=end_id)
 
@@ -209,11 +214,11 @@ class RoutePlanner:
         new_network = LaneletNetwork()
         new_network = new_network.create_from_lanelet_list(all_lanelets)
 
-        #goal = lanelet_mapping[self.goal_lanelet_id][-1]
+        # goal = lanelet_mapping[self.goal_lanelet_id][-1]
 
         return new_network, lanelet_mapping
 
-    def create_split_lanelets(self, lanelets, split_factor, lanelet_mapping, map_ids, start_id = 0):
+    def create_split_lanelets(self, lanelets, split_factor, lanelet_mapping, map_ids, start_id=0):
         lanelet_network = self.lanelet_network
 
         created_lanelets = []
@@ -235,14 +240,28 @@ class RoutePlanner:
                 if diff > 0:
                     diff = min(4, diff)
                     add = max(1, diff)
-                    #print("added new vertice")
-                    #print(split_array)
-                    split_array = np.arange(lanelet_length - (2 * split_factor), lanelet_length - add, 2)
-                    #print(split_array)
+                    if lanelet_length - (2 * split_factor) - add > 0:
+                        split_array = np.arange(lanelet_length - (2 * split_factor) - add, lanelet_length - add + 1, 2)
+                    elif lanelet_length - (2 * split_factor) > 0:
+                        split_array = np.arange(lanelet_length - (2 * split_factor), lanelet_length + 1, 2)
+                    lane_index = len(lanelet.center_vertices[:]) - 1
+                    if len(split_array) == 1:
+                        if split_array ==[0] or split_array == [1]:
+                            if lanelet_length - (2 * split_factor) >= 0:
+                                split_array = np.arange(lanelet_length - (2 * split_factor), lanelet_length + 1, 2)
+                                lane_index = len(lanelet.center_vertices[:]) - 1
+                else:
+                    split_array = np.arange(lanelet_length - (2 * split_factor), lanelet_length + 1, 2)
+                    lane_index = len(lanelet.center_vertices[:]) - 1
 
             lanes.clear()
             # split lanelet into sublanelets
             lanes = np.split(np.array(lanelet.center_vertices[0:lane_index + 1]), split_array)
+
+            if len(lanes[-1]) <= 1:
+                lanes = lanes[0:len(lanes)-1]
+                map_ids.remove((lanelet_mapping[lanelet_id])[-1])
+                del (lanelet_mapping[lanelet_id])[-1]
 
             # get predecessor for first new lanelet
             p_list = lanelet.predecessor
@@ -260,44 +279,47 @@ class RoutePlanner:
                 pred_list = None
 
             for i in range(len(lanes)):
-                # get successor from lanelet_mapping
-                suc_list = []
-                if i == split_factor:
-                    s_list = lanelet.successor
-                    for suc in s_list:
-                        if suc in lanelet_mapping:
-                            suc_list.append(lanelet_mapping[suc][0])
-                        else:
-                            suc_list.append(suc)
-                else:
-                    suc_list.append(map_ids[id + 1])
-                # if suc_list is empty set it to None, otherwise problems with new lanelet
-                if suc_list == []:
-                    suc_list = None
-
-                # get left and right adjacent from lanelet_mapping (attention: (not) same direction)
                 temp_right = None
                 temp_left = None
-                if lanelet.adj_right:
-                    if lanelet.adj_right in lanelet_mapping:
-                        right_lanelets = lanelet_mapping[lanelet.adj_right]
-                        if lanelet.adj_right_same_direction:
-                            temp_right = right_lanelets[i]
-                        else:
-                            if len(right_lanelets) == 1:
-                                temp_right = right_lanelets[0]
+                suc_list = []
+                if not(lanelet_id == self.goal_lanelet_id and i == len(lanes)-1):
+                    # get successor from lanelet_mapping
+                    if i == split_factor and lanelet_id == self.goal_lanelet_id:
+                        suc_list.append(map_ids[id + 1])
+                    if i == split_factor:
+                        s_list = lanelet.successor
+                        for suc in s_list:
+                            if suc in lanelet_mapping:
+                                suc_list.append(lanelet_mapping[suc][0])
                             else:
-                                temp_right = right_lanelets[-1 - i]
-                if lanelet.adj_left:
-                    if lanelet.adj_left in lanelet_mapping:
-                        left_lanelets = lanelet_mapping[lanelet.adj_left]
-                        if lanelet.adj_left_same_direction:
-                            temp_left = left_lanelets[i]
-                        else:
-                            if len(left_lanelets) == 1:
-                                temp_left = left_lanelets[0]
+                                suc_list.append(suc)
+                    else:
+                        suc_list.append(map_ids[id + 1])
+                    # if suc_list is empty set it to None, otherwise problems with new lanelet
+                    if suc_list == []:
+                        suc_list = None
+
+                    # get left and right adjacent from lanelet_mapping (attention: (not) same direction)
+                    if lanelet.adj_right:
+                        if lanelet.adj_right in lanelet_mapping:
+                            right_lanelets = lanelet_mapping[lanelet.adj_right]
+                            if lanelet.adj_right_same_direction:
+                                temp_right = right_lanelets[i]
                             else:
-                                temp_left = left_lanelets[-1 - i]
+                                if len(right_lanelets) == 1:
+                                    temp_right = right_lanelets[0]
+                                else:
+                                    temp_right = right_lanelets[-1 - i]
+                    if lanelet.adj_left:
+                        if lanelet.adj_left in lanelet_mapping:
+                            left_lanelets = lanelet_mapping[lanelet.adj_left]
+                            if lanelet.adj_left_same_direction:
+                                temp_left = left_lanelets[i]
+                            else:
+                                if len(left_lanelets) == 1:
+                                    temp_left = left_lanelets[0]
+                                else:
+                                    temp_left = left_lanelets[-1 - i]
 
                 # create new lanelet: set successor, adjacent_left, adjacent_right are set according to lanelet_mapping
                 # in the graph generation we don't care about left and right_vertices: just assign center_vertices
@@ -317,7 +339,7 @@ class RoutePlanner:
                 # append current lanelet as pred for next lanelet
                 pred_list.append(new_lanelet.lanelet_id)
 
-        return created_lanelets, id
+        return created_lanelets, id, lanelet_mapping
 
     def get_adjacent_lanelets_list(self, lanelet_id):
         """
@@ -571,30 +593,36 @@ if __name__ == '__main__':
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-2_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-4_3_T-1.xml'
 
+    # not work
+
+    # fixed
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-9_1_T-1.xml'
+
+    # probl
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-1_1_T-1.xml'
+
+    # evtl verlängerung nötig?
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-21_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-24_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-27_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-6_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-19_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-12_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-29_1_T-1.xml'
+
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-15_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-25_1_T-1.xml'
-    #zu kurze goal lanelet -> pred?!
-    scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-22_1_T-1.xml'
-    # cannot be reached?!
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-22_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-10_1_T-1.xml'
-
-    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-24_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-4_1_T-1.xml'
-    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-27_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-20_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-3_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-23_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-2_1_T-1.xml'
-    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-6_1_T-1.xml'
-    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-19_1_T-1.xml'
-    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-1_1_T-1.xml'
-    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-12_1_T-1.xml'
-    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-29_1_T-1.xml'
+
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-14_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-17_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-16_1_T-1.xml'
-    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-9_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-5_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-7_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-8_1_T-1.xml'
@@ -603,7 +631,14 @@ if __name__ == '__main__':
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-18_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-13_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-28_1_T-1.xml'
-    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_7_T-1.xml'
+
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_A99-1_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_A9-2_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_A9-1_1_T-1.xml'
+
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_B471-1_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/cooperative/C-DEU_B471-1_1_T-1.xml'
+    scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_7_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_8_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-2_2_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-2_1_T-1.xml'
@@ -631,9 +666,7 @@ if __name__ == '__main__':
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_5_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-2_11_T-1.xml'
-    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_A99-1_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Intersect-1_2_S-1.xml'
-    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_A9-2_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_Gar-1_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_Muc-4_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Merge-1_1_T-1.xml'
@@ -642,11 +675,9 @@ if __name__ == '__main__':
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_Ffb-1_3_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_HW-1_1_S-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Intersect-1_1_S-1.xml'
-    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_A9-1_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_Muc-3_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_Ffb-1_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_Ffb-2_2_S-1.xml'
-    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_B471-1_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_Muc-2_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Urban-1_1_S-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_Ffb-2_1_T-1.xml'
@@ -657,7 +688,6 @@ if __name__ == '__main__':
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/cooperative/C-USA_Lanker-2_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/cooperative/C-USA_Lanker-2_2_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/cooperative/C-USA_US101-30_1_T-1.xml'
-    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/cooperative/C-DEU_B471-1_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/cooperative/C-USA_Lanker-1_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/cooperative/C-USA_US101-32_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/cooperative/C-USA_Lanker-2_4_T-1.xml'
