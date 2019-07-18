@@ -16,6 +16,7 @@ import numpy as np
 import time, warnings
 from parameter_classes import VehModelParameters, SamplingParameters
 from polyline import compute_curvature_from_polyline, compute_orientation_from_polyline, compute_pathlength_from_polyline
+from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType, StaticObstacle
 
 
 __author__ = "Christian Pek"
@@ -31,10 +32,11 @@ __status__ = "Alpha"
 class ReactivePlanner(object):
     def __init__(self, v_desired=14, collision_check_in_cl: bool = False, lanelet_network:LaneletNetwork=None):
 
-        params = PlanningParameter()
-        params.parameter_velocity_reaching()
+        params = PlanningParameter(velocity_reaching=True)
+        self.set_parameters(params)
 
         vehicle_params = VehicleParameter()
+        self.set_parameters(vehicle_params)
 
         # Set time sampling variables
         self.horizon = params.prediction_horizon
@@ -77,6 +79,7 @@ class ReactivePlanner(object):
         # store feasible trajectories of last run
         self._feasible_trajectories = None
         self._infeasible_count_collision = 0
+        self._infeasible_count_behavior = 0
         self._infeasible_count_kinematics = 0
         self._min_cost = None
         self._max_cost = None
@@ -99,6 +102,14 @@ class ReactivePlanner(object):
 
         # compute sampling sets
         self._setup_sampling_sets()
+
+    def set_parameters(self, parameters):
+        if type(parameters).__name__ == PlanningParameter:
+            self.params = parameters
+
+        elif type(parameters).__name__ == VehicleParameter:
+            self.params_vehicle = parameters
+
 
     def set_desired_speed(self, v_desired):
         """
@@ -284,8 +295,7 @@ class ReactivePlanner(object):
         """
 
         # get parameters for planning
-        params = PlanningParameter()
-        params.parameter_velocity_reaching()
+        params = PlanningParameter(velocity_reaching = True)
 
         # create trajectory bundle object
         trajectory_bundle = TrajectoryBundle()
@@ -382,7 +392,7 @@ class ReactivePlanner(object):
             return False
 
         return feasible
-
+    '''
     def _check_kinematics(self, trajectory: TrajectorySample) -> bool:
         """
         Checks the kinematics of given trajectory and computes the cartesian trajectory information
@@ -451,7 +461,7 @@ class ReactivePlanner(object):
                 ddot = d_acceleration[i] - dp * s_acceleration[i]
 
                 if s_velocity[i] > 0.001:
-                    d_pp = ddot / (s_velocity[i] ** 2)
+                    dpp = ddot / (s_velocity[i] ** 2)
                 else:
                     if np.abs(ddot) > 0.00003:
                         dpp = None
@@ -524,7 +534,6 @@ class ReactivePlanner(object):
                 except Exception as e:
                     print(e)
                     return False
-
             # store curvilinear extension
             trajectory.ext_curvilinear = CurviLinearSample(s_n, d_n, theta_n)
             # store Cartesian extension
@@ -540,6 +549,176 @@ class ReactivePlanner(object):
 
         # Trajectory is feasible
         return True
+    '''
+
+    def _check_kinematics(self, trajectory: TrajectorySample) -> bool:
+        """
+        Checks the kinematics of given trajectory
+        :param trajectory: The trajectory to check with cartesian information
+        :return: True if the trajectory is feasible and false otherwise
+        """
+        v = trajectory.cartesian.v
+        a = trajectory.cartesian.a
+        theta_gl = trajectory.cartesian.theta
+        kappa_gl = trajectory.cartesian.kappa
+        s = trajectory.curvilinear.s
+        for i in range(0, len(s)):
+            if not self._check_vehicle_model(v[i], a[i],
+                                             (theta_gl[i] - theta_gl[i - 1]) / self.dT if i + 1 > 1 else 0.,
+                                             kappa_gl[i],
+                                             (kappa_gl[i] - kappa_gl[i - 1]) / self.dT if i + 1 > 1 else 0.):
+                return False
+        return True
+
+    # Fabian
+    def _compute_cartesian_trajectory(self, trajectory: TrajectorySample):
+        """
+        Computes the cartesian trajectory information
+        :param trajectory: The trajectory to compute
+        :return: Computed trajectory
+        """
+
+        # constants
+        _LOW_VEL_MODE = True
+
+        # create time array
+        t = np.arange(0, trajectory.trajectory_long.duration_s + self.dT, self.dT)
+
+        # precompute time interval information
+        t2 = np.square(t)
+        t3 = t2 * t
+        t4 = np.square(t2)
+        t5 = t4 * t
+        # compute position, velocity, acceleration
+        s = trajectory.trajectory_long.calc_position(t, t2, t3, t4, t5)  # lon pos
+        s_velocity = trajectory.trajectory_long.calc_velocity(t, t2, t3, t4)  # lon velocity
+        s_acceleration = trajectory.trajectory_long.calc_acceleration(t, t2, t3)  # lon acceleration
+
+        s1 = s - s[0]
+        s2 = np.square(s1)
+        s3 = s2 * s1
+        s4 = np.square(s2)
+        s5 = s4 * s1
+
+        # d = trajectory.trajectory_lat.calc_position(t, t2, t3, t4, t5)  # lat pos
+        d = trajectory.trajectory_lat.calc_position(s1, s2, s3, s4, s5)  # lat pos
+        # d_velocity = trajectory.trajectory_lat.calc_velocity(t, t2, t3, t4)  # lat velocity
+        d_velocity = trajectory.trajectory_lat.calc_velocity(s1, s2, s3, s4)  # lat velocity
+        # d_acceleration = trajectory.trajectory_lat.calc_acceleration(t, t2, t3)  # lat acceleration
+        d_acceleration = trajectory.trajectory_lat.calc_acceleration(s1, s2, s3)  # lat acceleration
+
+        x = list()  # [x_0.position[0]]
+        y = list()  # [x_0.position[1]]
+        theta_gl = list()  # [x_0.orientation]
+        theta_cl = list()  # [x_0.orientation - np.interp(s[0], self._ref_pos, self._theta_ref)]
+        v = list()  # [x_0.v]
+        a = list()  # [x_0.a]
+        kappa_gl = list()  # [x_0.kappa]
+        for i in range(0, len(s)):
+            # compute Global position
+            try:
+                pos = self._cosy.convert_to_cartesian_coords(s[i], d[i])
+            except ValueError:
+                # outside of projection domain
+                return None
+            x.append(pos[0])
+            y.append(pos[1])
+
+            # compute orientations
+            dp = None
+            dpp = None
+            if not _LOW_VEL_MODE:
+                if s_velocity[i] > 0.001:
+                    dp = d_velocity[i] / s_velocity[i]
+                else:
+                    if d_velocity[i] > 0.001:
+                        dp = None
+                    else:
+                        dp = 0.
+                ddot = d_acceleration[i] - dp * s_acceleration[i]
+
+                if s_velocity[i] > 0.001:
+                    dpp = ddot / (s_velocity[i] ** 2)
+                else:
+                    if np.abs(ddot) > 0.00003:
+                        dpp = None
+                    else:
+                        dpp = 0.
+            else:
+                dp = d_velocity[i]
+                dpp = d_acceleration[i]
+
+            # add cl orientation
+            if s_velocity[i] > 0.005:
+                if _LOW_VEL_MODE:
+                    theta_cl.append(np.arctan2(dp, 1.0))
+                else:
+                    theta_cl.append(np.arctan2(d_velocity[i], s_velocity[i]))
+            else:
+                theta_cl.append(np.interp(s[i], self._ref_pos, self._theta_ref))
+
+            # add global orientation
+            theta_gl.append(theta_cl[-1] + np.interp(s[i], self._ref_pos, self._theta_ref))
+
+            # Kappa
+            k_r = np.interp(s[i], self._ref_pos, self._ref_curv)
+            k_r_d = np.interp(s[i], self._ref_pos, self._ref_curv_d)
+            # ref_curv_prime = np.gradient(self._ref_curv, self._ref_pos)
+            oneKrD = (1 - k_r * d[i])
+            cosTheta = np.cos(theta_cl[-1])
+            tanTheta = np.tan(theta_cl[-1])
+            kappa = (dpp + k_r * dp * tanTheta) * cosTheta * (cosTheta / oneKrD) ** 2 + (cosTheta / oneKrD) * k_r
+            kappa_gl.append(kappa)
+            # kappa_cl.append(kappa_gl[-1] - k_r)
+
+            # velocity
+            v.append(s_velocity[i] * (oneKrD / (np.cos(theta_cl[-1]))))
+            if v[-1] <= 10 ** -1:
+                v[-1] = 0
+
+            # a.append((v[-1] - v[-2]) / self.dT)
+
+            a.append(s_acceleration[i] * oneKrD / cosTheta + ((s_velocity[i] ** 2) / cosTheta) * (
+                    oneKrD * tanTheta * (kappa_gl[-1] * oneKrD / cosTheta - k_r) - (
+                    k_r_d * d[i] + k_r * d_velocity[i])))
+
+        # convert to array
+        v = np.array(v)
+        a = np.array(a)
+
+        # check if trajectories planning horizon is shorter than expected
+        if trajectory.trajectory_long.desired_horizon > trajectory.trajectory_long.duration_s:
+            # extend trajectory
+            s_n, d_n, theta_n, v_n, a_n = self._extend_trajectory(s[-1], d[-1], s_velocity[-1], theta_cl[-1], v[-1],
+                                                                  a[-1],
+                                                                  trajectory.trajectory_long.desired_horizon - trajectory.trajectory_long.duration_s,
+                                                                  self.dT)
+            # transform to cartesian
+            x_n = list()
+            y_n = list()
+            for i in range(len(s_n)):
+                try:
+                    pos = self._cosy.convert_to_cartesian_coords(s_n[i], d_n[i])
+                    x_n.append(pos[0])
+                    y_n.append(pos[1])
+                except Exception as e:
+                    # print(e)
+                    return None
+            # store curvilinear extension
+            trajectory.ext_curvilinear = CurviLinearSample(s_n, d_n, theta_n)
+            # store Cartesian extension
+            trajectory.ext_cartesian = CartesianSample(x_n, y_n, np.repeat(theta_gl[-1], len(s_n)), v_n, a_n, 0, 0)
+
+        # store Cartesian trajectory
+        trajectory.cartesian = CartesianSample(x, y, theta_gl, v, a, kappa_gl, np.append([0], np.diff(kappa_gl)))
+
+        # store Curvilinear trajectory
+        # theta_cl = trajectory.cartesian.theta - np.interp(trajectory.curvilinear.s, self._ref_pos, self._ref_curv)
+        trajectory.curvilinear = CurviLinearSample(s, d, theta_cl, ss=s_velocity, sss=s_acceleration, dd=d_velocity,
+                                                   ddd=d_acceleration)
+
+        # Trajectory is feasible
+        return trajectory
 
     def draw_trajectory_set(self, trajectory_bundle: List[TrajectorySample], step=2):
         """
@@ -601,7 +780,7 @@ class ReactivePlanner(object):
 
         return (x_0_lon, x_0_lat)
 
-
+    '''
     def plan(self, x_0: State, cc: object, cl_states=None) -> tuple:
         """
         Plans an optimal trajectory
@@ -618,6 +797,7 @@ class ReactivePlanner(object):
         else:
             x_0_lon, x_0_lat = self._compute_initial_states(x_0)
 
+
         print('<Reactive Planner>: initial state is: lon = {} / lat = {}'.format(x_0_lon, x_0_lat))
 
         # create empty bundle
@@ -629,19 +809,25 @@ class ReactivePlanner(object):
         while bundle.empty() and i < self._sampling_level:
             print('<ReactivePlanner>: Starting at sampling density {} of {}'.format(i + 1, self._sampling_level))
             print('<ReactivePlanner>: Sampling {} trajectories'.format(self.no_of_samples(i)))
+            # 1 Start
             # plan trajectory bundle
+            # return: trajectory bundle with all sample trajectories.
             bundle = self._create_trajectory_bundle(self._desired_speed, x_0_lon, x_0_lat, samp_level=i)
 
-            bundle_old = bundle
 
+            bundle_old = bundle
+            # 1 Ende
+            # 2 Start
             # check feasibility
             bundle = self._get_feasible_trajectories(bundle, cc, x_0)
+            # geht nur mit feasible trajectorien:   optimal_trajectory = bundle.updated_optimal_trajectory() if not bundle.empty() else None
 
             # print statistics
             print('<ReactivePlanner>: Rejected {} infeasible trajectories due to kinematics'.format(
                 self.no_of_infeasible_trajectories_kinematics()))
             print('<ReactivePlanner>: Rejected {} infeasible trajectories due to collisions'.format(
                 self.no_of_infeasible_trajectories_collision()))
+            # 2 Ende
 
             i = i + 1
             if bundle.empty() and x_0.velocity <= 0.1:
@@ -677,14 +863,126 @@ class ReactivePlanner(object):
         # find optimal trajectory
         optimal_trajectory = bundle.updated_optimal_trajectory() if not bundle.empty() else None
         if not bundle.empty():
+            #print("here")
             self._min_cost = bundle_old.min_costs()
             self._max_cost = bundle_old.max_costs()
+            print(self._min_cost, self._max_cost)
+            #self._min_cost = bundle.min_costs()
+            #self._max_cost = bundle.max_costs()
+            #print(self._min_cost, self._max_cost)
             # self.draw_trajectory_set(self._feasible_trajectories)
             print('Found optimal trajectory with costs = {}, which corresponds to {} percent of seen costs'.format(
                 optimal_trajectory.total_cost,
                 ((optimal_trajectory.total_cost - self._min_cost) / (self._max_cost - self._min_cost))))
 
         return self._compute_trajectory_pair(optimal_trajectory) if not bundle.empty() else None
+    '''
+
+    #Fabian Lazy evaluation
+    def plan(self, x_0: State, cc: object, cl_states=None) -> tuple:
+        """
+        Plans an optimal trajectory
+        :param x_0: Initial state as CR state (CR = cartesian)
+        :param cc:  CollisionChecker object
+        :param cl_states: Curvilinear state if replanning is used
+        :return: Optimal trajectory as tuple or None, if no trajectory is found.
+        """
+        self.x_0 = x_0
+
+        # compute initial states
+        if cl_states is not None:
+            x_0_lon, x_0_lat = cl_states
+        else:
+            x_0_lon, x_0_lat = self._compute_initial_states(x_0)
+
+        print('<Reactive Planner>: initial state is: lon = {} / lat = {}'.format(x_0_lon, x_0_lat))
+
+        # create empty bundle
+        bundle = TrajectoryBundle()
+        # initial index of sampling set to use
+        i = 0
+
+        # sample until trajectory has been found or sampling_level exceeds its limit
+        while i < self._sampling_level:
+            print('<ReactivePlanner>: Starting at sampling density {} of {}'.format(i + 1, self._sampling_level))
+            print('<ReactivePlanner>: Sampling {} trajectories'.format(self.no_of_samples(i)))
+
+            bundle = self._create_trajectory_bundle(self._desired_speed, x_0_lon, x_0_lat, samp_level=i)
+            bundle_old = bundle
+            val = TrajectoryBundle()
+
+            i = i+1
+            # store only valid trajectories with computed cartesian coordinates
+            if not bundle.empty():
+                for traj in bundle.trajectory_bundle:
+                    tmp = self._compute_cartesian_trajectory(traj)
+                    if tmp is not None:
+                        tmp.reevaluate_costs()
+                        val.add_trajectory(tmp)
+
+            # sort valid trajectories by their costs
+            val.trajectory_bundle = sorted(val.trajectory_bundle, key=lambda traj: traj.total_cost)
+
+            # iterate over valid trajectories and return first feasible trajectory
+            for traj in val.trajectory_bundle:
+                if self._feasible_trajectory(traj, cc):
+                    self._min_cost=bundle_old.min_costs()
+                    self._max_cost=bundle_old.max_costs()
+                    print(
+                        'Found optimal trajectory with costs = {}, which corresponds to {} percent of seen costs'.format(
+                            traj.total_cost,
+                            ((traj.total_cost - self._min_cost) / (self._max_cost - self._min_cost))))
+                    return self._compute_trajectory_pair(traj)
+
+            # add standstill trajectory
+            bundle = TrajectoryBundle()
+            if x_0.velocity <= 0.1:
+                # create artifical standstill trajectory
+                print('Adding standstill trajectory')
+                traj_lon = QuarticTrajectory(t_start_s=0, duration_s=self.horizon, desired_horizon=self.horizon,
+                                                    start_state=x_0_lon,
+                                                    desired_velocity=self._desired_speed)
+                traj_lat = QuinticTrajectory(t_start_s=0, desired_horizon=self.horizon,
+                                                       start_state=x_0_lat)
+                p = TrajectorySample(0, traj_lon, traj_lat, 0)
+                p.cartesian = CartesianSample(np.repeat(x_0.position[0], self.N), np.repeat(x_0.position[1], self.N),
+                                              np.repeat(x_0.orientation, self.N), np.repeat(0, self.N),
+                                              np.repeat(0, self.N), np.repeat(0, self.N), np.repeat(0, self.N))
+                p.curvilinear = CurviLinearSample(np.repeat(x_0_lon[0], self.N), np.repeat(x_0_lat[0], self.N),
+                                                  np.repeat(x_0.orientation, self.N), np.repeat(x_0_lat[1], self.N),
+                                                  np.repeat(x_0_lat[2], self.N), np.repeat(x_0_lon[1], self.N),
+                                                  np.repeat(x_0_lon[2], self.N))
+                p = self._compute_cartesian_trajectory(p)
+                p.reevaluate_costs()
+                bundle.add_trajectory(p)
+                bundle_old = bundle
+                if self._feasible_trajectory(p, cc):
+                    self._min_cost=bundle_old.min_costs()
+                    self._max_cost=bundle_old.max_costs()
+                    print(
+                        'Found optimal trajectory with costs = {}, which corresponds to {} percent of seen costs'.format(
+                            p.total_cost,
+                            ((p.total_cost - self._min_cost) / (self._max_cost - self._min_cost))))
+                    return self._compute_trajectory_pair(p)
+
+        # check if feasible trajectory exists -> emergency mode
+        if bundle.empty():
+            print('<ReactivePlanner>: Could not find any trajectory out of {} trajectories'.format(
+                sum([self.no_of_samples(i) for i in range(self._sampling_level)])))
+            self._feasible_trajectories = bundle_old.trajectory_bundle
+            print('<ReactivePlanner>: Cannot find trajectory with default sampling parameters. '
+                  'Switching to emergency mode!')
+
+        # store feasible trajectories (and trajectories with higher cost than optimal trajectory)
+        # Problem: not all trajectories are checked for feasibility
+        #self._feasible_trajectories = bundle.trajectory_bundle if not bundle.empty() else None
+
+        return None
+
+    # Fabian Ende
+
+
+
 
     def _compute_trajectory_pair(self, trajectory: TrajectorySample) -> tuple:
         """
@@ -746,6 +1044,7 @@ class ReactivePlanner(object):
         # reset statistics
         self._infeasible_count_collision = 0
         self._infeasible_count_kinematics = 0
+        self._infeasible_count_behavior = 0
 
 
         t0 = time.time()
@@ -772,9 +1071,16 @@ class ReactivePlanner(object):
         feas = True
 
         # check kinematic constraints
+        # Problem check_kinematics2 fehler
         feas &= self._check_kinematics(trajectory)
         if not feas:
             self._infeasible_count_kinematics += 1
+
+        if feas:
+            # check trajectory for traffic rule violation
+            feas &= self._check_driving_behavior(trajectory)
+            if not feas:
+                self._infeasible_count_behavior += 1
 
         # only check for collisions (expensive operation) if trajectory is kinematically feasible
         if feas:
@@ -784,6 +1090,42 @@ class ReactivePlanner(object):
                 self._infeasible_count_collision += 1
 
         return feas
+
+    def _check_driving_behavior(self, trajectory: TrajectorySample) -> bool:
+        """
+        Checks a given trajectory for violation of traffic rules and behavior (e.g. roadkeeping, velcoity)
+        :param trajectory: The trajectory to check
+        :return: True if appropriate driving behavior, False otherwise
+        """
+
+        assert self.lanelet_network is not None, \
+            'lanelet network must be provided during initialization for using get_reference_of_lane().'
+
+        violation = False
+
+        # Pos to check leaving lanelet in cartesian space
+        traj_pos_cart = np.column_stack((trajectory.cartesian.x, trajectory.cartesian.y))
+        tray_in_any_lanelet = np.full(len(traj_pos_cart), False)
+
+        v_max = np.max(trajectory.cartesian.v)
+        cart_course = trajectory.cartesian.theta
+        adj_candidate = list(self.lanelet_network.lanelets_in_proximity(traj_pos_cart[0, :], 10))
+
+        # Check if every point of trajectory is inside any lanelet
+        for k in range(len(adj_candidate)):
+            tray_in_any_lanelet = np.logical_or(tray_in_any_lanelet, adj_candidate[k].contains_points(traj_pos_cart))
+        boundary_crossed = not all(tray_in_any_lanelet)
+
+
+        # TODO: check speedlimit on lanelet with: self.lanelet_network.find_lanelet_by_id(lanelet_id).speed_limit
+        for k in range(len(adj_candidate)):
+            if v_max > adj_candidate[k].speed_limit * 1.1:
+                print(v_max)
+                print('Please slow down!')
+
+        violation = boundary_crossed | violation
+
+        return not violation
 
     def _check_for_collisions(self, trajectory: TrajectorySample, cc: object) -> bool:
         """
@@ -830,3 +1172,82 @@ class ReactivePlanner(object):
 
         return DynamicObstacle(42, ObstacleType.CAR,shape, trajectory.state_list[0],prediction)
 
+    def _boundary_not_intersecting(self, scenario, p, own_ID, total_IDs):
+        n = 50
+
+        total_IDs.remove(own_ID)
+        #create list of n-1 points between p[0] and p[1]
+        delta_x = p[1][0]-p[0][0]
+        delta_y = p[1][1]-p[0][1]
+        points = np.array([[p[0][0]+1/n*delta_x, p[0][1]+1/n*delta_y]])
+        for i in range(2,n):
+            points = np.append(points, np.array([[p[0][0]+i/n*delta_x, p[0][1]+i/n*delta_y]]), axis= 0)
+
+        # checks whether a point between p[0] and p[1] is on other lanelet
+        for i in total_IDs:
+            if True in scenario.lanelet_network.find_lanelet_by_id(i).contains_points(points):
+                return False
+        return True
+
+
+    def add_obstacles_at_lanelet_edges(self, scenario, xml_file):
+
+        from commonroad.common.util import Interval
+        import xml.etree.ElementTree as ET
+        # find all lanelet IDs
+        tree = ET.parse(xml_file)
+        root = tree.getroot()
+        IDs = []
+        for child in root:
+            if child.tag == "lanelet":
+                IDs.append(int(child.attrib["id"]))
+        # add obstacles
+        e = 1e-6  # avoid numerical errors
+        for i in IDs:
+            if scenario.lanelet_network.find_lanelet_by_id(i).adj_left is None:
+                old = scenario.lanelet_network.find_lanelet_by_id(i).left_vertices[0];
+                for element in scenario.lanelet_network.find_lanelet_by_id(i).left_vertices:
+                    delta_x = element[0] - old[0]
+                    delta_y = element[1] - old[1]
+                    ang = np.arctan(delta_y / (delta_x + e))
+                    len_obj = np.sqrt(delta_x ** 2 + delta_y ** 2)
+                    if delta_x >= 0:
+                        x_obj = element[0] - 0.5 * len_obj * np.cos(np.arctan(np.abs(delta_y / (delta_x + e))))
+                        y_obj = element[1] - 0.5 * len_obj * np.sin(np.arctan(delta_y / (delta_x + e)))
+                    else:
+                        x_obj = element[0] + 0.5 * len_obj * np.cos(np.arctan(np.abs(delta_y / (delta_x + e))))
+                        y_obj = element[1] + 0.5 * len_obj * np.sin(np.arctan(delta_y / (delta_x + e)))
+                    obj = Rectangle(length=len_obj, width=0.05)
+                    state = State(position=np.array([x_obj, y_obj]), orientation=ang, velocity=0,
+                                  time_step=Interval(0, 30))
+                    o_type = ObstacleType
+                    obj = StaticObstacle(obstacle_shape=obj, initial_state=state, obstacle_type=o_type.ROAD_BOUNDARY,
+                                         obstacle_id=scenario.generate_object_id())
+                    if self._boundary_not_intersecting(self, scenario, np.array([element, old]), i, IDs[:]):
+                        scenario.add_objects(obj)
+                    old = element
+            if scenario.lanelet_network.find_lanelet_by_id(i).adj_right is None:
+                old = scenario.lanelet_network.find_lanelet_by_id(i).right_vertices[0];
+                for element in scenario.lanelet_network.find_lanelet_by_id(i).right_vertices:
+                    delta_x = element[0] - old[0]
+                    delta_y = element[1] - old[1]
+                    ang = np.arctan(delta_y / (delta_x + e))
+                    len_obj = np.sqrt(delta_x ** 2 + delta_y ** 2)
+                    if delta_x >= 0:
+                        x_obj = element[0] - 0.5 * len_obj * np.cos(np.arctan(np.abs(delta_y / (delta_x + e))))
+                        y_obj = element[1] - 0.5 * len_obj * np.sin(np.arctan(delta_y / (delta_x + e)))
+                    else:
+                        x_obj = element[0] + 0.5 * len_obj * np.cos(np.arctan(np.abs(delta_y / (delta_x + e))))
+                        y_obj = element[1] + 0.5 * len_obj * np.sin(np.arctan(delta_y / (delta_x + e)))
+                    # y_obj = element[1] - 0.5 * len_obj * np.sin(np.arctan(delta_y / (delta_x+e)))
+                    obj = Rectangle(length=len_obj, width=-0.05)
+                    state = State(position=np.array([x_obj, y_obj]), orientation=ang, velocity=0,
+                                  time_step=Interval(0, 30))
+                    o_type = ObstacleType
+                    obj = StaticObstacle(obstacle_shape=obj, initial_state=state, obstacle_type=o_type.ROAD_BOUNDARY,
+                                         obstacle_id=scenario.generate_object_id())
+                    if self._boundary_not_intersecting(self, scenario, np.array([element, old]), i, IDs[:]):
+                        scenario.add_objects(obj)
+                    old = element
+
+        return scenario
