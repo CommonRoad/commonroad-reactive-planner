@@ -7,7 +7,7 @@ from commonroad.visualization.draw_dispatch_cr import draw_object
 from commonroad.scenario.lanelet import Lanelet, LaneletNetwork
 import matplotlib.pyplot as plt
 import cProfile
-import time
+import time, warnings
 from scipy import spatial
 
 
@@ -60,6 +60,10 @@ class RoutePlanner:
 
         self.lanelet_network = self.scenario.lanelet_network
         self.graph = self.create_graph_from_lanelet_network()
+        self.reference_paths = {}
+        for lanelet in self.lanelet_network.lanelets:
+            self.reference_paths[lanelet.lanelet_id] = lanelet.center_vertices
+
 
     def create_graph_from_lanelet_network(self, lanelet_network = None, allow_overtaking: bool = False):
         """ Build a graph from the lanelet network. The length of a lanelet is assigned as weight to
@@ -222,7 +226,6 @@ class RoutePlanner:
         lanelet_network = self.lanelet_network
 
         created_lanelets = []
-        # TODO same length all lanelets
         lanes = []
         id = start_id
         # split each lanelet
@@ -474,11 +477,8 @@ class RoutePlanner:
                 else:
                     reference_lanelets.append(lanelet)
 
-        #print( "New path")
-        #print(reference_lanelets[0].lanelet_id)
         center_vertices = reference_lanelets[0].center_vertices
         for i in range(1, len(reference_lanelets)):
-            #print(reference_lanelets[i].lanelet_id)
             if np.isclose(center_vertices[-1],
                           reference_lanelets[i].center_vertices[0]).all():
                 idx = 1
@@ -580,7 +580,57 @@ class RoutePlanner:
 
             reference_paths[start] = reference_path
 
+        self.reference_paths = reference_paths
         return reference_paths, lanelets_leading_to_goal
+
+    def set_reference_lane(self, lane_direction: int, position) -> None:
+        """
+        compute new reference path based on relative lane position.
+        :param lane_direction: 0=curernt lane >0=right lanes, <0=left lanes
+        :return: new reference lane vertices
+        """
+        assert self.lanelet_network is not None,\
+            'lanelet network must be provided during initialization for using get_reference_of_lane().'
+
+        current_ids = self.lanelet_network.find_lanelet_by_position(np.array([position]))[0]
+        if len(current_ids) > 0:
+            current_lanelet = self.lanelet_network.find_lanelet_by_id(current_ids[0])
+        else:
+            #return self.reference_paths[current_lanelet.lanelet_id]
+            raise ValueError('set_reference_lane: x0 is not located on any lane and no previous reference available.')
+
+        # determine target lane
+        target_lanelet = None
+        if lane_direction==-1:
+            if current_lanelet.adj_left_same_direction not in (False,None):
+                target_lanelet = self.lanelet_network.find_lanelet_by_id(current_lanelet.adj_left)
+        elif lane_direction == 1:
+            if current_lanelet.adj_right_same_direction not in (False,None):
+                target_lanelet = self.lanelet_network.find_lanelet_by_id(current_lanelet.adj_right)
+        elif lane_direction == 0:
+            target_lanelet = current_lanelet
+
+        if target_lanelet is None:
+            warnings.warn('set_reference_lane: No adjacent lane in direction {}, stay in current lane.'.format(lane_direction), stacklevel=2)
+            target_lanelet = current_lanelet
+        else:
+            print('<reactive_planner> Changed reference lanelet from {} to {}.'.format(current_lanelet.lanelet_id, target_lanelet.lanelet_id))
+
+        distance, end_index = spatial.KDTree(self.reference_paths[current_lanelet.lanelet_id]).query(position)
+        distance, start_index = spatial.KDTree(self.reference_paths[target_lanelet.lanelet_id]).query(position)
+        tmp = np.array([position])
+        temp1 = np.concatenate((self.reference_paths[current_lanelet.lanelet_id][0:end_index -1], tmp), axis=0)
+        reference_path = np.concatenate((temp1, self.reference_paths[target_lanelet.lanelet_id][start_index + 2:]), axis=0)
+        # smooth reference path until curvature is smaller or equal max_curvature_reference_path
+        resampling_step_reference_path = 1.5
+        max_curvature_reference_path = 0.15
+        max_curvature = max_curvature_reference_path + 0.2
+        while max_curvature > max_curvature_reference_path:
+            reference_path = np.array(chaikins_corner_cutting(reference_path))
+            reference_path = resample_polyline(reference_path, resampling_step_reference_path)
+            max_curvature = max(abs(compute_curvature_from_polyline(reference_path)))
+
+        return reference_path
 
 
 if __name__ == '__main__':
@@ -593,10 +643,8 @@ if __name__ == '__main__':
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-2_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-4_3_T-1.xml'
 
-    # not work
-
     # fixed
-    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-9_1_T-1.xml'
+    scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-9_1_T-1.xml'
 
     # probl
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-1_1_T-1.xml'
@@ -638,7 +686,7 @@ if __name__ == '__main__':
 
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_B471-1_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/cooperative/C-DEU_B471-1_1_T-1.xml'
-    scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_7_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_7_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_8_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-2_2_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-2_1_T-1.xml'
@@ -718,12 +766,17 @@ if __name__ == '__main__':
         resampling_step_reference_path=1.5,
         max_curvature_reference_path=0.1)
 
+    print("Paths")
+
+    new_path = route_planner.set_reference_lane(1, route_planner.planning_problem.initial_state.position)
+
     start = time.time()
     draw_object(scenario.lanelet_network, draw_params={'lanelet_network': {'lanelet': {'show_label': True}}})
     draw_object(planning_problem_set)
 
-    for path in reference_path0.values():
-        plt.plot(path[:, 0], path[:, 1], '-*b', linewidth=4, zorder=50)
+    #for path in reference_path0.values():
+    #    plt.plot(path[:, 0], path[:, 1], '-*b', linewidth=4, zorder=50)
+    plt.plot(new_path[:, 0], new_path[:, 1], '-*b', linewidth=4, zorder=50)
 
     #for id in lanelets_leading_to_goal:
     #    l = scenario.lanelet_network.find_lanelet_by_id(id)
