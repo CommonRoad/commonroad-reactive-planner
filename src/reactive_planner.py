@@ -1,3 +1,6 @@
+# from route_planner import RoutePlanner
+from scipy import spatial
+
 from parameter import VehicleParameter, PlanningParameter
 from trajectory_bundle import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample
 from polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
@@ -1256,39 +1259,56 @@ class ReactivePlanner(object):
         return scenario
 
 
+    # Raphael Highlevel
 
-    def check_current_state(self, scenario, trajectory):
+    def check_current_state(self, route_planner, scenario, trajectory, reference_path):
+
+        print(self.statemachine.state)
 
         if self.statemachine.state == 'following':
-            if self.check_velocity_of_car_ahead_too_slow(scenario, trajectory):
+
+            # TODO: Vel auch anpassen, wenn Differenz nicht groß genug ist?
+            ego_velocity = trajectory._initial_state.velocity
+
+            vel_is_too_slow, obstacles_ahead = self.check_velocity_of_car_ahead_too_slow(scenario, trajectory)
+
+            if vel_is_too_slow:
+
+                for car in obstacles_ahead:
+                    if not hasattr(car.initial_state, 'velocity'):
+                        ego_velocity = 0
+                if ego_velocity != 0:
+                    ego_velocity = obstacles_ahead[0].initial_state.velocity
+
                 if self.check_for_possible_overtaking_lanelet(scenario, trajectory):
+
                     if self.check_lane_change_possible(scenario, trajectory, left=True):
+
                         self.statemachine.Car_ahead_too_slow(
                             self.get_laneletid_of_egocar(scenario, trajectory),
                             scenario.lanelet_network.find_lanelet_by_id(self.get_laneletid_of_egocar(scenario, trajectory)).adj_left)
 
-                        left_obstacles = self.get_obstacles_on_neighboring_lane(trajectory, scenario, left=True)
-                        if left_obstacles is not None:
-                            for obstacle in left_obstacles:
-                                print("Obst on neighboring lane: ", obstacle.initial_state.position)
+                        print(trajectory._initial_state.position)
+                        reference_path = route_planner.set_reference_lane(-1, trajectory._initial_state.position)
 
-                            print("Merging necessary")
+                        ego_velocity = trajectory._initial_state.velocity
+
+            if ego_velocity != trajectory._initial_state.velocity:
+                print("Changed velocity!")
+
+            return ego_velocity, reference_path
 
         if self.statemachine.state == 'lane_change_left':
 
+            ego_velocity = trajectory._initial_state.velocity
+
             position_ego = trajectory._initial_state.position
-            new_center_vertice = scenario.lanelet_network.find_lanelet_by_id(self.statemachine.new_lanelet).center_vertices
+            distance, index = spatial.KDTree(reference_path).query(position_ego)
 
-            # Lane change is done, if car position corresponds to center of new line:
-            for point in new_center_vertice:
-                if point[0] - 2 < position_ego[0] < point[0] + 2:
-                    if point[1] - 2 < position_ego[1] < point[1] + 2:
-                        self.statemachine.on_new_centerline()
-                        break
+            if distance < 1:
+                self.statemachine.on_new_centerline()
 
-            #TODO: correct implementation of reference path
-            reference_path = new_center_vertice
-            self.set_reference_path(reference_path)
+            return ego_velocity, reference_path
 
         if self.statemachine.state == 'on_overtaking_line':
             #TODO: Calculate time from Velocity
@@ -1297,7 +1317,27 @@ class ReactivePlanner(object):
             if self.statemachine.timer_elapsed == True:
                 print("Hurrayy!")
 
-        print(self.statemachine.state)
+
+    def create_new_cl_state(self, x_0, x_cl,  changed_velocity):
+
+        # compute curvilinear position
+        s, d = self._cosy.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
+        # compute orientation in curvilinear coordinate frame
+        theta_cl = x_0.orientation - np.interp(s, self._ref_pos, self._theta_ref)
+
+        # compute curvatures
+        kr = np.interp(s, self._ref_pos, self._ref_curv)
+
+        # compute d prime and d prime prime -> derivation after arclength
+        d_p = (1 - kr * d) * np.tan(theta_cl)
+
+        # compute s dot and s dot dot -> derivation after time
+        s_d = changed_velocity * np.cos(theta_cl) / (1 - np.interp(s, self._ref_pos, self._ref_curv) * d)
+
+        x_cl[0][1] = s_d
+        x_cl[1][1] = d_p
+
+        return x_cl
 
     def check_velocity_of_car_ahead_too_slow(self, scenario, ego):
 
@@ -1307,7 +1347,7 @@ class ReactivePlanner(object):
             print("Near Obstacles ", obstacle.initial_state.position)
         obstacles_ahead = self.check_for_obstacles_ahead(scenario, ego, near_obstacles)
 
-        return self.check_if_velocity_is_too_slow(ego, obstacles_ahead)
+        return self.check_if_velocity_is_too_slow(ego, obstacles_ahead), obstacles_ahead
 
     def check_if_velocity_is_too_slow(self, ego, obstacles_ahead):
         allowed_velocity_difference = ego._initial_state.velocity / 10
@@ -1319,6 +1359,7 @@ class ReactivePlanner(object):
                 print("Car ahead is too slow! Difference: ",
                       car.initial_state.velocity - (ego._initial_state.velocity + allowed_velocity_difference))
                 return True
+        # print("Vel Diff: ", car.initial_state.velocity - (ego._initial_state.velocity + allowed_velocity_difference))
         return False
 
     def get_near_obstacles(self, ego, scenario):
