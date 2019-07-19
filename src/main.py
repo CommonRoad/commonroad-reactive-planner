@@ -168,23 +168,25 @@ if __name__ == '__main__':
         optimal = planner.plan(x_0, collision_checker, cl_states=x_cl)
         # convert to CR obstacle
         ego = planner.convert_cr_trajectory_to_object(optimal[0])
-        draw_object(scenario, draw_params={'time_begin': k})
+        draw_object(scenario, draw_params={'time_begin': k, 'time_end': k})
         #draw_object(planning_problem_set)
         draw_object(ego)
         draw_object(ego.prediction.occupancy_at_time_step(1))
         plt.pause(0.1)
 
+        # TODO: Reste x_0 to reach starting velocity?
         x_0 = optimal[0].state_list[1]
         x_cl = (optimal[2][1], optimal[3][1])
 
-        if k == 3:
-            reference_path = route_planner.set_reference_lane(-1, x_0.position)
-            planner.set_reference_path(reference_path)
-            plt.plot(reference_path[:, 0], reference_path[:, 1], '-*b', linewidth=1, zorder=10)
-
         print("Goal state is: {}".format(optimal[1].state_list[-1]))
 
-        planner.check_current_state(scenario, ego)
+        print("Velocity before ", x_0.velocity)
+        changed_velocity, reference_path = planner.check_current_state(route_planner, scenario, ego, reference_path)
+        x_cl = planner.create_new_cl_state(x_0, x_cl, changed_velocity)
+        print("Velocity after ", x_0.velocity)
+
+        planner.set_reference_path(reference_path)
+        plt.plot(reference_path[:, 0], reference_path[:, 1], '-*g', linewidth=1, zorder=10)
 
     print('Done')
     plt.show(block=True)
