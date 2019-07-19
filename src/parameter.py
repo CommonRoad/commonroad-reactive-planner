@@ -1,4 +1,3 @@
-
 # planning parameter
 class PlanningParameter:
     def __init__(self, velocity_reaching=True):

@@ -53,3 +53,35 @@ def compute_pathlength_from_polyline(polyline: npy.ndarray) -> npy.ndarray:
         distance[i] = distance[i - 1] + npy.linalg.norm(polyline[i] - polyline[i - 1])
 
     return npy.array(distance)
+
+
+def chaikins_corner_cutting(polyline):
+    new_polyline = list()
+    new_polyline.append(polyline[0])
+    for i in range(0, len(polyline)-1):
+        new_polyline.append((3/4)*polyline[i] + (1/4)*polyline[i+1])
+        new_polyline.append((1/4)*polyline[i] + (3/4)*polyline[i+1])
+    new_polyline.append(polyline[-1])
+    return new_polyline
+
+
+def resample_polyline(polyline, step=2.0):
+    new_polyline = [polyline[0]]
+    current_position = 0 + step
+    current_length = np.linalg.norm(polyline[0] - polyline[1])
+    current_idx = 0
+    while current_idx < len(polyline) - 1:
+        if current_position >= current_length:
+            current_position = current_position - current_length
+            current_idx += 1
+            if current_idx > len(polyline) - 2:
+                break
+            current_length = np.linalg.norm(polyline[current_idx + 1]
+                                            - polyline[current_idx])
+        else:
+            rel = current_position/current_length
+            new_polyline.append((1-rel) * polyline[current_idx] +
+                                rel * polyline[current_idx + 1])
+            current_position += step
+    new_polyline.append(polyline[-1])
+    return np.array(new_polyline)
