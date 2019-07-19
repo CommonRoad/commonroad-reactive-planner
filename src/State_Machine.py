@@ -9,8 +9,8 @@ class CarHighlevelStates(object):
     transitions = [{'trigger': 'Car_ahead_too_slow',    'source': 'following',          'dest': 'lane_change_left',
                     'before': ['set_overtaking_true', 'set_lanelet_ids'], 'conditions': 'lanelet_ids_valid'},
 
-                   {'trigger': 'on_new_centerline',     'source': 'lane_change_left',   'dest': 'on_overtaking_line',
-                    'before': 'set_timer_overtaking', 'conditions': 'overtaking_is_true'},
+                   #{'trigger': 'on_new_centerline',     'source': 'lane_change_left',   'dest': 'on_overtaking_line',
+                   # 'before': 'set_timer_overtaking', 'conditions': 'overtaking_is_true'},
 
                    {'trigger': 'on_new_centerline',     'source': 'lane_change_left',   'dest': 'following',
                     'before': 'reset_lanelet_ids', 'after': 'set_overtaking_false'},
