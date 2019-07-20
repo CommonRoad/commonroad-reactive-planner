@@ -180,10 +180,8 @@ if __name__ == '__main__':
 
         print("Goal state is: {}".format(optimal[1].state_list[-1]))
 
-        print("Velocity before ", x_0.velocity)
         changed_velocity, reference_path = planner.check_current_state(route_planner, scenario, ego, reference_path)
         x_cl = planner.create_new_cl_state(x_0, x_cl, changed_velocity)
-        print("Velocity after ", x_0.velocity)
 
         planner.set_reference_path(reference_path)
         plt.plot(reference_path[:, 0], reference_path[:, 1], '-*g', linewidth=1, zorder=10)

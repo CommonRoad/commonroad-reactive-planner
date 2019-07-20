@@ -1265,6 +1265,17 @@ class ReactivePlanner(object):
 
         print(self.statemachine.state)
 
+        if self.statemachine.state == 'lane_change_left':
+
+            ego_velocity = trajectory._initial_state.velocity
+            ego_position = trajectory._initial_state.position
+
+            if self.check_if_car_on_new_lanelet(scenario, trajectory):
+                if self.check_if_on_new_centervertice(scenario, ego_position):
+                    self.statemachine.on_new_centerline()
+
+            return ego_velocity, reference_path
+
         if self.statemachine.state == 'following':
 
             # TODO: Vel auch anpassen, wenn Differenz nicht groß genug ist?
@@ -1274,39 +1285,36 @@ class ReactivePlanner(object):
 
             if vel_is_too_slow:
 
-                for car in obstacles_ahead:
-                    if not hasattr(car.initial_state, 'velocity'):
-                        ego_velocity = 0
-                if ego_velocity != 0:
-                    ego_velocity = obstacles_ahead[0].initial_state.velocity
+                velocity_has_to_be_changed = False
 
                 if self.check_for_possible_overtaking_lanelet(scenario, trajectory):
 
                     if self.check_lane_change_possible(scenario, trajectory, left=True):
-
                         self.statemachine.Car_ahead_too_slow(
                             self.get_laneletid_of_egocar(scenario, trajectory),
-                            scenario.lanelet_network.find_lanelet_by_id(self.get_laneletid_of_egocar(scenario, trajectory)).adj_left)
+                            scenario.lanelet_network.find_lanelet_by_id(
+                                self.get_laneletid_of_egocar(scenario, trajectory)).adj_left)
 
                         print(trajectory._initial_state.position)
                         reference_path = route_planner.set_reference_lane(-1, trajectory._initial_state.position)
 
                         ego_velocity = trajectory._initial_state.velocity
 
+                    else:
+                        velocity_has_to_be_changed = True
+
+                else:
+                    velocity_has_to_be_changed = True
+
+                if velocity_has_to_be_changed == True:
+                    for car in obstacles_ahead:
+                        if not hasattr(car.initial_state, 'velocity'):
+                            ego_velocity = 0
+                    if ego_velocity != 0:
+                        ego_velocity = obstacles_ahead[0].initial_state.velocity
+
             if ego_velocity != trajectory._initial_state.velocity:
                 print("Changed velocity!")
-
-            return ego_velocity, reference_path
-
-        if self.statemachine.state == 'lane_change_left':
-
-            ego_velocity = trajectory._initial_state.velocity
-
-            position_ego = trajectory._initial_state.position
-            distance, index = spatial.KDTree(reference_path).query(position_ego)
-
-            if distance < 1:
-                self.statemachine.on_new_centerline()
 
             return ego_velocity, reference_path
 
@@ -1339,12 +1347,35 @@ class ReactivePlanner(object):
 
         return x_cl
 
+    def check_if_car_on_new_lanelet(self, scenario, ego):
+
+        # distance, index = spatial.KDTree(reference_path).query(position_ego)
+
+        ego_laneletid = self.get_laneletid_of_egocar(scenario, ego)
+
+        if ego_laneletid == self.statemachine.new_lanelet:
+            return True
+        else:
+            return False
+
+    def check_if_on_new_centervertice(self, scenario, ego_position):
+
+        new_laneletid = self.statemachine.new_lanelet
+        new_lanelet = scenario.lanelet_network.find_lanelet_by_id(new_laneletid)
+
+        distance, index = spatial.KDTree(new_lanelet.center_vertices).query(ego_position)
+
+        if distance < 1:
+            return True
+        else:
+            return False
+
     def check_velocity_of_car_ahead_too_slow(self, scenario, ego):
 
         near_obstacles = self.get_near_obstacles(ego, scenario)
 
-        for obstacle in near_obstacles:
-            print("Near Obstacles ", obstacle.initial_state.position)
+        # for obstacle in near_obstacles:
+        #     print("Near Obstacles ", obstacle.initial_state.position)
         obstacles_ahead = self.check_for_obstacles_ahead(scenario, ego, near_obstacles)
 
         return self.check_if_velocity_is_too_slow(ego, obstacles_ahead), obstacles_ahead
@@ -1470,24 +1501,26 @@ class ReactivePlanner(object):
 
     def check_lane_change_possible(self, scenario, ego, left = True):
 
-        obstacles_on_neigboring_lane = self.get_obstacles_on_neighboring_lane(ego, scenario, left)
+        obstacles_on_neighboring_lane = self.get_obstacles_on_neighboring_lane(ego, scenario, left)
 
         vehicle_position = ego._initial_state.position
         rotation_matrix = [[np.cos(ego._initial_state.orientation), -np.sin(ego._initial_state.orientation)],
                            [np.sin(ego._initial_state.orientation), np.cos(ego._initial_state.orientation)]]
 
-        for obstacle in obstacles_on_neigboring_lane:
+        vehicle_parameter = VehicleParameter()
+        number_neighbors = len(obstacles_on_neighboring_lane)
+        for obstacle in obstacles_on_neighboring_lane:
 
             obstacle_position = obstacle.initial_state.position
             transformed_obstacle_position_rounded = np.round(np.matmul(obstacle_position - vehicle_position, rotation_matrix), 1)
 
-            if -obstacle.obstacle_shape.length/2 < abs(ego._initial_state.velocity) - transformed_obstacle_position_rounded[0]  \
-                    < obstacle.obstacle_shape.length/2:
-                if left:
-                    if 0 < transformed_obstacle_position_rounded[1] < 3:
-                        return False
-                else:
-                    if -3 < transformed_obstacle_position_rounded[1] < 0:
-                        return False
+            if obstacle.obstacle_shape.length/2 < \
+                    abs(transformed_obstacle_position_rounded[0]) - vehicle_parameter.length/2: #abs(ego._initial_state.shape.length/2):
+                number_neighbors = number_neighbors - 1
 
-        return True
+        if number_neighbors == 0:
+            print("Lanechange possible!")
+            return True
+        else:
+            print("No lanechange due to neighboring Obstacles!")
+            return False
