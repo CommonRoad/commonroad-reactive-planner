@@ -52,6 +52,7 @@ class VehicleParameter:
         self.acceleration_max = 8  # m/s²
         self.acceleration_dot_max = 0.2
         self.velocity_max = 150 / 3.6  # m/s
+        self.velocity_threshold = 6 # m/s
 
         self.curvature_max = 0.2
 

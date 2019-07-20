@@ -1,6 +1,6 @@
 from parameter import VehicleParameter, PlanningParameter
 from trajectory_bundle import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample
-from polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
+from polynomial_trajectory import QuinticTrajectory#, QuarticTrajectory
 from commonroad.common.validity import *
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 from commonroad.scenario.lanelet import LaneletNetwork, Lanelet
@@ -102,6 +102,9 @@ class ReactivePlanner(object):
 
         # compute sampling sets
         self._setup_sampling_sets()
+
+        # switch between low and high velocity mode
+        self._velocity_threshold = vehicle_params.velocity_threshold
 
     def set_parameters(self, parameters):
         if type(parameters).__name__ == PlanningParameter:
@@ -309,22 +312,40 @@ class ReactivePlanner(object):
 
             # Longitudinal sampling for all possible velocities
             for v in self._v_sets[samp_level]:
-                trajectory_long = QuarticTrajectory(t_start_s=0, duration_s=t, desired_horizon=self.horizon,
-                                                    start_state=x_0_lon, target_velocity=v,
-                                                    desired_velocity=self._desired_speed)
-                jerk_cost = trajectory_long.squared_jerk_integral(t) / t
                 time_cost = 1.0 / t
                 distance_cost = (desired_speed - v) ** 2
+                end_state_lon = np.array([t * v + x_0_lon[0], v, 0.0])
+
+                # Old Version (Quartic Polynomial)
+                # trajectory_long = QuarticTrajectory(t_start_s=0, duration_s=t, desired_horizon=self.horizon,
+                #                                     start_state=x_0_lon, target_velocity=v,
+                #                                     desired_velocity=self._desired_speed)
+                # jerk_cost = trajectory_long.squared_jerk_integral(t) / t
+                # trajectory_long.set_cost(jerk_cost, time_cost, distance_cost,
+                #                          params.k_jerk_lon, params.k_time, params.k_distance)
+
+                # !!!New Version: Quintic Polynomial!!!
+                trajectory_long = QuinticTrajectory(t_start_s=0, duration_s=t, desired_horizon=self.horizon,
+                                                     start_state=x_0_lon, end_state=end_state_lon,
+                                                    desired_velocity=self._desired_speed)
+                jerk_cost = trajectory_long.squared_jerk_integral(t) / t
                 trajectory_long.set_cost(jerk_cost, time_cost, distance_cost,
                                          params.k_jerk_lon, params.k_time, params.k_distance)
 
                 # Sample lateral end states (add x_0_lat to sampled states)
                 for d in self._d_sets[samp_level].union({x_0_lat[0]}):
                     end_state_lat = np.array([d, 0.0, 0.0])
-                    # SWITCHING TO POSITION DOMAIN FOR LATERAL TRAJECTORY PLANNING
-                    s_lon_goal = trajectory_long.calc_position_at(t) - x_0_lon[0]
-                    trajectory_lat = QuinticTrajectory(t_start_s=0, duration_s=s_lon_goal, desired_horizon=self.horizon,
-                                                       start_state=x_0_lat, end_state=end_state_lat)
+                    # (SWITCHING TO POSITION DOMAIN FOR LATERAL TRAJECTORY PLANNING)
+                    if trajectory_long.calc_velocity_at(trajectory_long.duration_s) < self._velocity_threshold:
+                        s_lon_goal = trajectory_long.calc_position_at(t) - x_0_lon[0]
+                        trajectory_lat = QuinticTrajectory(t_start_s=0, duration_s=s_lon_goal,
+                                                           desired_horizon=self.horizon,
+                                                           start_state=x_0_lat, end_state=end_state_lat)
+                    else:
+                        trajectory_lat = QuinticTrajectory(t_start_s=0, duration_s=t,
+                                                           desired_horizon=self.horizon,
+                                                           start_state=x_0_lat, end_state=end_state_lat)
+
                     if trajectory_lat.coeffs is not None:
 
                         jerk_cost = trajectory_lat.squared_jerk_integral(t) / t
