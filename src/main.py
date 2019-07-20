@@ -86,4 +86,4 @@ if __name__ == '__main__':
         print("Goal state is: {}".format(optimal[1].state_list[-1]))
 
     print('Done')
-    plt.show(block=True)
+    plt.show(block=False)

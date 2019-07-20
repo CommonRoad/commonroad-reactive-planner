@@ -103,7 +103,7 @@ class ReactivePlanner(object):
         self._setup_sampling_sets()
 
         # switch between low and high velocity mode
-        self._velocity_threshold = 6
+        self._velocity_threshold = vehicle_params.velocity_threshold
 
     def set_parameters(self, parameters):
         if type(parameters).__name__ == PlanningParameter:
