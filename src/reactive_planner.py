@@ -107,6 +107,10 @@ class ReactivePlanner(object):
         self._velocity_threshold = vehicle_params.velocity_threshold
 
     def set_parameters(self, parameters):
+        """
+        Set vehicle and planning parameters of the planner to plan trajectories for different vehicle and sampling settings
+        :param parameters: VehicleParameter or PlanningParameter Object
+        """
         if type(parameters).__name__ == PlanningParameter:
             self.params = parameters
 
@@ -150,7 +154,6 @@ class ReactivePlanner(object):
         self._theta_ref = theta_ref
         self._ref_curv_d = np.gradient(self._ref_curv, self._ref_pos)
 
-    # TODO ?! High level planner
     def set_reference_lane(self, lane_direction: int) -> None:
         """
         compute new reference path based on relative lane position.
@@ -190,7 +193,6 @@ class ReactivePlanner(object):
         else:
             print('<reactive_planner> Changed reference lanelet from {} to {}.'.format(current_lanelet.lanelet_id, target_lanelet.lanelet_id))
 
-        #TODO: currently only using first lane, integrate high level planner
         lanes = Lanelet.all_lanelets_by_merging_successors_from_lanelet(target_lanelet,self.lanelet_network)
         if len(lanes) > 1:
             reference = lanes[0].center_vertices
@@ -300,25 +302,25 @@ class ReactivePlanner(object):
         # get parameters for planning
         params = PlanningParameter(velocity_reaching = True)
 
-        # create trajectory bundle object
+        # create empty trajectory bundle object
         trajectory_bundle = TrajectoryBundle()
 
         # reset cost statistic
         self._min_cost = 10 ** 9
         self._max_cost = 0
 
-
         for t in self._t_sets[samp_level]:
 
-            # Longitudinal sampling for all possible velocities
+            # Quintic longitudinal sampling over all possible velocities
             for v in self._v_sets[samp_level]:
-                time_cost = 1.0 / t
-                distance_cost = (desired_speed - v) ** 2
-                end_state_lon = np.array([t * v + x_0_lon[0], v, 0.0])
 
                 trajectory_long = QuinticTrajectory(t_start_s=0, duration_s=t, desired_horizon=self.horizon,
                                                      start_state=x_0_lon, end_state=end_state_lon,
                                                     desired_velocity=self._desired_speed)
+                # set costs for sampled longitudinal trajectory sample
+                time_cost = 1.0 / t
+                distance_cost = (desired_speed - v) ** 2
+                end_state_lon = np.array([t * v + x_0_lon[0], v, 0.0])
                 jerk_cost = trajectory_long.squared_jerk_integral(t) / t
                 trajectory_long.set_cost(jerk_cost, time_cost, distance_cost,
                                          params.k_jerk_lon, params.k_time, params.k_distance)
@@ -326,12 +328,14 @@ class ReactivePlanner(object):
                 # Sample lateral end states (add x_0_lat to sampled states)
                 for d in self._d_sets[samp_level].union({x_0_lat[0]}):
                     end_state_lat = np.array([d, 0.0, 0.0])
-                    # (SWITCHING TO POSITION DOMAIN FOR LATERAL TRAJECTORY PLANNING)
+
+                    # Switch to sampling over s for low velocities (non-holonomic behaviour)
                     if trajectory_long.calc_velocity_at(trajectory_long.duration_s) < self._velocity_threshold:
                         s_lon_goal = trajectory_long.calc_position_at(t) - x_0_lon[0]
                         trajectory_lat = QuinticTrajectory(t_start_s=0, duration_s=s_lon_goal,
                                                            desired_horizon=self.horizon,
                                                            start_state=x_0_lat, end_state=end_state_lat)
+                    # Switch to sampling over t for high velocities
                     else:
                         trajectory_lat = QuinticTrajectory(t_start_s=0, duration_s=t,
                                                            desired_horizon=self.horizon,
@@ -339,6 +343,7 @@ class ReactivePlanner(object):
 
                     if trajectory_lat.coeffs is not None:
 
+                        # set costs for sampled lateral trajectory sample
                         jerk_cost = trajectory_lat.squared_jerk_integral(t) / t
                         time_cost = 0  # 1.0/t
                         distance_cost = d ** 2
@@ -348,7 +353,7 @@ class ReactivePlanner(object):
                         # Create trajectory sample and add it to trajectory bundle
                         trajectory_cost = params.k_long * trajectory_long.cost + params.k_lat * trajectory_lat.cost
 
-                        # store costs
+                        # store all costs
                         if trajectory_cost < self._min_cost:
                             self._min_cost = trajectory_cost
 
@@ -582,7 +587,6 @@ class ReactivePlanner(object):
                 return False
         return True
 
-    # Fabian
     def _compute_cartesian_trajectory(self, trajectory: TrajectorySample):
         """
         Computes the cartesian trajectory information
@@ -893,11 +897,6 @@ class ReactivePlanner(object):
 
         return None
 
-    # Fabian Ende
-
-
-
-
     def _compute_trajectory_pair(self, trajectory: TrajectorySample) -> tuple:
         """
         Computes the output required for visualizing in CommonRoad framework
@@ -985,7 +984,6 @@ class ReactivePlanner(object):
         feas = True
 
         # check kinematic constraints
-        # Problem check_kinematics2 fehler
         feas &= self._check_kinematics(trajectory)
         if not feas:
             self._infeasible_count_kinematics += 1
@@ -1031,7 +1029,6 @@ class ReactivePlanner(object):
         boundary_crossed = not all(tray_in_any_lanelet)
 
 
-        # TODO: check speedlimit on lanelet with: self.lanelet_network.find_lanelet_by_id(lanelet_id).speed_limit
         for k in range(len(adj_candidate)):
             if v_max > adj_candidate[k].speed_limit * 1.1:
                 print(v_max)
@@ -1087,6 +1084,14 @@ class ReactivePlanner(object):
         return DynamicObstacle(42, ObstacleType.CAR,shape, trajectory.state_list[0],prediction)
 
     def _boundary_not_intersecting(self, scenario, p, own_ID, total_IDs):
+        """
+        Helper to check if boundary object is not intersecting/blocking any lanelet
+        :param scenario:    Scenario object
+        :param p:           Array of a point and its predecessor describing a boundary segment
+        :param own_ID:      Id of the lanelet corresponding to the boundary
+        :param total_IDs:   List of all lanelet Ids to check for intersection
+        :return:            Boolean
+        """
         n = 50
 
         total_IDs.remove(own_ID)
@@ -1105,6 +1110,13 @@ class ReactivePlanner(object):
 
 
     def add_obstacles_at_lanelet_edges(self, scenario, xml_file):
+        """
+        Adds Obstacles to the most outer boundaries of the lanelet network to prevent the planner from leaving the
+        lanelet network into empty regions
+        :param scenario: Scenario object to which lanelet boundaries obstacles should be added
+        :param xml_file: Path to the xml File in which the scenario is described
+        :return: scenario with boundary obstacles
+        """
 
         from commonroad.common.util import Interval
         import xml.etree.ElementTree as ET
@@ -1165,5 +1177,3 @@ class ReactivePlanner(object):
                     old = element
 
         return scenario
-
-

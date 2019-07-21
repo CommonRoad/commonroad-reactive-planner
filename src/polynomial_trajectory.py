@@ -200,7 +200,7 @@ class PolynomialTrajectory(ABC):
     def calc_position_at(self, t):
         """
         Calculates position at time t
-        :param t:
+        :param t: time
         :return: position
         """
         if self.coeffs is None:
@@ -256,12 +256,20 @@ class QuinticTrajectory(PolynomialTrajectory):
 
 
 class QuarticTrajectory(PolynomialTrajectory):
+    """
+
+    """
     def __init__(self, t_start_s=0, duration_s=0, desired_horizon=0, start_state=np.zeros([3, 1]), target_velocity=0, desired_velocity=0):
         super(QuarticTrajectory, self).__init__(t_start_s=t_start_s, duration_s=duration_s, desired_horizon=desired_horizon,
                                                 target_velocity=target_velocity, start_state=start_state)
         self._desired_velocity = desired_velocity
 
     def calc_coeffs(self):
+        """
+        calculates coefficients of quartic trajectory for given start state, target velocity (second derivative of an
+        end state) and desired duration
+        :return:
+        """
         p_init = self.start_state[0]
         p_init_d = self.start_state[1]
         p_init_dd = self.start_state[2]

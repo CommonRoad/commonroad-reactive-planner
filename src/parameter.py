@@ -1,6 +1,9 @@
 
 # planning parameter
 class PlanningParameter:
+    """
+    Class storing parameters for sampling and the cost function of the planner
+    """
     def __init__(self, velocity_reaching=True):
 
         if velocity_reaching:
@@ -45,6 +48,9 @@ class PlanningParameter:
 
 # vehicle parameter
 class VehicleParameter:
+    """
+    Class storing parameters describing a vehicle's physics
+    """
     def __init__(self):
         self.jerk_long_max = None
         self.jerk_lat_max = None
