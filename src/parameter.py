@@ -20,7 +20,7 @@ class PlanningParameter:
 
             # direction planning parameter
             self.d_deviation = 5
-            self.d_N = 5
+            self.d_N = 10
 
         else:
             # Values for position reaching
