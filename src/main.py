@@ -133,6 +133,7 @@ if __name__ == '__main__':
     # set reference path
     route_planner = RoutePlanner(scenario.lanelet_network, scenario_path)
     route_planner.create_reference_path_network()
+    route_planner.plan_all_reference_paths()
 
     source_position = route_planner.planning_problem.initial_state.position
     sourcelanelets = route_planner.lanelet_network.find_lanelet_by_position(np.array([source_position]))
@@ -162,19 +163,16 @@ if __name__ == '__main__':
     planner.set_parameters(params_vehicle)
     planner.set_reference_path(reference_path)
 
-    plt.plot(reference_path[:, 0], reference_path[:, 1], '-*g', linewidth=1, zorder=10)
     x_cl = None
 
     for k in range(0, 50):
 
         optimal = planner.plan(x_0, collision_checker, cl_states=x_cl)
+
         # convert to CR obstacle
         ego = planner.convert_cr_trajectory_to_object(optimal[0])
-        draw_object(scenario, draw_params={'time_begin': k, 'time_end': k})
-        #draw_object(planning_problem_set)
-        draw_object(ego)
-        draw_object(ego.prediction.occupancy_at_time_step(1))
-        plt.pause(0.1)
+
+        planner.plotting(k, scenario, planning_problem_set, reference_path, ego, only_new_time_step = True)
 
         # TODO: Reste x_0 to reach starting velocity?
         x_0 = optimal[0].state_list[1]
@@ -186,7 +184,6 @@ if __name__ == '__main__':
         x_cl = planner.create_new_cl_state(x_0, x_cl, changed_velocity)
 
         planner.set_reference_path(reference_path)
-        plt.plot(reference_path[:, 0], reference_path[:, 1], '-*g', linewidth=1, zorder=10)
 
     print('Done')
     plt.show(block=True)
