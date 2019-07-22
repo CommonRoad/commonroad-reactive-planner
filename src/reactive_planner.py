@@ -313,14 +313,13 @@ class ReactivePlanner(object):
 
             # Quintic longitudinal sampling over all possible velocities
             for v in self._v_sets[samp_level]:
-
+                end_state_lon = np.array([t * v + x_0_lon[0], v, 0.0])
                 trajectory_long = QuinticTrajectory(t_start_s=0, duration_s=t, desired_horizon=self.horizon,
                                                      start_state=x_0_lon, end_state=end_state_lon,
                                                     desired_velocity=self._desired_speed)
                 # set costs for sampled longitudinal trajectory sample
                 time_cost = 1.0 / t
                 distance_cost = (desired_speed - v) ** 2
-                end_state_lon = np.array([t * v + x_0_lon[0], v, 0.0])
                 jerk_cost = trajectory_long.squared_jerk_integral(t) / t
                 trajectory_long.set_cost(jerk_cost, time_cost, distance_cost,
                                          params.k_jerk_lon, params.k_time, params.k_distance)
