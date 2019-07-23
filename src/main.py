@@ -123,7 +123,7 @@ if __name__ == '__main__':
 
     # Initialize reactive planner
     scenario, planning_problem_set = CommonRoadFileReader(scenario_path).open()
-    plt.figure(figsize=(25, 10))
+    plt.figure('start', figsize=(25, 10))
     draw_object(scenario)
     plt.axis('equal')
     plt.show(block=False)
@@ -165,9 +165,12 @@ if __name__ == '__main__':
 
     x_cl = None
 
-    for k in range(0, 50):
+    number_of_steps = 100
 
-        optimal = planner.plan(x_0, collision_checker, cl_states=x_cl)
+    # collision_checker = planner.updated_collision_checker(number_of_steps, collision_checker)
+
+    for k in range(0, number_of_steps):
+
         optimal = planner.plan(x_0, collision_checker.time_slice(k), cl_states=x_cl)
 
         # convert to CR obstacle
