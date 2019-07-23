@@ -1261,7 +1261,7 @@ class ReactivePlanner(object):
 
     # Raphael Highlevel
 
-    def check_current_state(self, route_planner, scenario, trajectory, reference_path, obstacles_ahead):
+    def check_current_state(self, route_planner, scenario, trajectory, reference_path, obstacles_ahead, k):
 
         print(self.statemachine.state)
 
@@ -1284,7 +1284,7 @@ class ReactivePlanner(object):
 
             if self.check_for_possible_overtaking_lanelet(scenario, trajectory):
 
-                if self.check_lane_change_possible(scenario, trajectory, obstacles_ahead, left=True):
+                if self.check_lane_change_possible(scenario, trajectory, obstacles_ahead, k, left=True):
                     self.statemachine.Car_ahead_too_slow(
                         self.get_laneletid_of_egocar(scenario, trajectory),
                         scenario.lanelet_network.find_lanelet_by_id(
@@ -1481,7 +1481,10 @@ class ReactivePlanner(object):
         x_1, y_1 = np.array([x, y]) + np.array([1, 1 * np.tan(heading)])
         tmp = np.array([[x, y], [x_1, y_1]])
 
-        return scenario.lanelet_network.find_lanelet_by_position(tmp)[0][0]
+        if scenario.lanelet_network.find_lanelet_by_position(tmp)[0]:
+            return scenario.lanelet_network.find_lanelet_by_position(tmp)[0][0]
+        else:
+            return scenario.lanelet_network.find_lanelet_by_position(tmp)[1][0]
 
     def get_obstacles_on_neighboring_lane(self, ego, scenario, k, left = True):
 
@@ -1506,6 +1509,7 @@ class ReactivePlanner(object):
         obstacles_on_neighboring_lane = self.get_obstacles_on_neighboring_lane(ego, scenario, k, left)
 
         vehicle_position = ego._initial_state.position
+        safety_margin = ego._initial_state.velocity / 10
         rotation_matrix = [[np.cos(ego._initial_state.orientation), -np.sin(ego._initial_state.orientation)],
                            [np.sin(ego._initial_state.orientation), np.cos(ego._initial_state.orientation)]]
 
@@ -1517,11 +1521,15 @@ class ReactivePlanner(object):
             transformed_obstacle_position_rounded = np.round(np.matmul(obstacle_position - vehicle_position, rotation_matrix), 1)
 
             if obstacle.obstacle_shape.length/2 < \
-                    abs(transformed_obstacle_position_rounded[0]) - vehicle_parameter.length/2: #abs(ego._initial_state.shape.length/2):
+                    abs(transformed_obstacle_position_rounded[0] - vehicle_parameter.length/2 - safety_margin):
 
-                if obstacle.initial_state.velocity > obstacles_ahead[0]:
-                    print("Car on left lane is faster: ", obstacle.initial_state.velocity-obstacles_ahead[0])
-                    number_neighbors = number_neighbors - 1
+                print("Distance between obstacles on neigboring lane: \n", obstacle.obstacle_shape.length/2
+                      - abs(transformed_obstacle_position_rounded[0] - vehicle_parameter.length/2 - safety_margin))
+
+                if transformed_obstacle_position_rounded > 0:
+                    if obstacle.initial_state.velocity > obstacles_ahead[0].initial_state.velocity:
+                        print("Car on left lane is faster: ", obstacle.initial_state.velocity-obstacles_ahead[0].initial_state.velocity)
+                        number_neighbors = number_neighbors - 1
 
         if number_neighbors == 0:
             print("Lanechange possible!")
