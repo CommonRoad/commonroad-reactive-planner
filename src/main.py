@@ -14,45 +14,61 @@ from parameter import PlanningParameter, VehicleParameter
 if __name__ == '__main__':
     print('Creating velocity reaching bundle....')
 
-    # Please set the path to your scenario here
-    # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-3_2_T-1.xml'
-    # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-3_1_T-1.xml'
-    # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-1_1_T-1.xml'
-    # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-4_4_T-1.xml'
-    # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-4_2_T-1.xml'
-    # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-4_1_T-1.xml'
-    # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-2_1_T-1.xml'
-    # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-4_3_T-1.xml'
-        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-21_1_T-1.xml'
-        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-25_1_T-1.xml'
-        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-22_1_T-1.xml'
-        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-10_1_T-1.xml'
-    scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-15_1_T-1.xml'
-        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-24_1_T-1.xml'
-            # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-4_1_T-1.xml'
-        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-27_1_T-1.xml'
+    # Finish
         # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-20_1_T-1.xml'
+        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-25_1_T-1.xml'
         # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-3_1_T-1.xml'
-        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-23_1_T-1.xml'
-        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-2_1_T-1.xml'
-        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-6_1_T-1.xml'
-        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-19_1_T-1.xml'
-        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-1_1_T-1.xml'
-        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-12_1_T-1.xml'
-    # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-29_1_T-1.xml'
+
+    # Please set the path to your scenario here
+        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-3_2_T-1.xml'
+        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-3_1_T-1.xml'
+        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-1_1_T-1.xml'
+        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-4_4_T-1.xml'
+        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-4_2_T-1.xml'
+        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-4_1_T-1.xml'
+        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-2_1_T-1.xml'
+        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-4_3_T-1.xml'
+
+    # One time Step (2,5)
+        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-21_1_T-1.xml'
         # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-14_1_T-1.xml'
         # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-17_1_T-1.xml'
+
+    # A few steps (2,30)
+        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-27_1_T-1.xml'
+
+            # Wird von Auto gerammt
+                # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-23_1_T-1.xml'
+        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-2_1_T-1.xml'
+        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-6_1_T-1.xml'
+            # Weicht von der Strecke ab..
+    scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-1_1_T-1.xml'
+        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-29_1_T-1.xml'
         # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-16_1_T-1.xml'
-####
-    # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-9_1_T-1.xml'
-        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-5_1_T-1.xml'
+        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-9_1_T-1.xml'
         # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-7_1_T-1.xml'
+
+    # No Step (3,30)
+        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-22_1_T-1.xml'
+        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-10_1_T-1.xml'
+        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-4_1_T-1.xml'
+        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-19_1_T-1.xml'
+        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-12_1_T-1.xml'
+        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-5_1_T-1.xml'
         # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-8_1_T-1.xml'
-        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-11_1_T-1.xml'
+
+    # Doesn't make the lanechange
+        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-15_1_T-1.xml'
+
+    # Car in front does not get recognized
+        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-24_1_T-1.xml'
+
+
+    # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-11_1_T-1.xml'
     # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-26_1_T-1.xml'
-        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-18_1_T-1.xml'
-        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-13_1_T-1.xml'
-            # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-28_1_T-1.xml'
+    # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-18_1_T-1.xml'
+    # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-13_1_T-1.xml'
+    # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-28_1_T-1.xml'
     # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_7_T-1.xml'
     # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_8_T-1.xml'
     # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-2_2_T-1.xml'
@@ -82,14 +98,14 @@ if __name__ == '__main__':
     # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-1_5_T-1.xml'
     # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/Lankershim/USA_Lanker-2_11_T-1.xml'
 
-    #viel zu klein-> reference path
-    #scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/hand-crafted/DEU_A99-1_1_T-1.xml'
+    # viel zu klein-> reference path
+    # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/hand-crafted/DEU_A99-1_1_T-1.xml'
     # discrete
-    #scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/hand-crafted/ZAM_Intersect-1_2_S-1.xml'
+    # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/hand-crafted/ZAM_Intersect-1_2_S-1.xml'
     # discrete network
-    #scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/hand-crafted/DEU_A9-2_1_T-1.xml'
+    # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/hand-crafted/DEU_A9-2_1_T-1.xml'
     # alle, aber müsste lane change einleiten
-    #scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/hand-crafted/DEU_Gar-1_1_T-1.xml'
+    # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/hand-crafted/DEU_Gar-1_1_T-1.xml'
     # zu wenige center vertices -> zu geringe auflösung für discrete/lane change
     # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/hand-crafted/DEU_Muc-4_1_T-1.xml'
     # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/hand-crafted/ZAM_Merge-1_1_T-1.xml'
@@ -166,9 +182,9 @@ if __name__ == '__main__':
     plt.plot(reference_path[:, 0], reference_path[:, 1], '-*g', linewidth=1, zorder=10)
     x_cl = None
 
-    for k in range(0, 50):
-
-        optimal = planner.plan(x_0, collision_checker, cl_states=x_cl)
+    for k in range(0, 150):
+        print(k)
+        optimal = planner.plan(x_0, collision_checker.time_slice(k), cl_states=x_cl)
         # convert to CR obstacle
         ego = planner.convert_cr_trajectory_to_object(optimal[0])
         draw_object(scenario, draw_params={'time_begin': k, 'time_end': k})
@@ -183,11 +199,16 @@ if __name__ == '__main__':
 
         print("Goal state is: {}".format(optimal[1].state_list[-1]))
 
-        changed_velocity, reference_path = planner.check_current_state(route_planner, scenario, ego, reference_path)
-        x_cl = planner.create_new_cl_state(x_0, x_cl, changed_velocity)
+        vel_is_too_slow, obstacles_ahead = planner.check_velocity_of_car_ahead_too_slow(scenario, ego, k)
 
-        planner.set_reference_path(reference_path)
-        plt.plot(reference_path[:, 0], reference_path[:, 1], '-*g', linewidth=1, zorder=10)
+        if vel_is_too_slow:
+            changed_velocity, reference_path = planner.check_current_state(route_planner, scenario, ego, reference_path, obstacles_ahead)
+            x_0.velocity = changed_velocity
+            x_cl = planner._compute_initial_states(x_0)
+            # x_cl = planner.create_new_cl_state(x_0, x_cl, changed_velocity)
+
+            planner.set_reference_path(reference_path)
+            plt.plot(reference_path[:, 0], reference_path[:, 1], '-*g', linewidth=1, zorder=10)
 
     print('Done')
     plt.show(block=True)

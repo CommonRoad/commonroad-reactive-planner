@@ -1261,7 +1261,7 @@ class ReactivePlanner(object):
 
     # Raphael Highlevel
 
-    def check_current_state(self, route_planner, scenario, trajectory, reference_path):
+    def check_current_state(self, route_planner, scenario, trajectory, reference_path, obstacles_ahead):
 
         print(self.statemachine.state)
 
@@ -1278,43 +1278,40 @@ class ReactivePlanner(object):
 
         if self.statemachine.state == 'following':
 
+            velocity_has_to_be_changed = False
             # TODO: Vel auch anpassen, wenn Differenz nicht groß genug ist?
             ego_velocity = trajectory._initial_state.velocity
 
-            vel_is_too_slow, obstacles_ahead = self.check_velocity_of_car_ahead_too_slow(scenario, trajectory)
+            if self.check_for_possible_overtaking_lanelet(scenario, trajectory):
 
-            if vel_is_too_slow:
+                if self.check_lane_change_possible(scenario, trajectory, obstacles_ahead, left=True):
+                    self.statemachine.Car_ahead_too_slow(
+                        self.get_laneletid_of_egocar(scenario, trajectory),
+                        scenario.lanelet_network.find_lanelet_by_id(
+                            self.get_laneletid_of_egocar(scenario, trajectory)).adj_left)
 
-                velocity_has_to_be_changed = False
+                    print(trajectory._initial_state.position)
+                    reference_path = route_planner.set_reference_lane(-1, trajectory._initial_state.position)
 
-                if self.check_for_possible_overtaking_lanelet(scenario, trajectory):
-
-                    if self.check_lane_change_possible(scenario, trajectory, left=True):
-                        self.statemachine.Car_ahead_too_slow(
-                            self.get_laneletid_of_egocar(scenario, trajectory),
-                            scenario.lanelet_network.find_lanelet_by_id(
-                                self.get_laneletid_of_egocar(scenario, trajectory)).adj_left)
-
-                        print(trajectory._initial_state.position)
-                        reference_path = route_planner.set_reference_lane(-1, trajectory._initial_state.position)
-
-                        ego_velocity = trajectory._initial_state.velocity
-
-                    else:
-                        velocity_has_to_be_changed = True
+                    ego_velocity = trajectory._initial_state.velocity
 
                 else:
                     velocity_has_to_be_changed = True
 
-                if velocity_has_to_be_changed == True:
-                    for car in obstacles_ahead:
-                        if not hasattr(car.initial_state, 'velocity'):
-                            ego_velocity = 0
-                    if ego_velocity != 0:
-                        ego_velocity = obstacles_ahead[0].initial_state.velocity
+            else:
+                velocity_has_to_be_changed = True
 
-            if ego_velocity != trajectory._initial_state.velocity:
-                print("Changed velocity!")
+            if velocity_has_to_be_changed:
+                for car in obstacles_ahead:
+                    if not hasattr(car.initial_state, 'velocity'):
+                        ego_velocity = 0
+                        print("Changed velocity!")
+                if ego_velocity != 0:
+                    ego_velocity = obstacles_ahead[0].initial_state.velocity
+                    print("Changed velocity to: ", ego_velocity)
+
+            # if ego_velocity != trajectory._initial_state.velocity:
+            #     print("Changed velocity!")
 
             return ego_velocity, reference_path
 
@@ -1370,13 +1367,13 @@ class ReactivePlanner(object):
         else:
             return False
 
-    def check_velocity_of_car_ahead_too_slow(self, scenario, ego):
+    def check_velocity_of_car_ahead_too_slow(self, scenario, ego, k):
 
-        near_obstacles = self.get_near_obstacles(ego, scenario)
+        near_obstacles = self.get_near_obstacles(ego, scenario, k)
 
         # for obstacle in near_obstacles:
         #     print("Near Obstacles ", obstacle.initial_state.position)
-        obstacles_ahead = self.check_for_obstacles_ahead(scenario, ego, near_obstacles)
+        obstacles_ahead = self.check_for_obstacles_ahead(scenario, ego, near_obstacles, k)
 
         return self.check_if_velocity_is_too_slow(ego, obstacles_ahead), obstacles_ahead
 
@@ -1393,30 +1390,35 @@ class ReactivePlanner(object):
         # print("Vel Diff: ", car.initial_state.velocity - (ego._initial_state.velocity + allowed_velocity_difference))
         return False
 
-    def get_near_obstacles(self, ego, scenario):
+    def get_near_obstacles(self, ego, scenario, k):
 
         r = ego._initial_state.velocity * 2
         near_obstacles = []
+        # for i in range(0, len(collision_state.obstacles())-1):
+        #     obstacle = collision_state.obstacles()[i]
+        #     print(pycrcc.RectOBB.center(obstacle))
 
         for static_obstacle in scenario.static_obstacles:
-
-            distance = np.linalg.norm(static_obstacle.initial_state.position - ego._initial_state.position) \
+            position = static_obstacle.occupancy_at_time(k).shape.center
+            distance = np.linalg.norm(position - ego._initial_state.position) \
                             - static_obstacle.obstacle_shape.length
 
             if distance < r:
                 near_obstacles.append(static_obstacle)
 
         for dynamic_obstacle in scenario.dynamic_obstacles:
+            if dynamic_obstacle.occupancy_at_time(k) is not None:
+                position = dynamic_obstacle.occupancy_at_time(k).shape.center
 
-            distance = np.linalg.norm(dynamic_obstacle.initial_state.position - ego._initial_state.position) \
-                            - dynamic_obstacle.obstacle_shape.length
+                distance = np.linalg.norm(position - ego._initial_state.position) \
+                                - dynamic_obstacle.obstacle_shape.length
 
-            if distance < r:
-                near_obstacles.append(dynamic_obstacle)
+                if distance < r:
+                    near_obstacles.append(dynamic_obstacle)
 
         return near_obstacles
 
-    def check_for_obstacles_ahead(self, scenario, ego, near_obstacles):
+    def check_for_obstacles_ahead(self, scenario, ego, near_obstacles, k):
         obstacles_ahead = []
 
         # rounded_vehicle_orientation = round(ego._initial_state.orientation, 1)
@@ -1429,16 +1431,16 @@ class ReactivePlanner(object):
 
         for obstacle in near_obstacles:
 
-            laneletid_obstacle = self.get_laneletid_of_obstacle(scenario, obstacle)
+            laneletid_obstacle = self.get_laneletid_of_obstacle(scenario, obstacle, k)
 
             if laneletid_ego == laneletid_obstacle:
 
-                obstacle_position = obstacle.initial_state.position
+                obstacle_position = obstacle.occupancy_at_time(k).shape.center #.initial_state.position
                 transformed_obstacle_position = np.matmul(obstacle_position - vehicle_position, Rotation_Matrix)
 
                 if transformed_obstacle_position[0] > 0:
                     obstacles_ahead.append(obstacle)
-                    print("Ahead Obstales: ", obstacle.initial_state.position)
+                    print("Ahead Obstales: ", obstacle_position) #obstacle.initial_state.position)
 #
             #     hypotenuse_length = np.linalg.norm(transformed_obstacle_position)
 #
@@ -1472,18 +1474,18 @@ class ReactivePlanner(object):
 
         return scenario.lanelet_network.find_lanelet_by_position(tmp)[0][0]
 
-    def get_laneletid_of_obstacle(self, scenario, obstacle):
-
-        x, y = obstacle.initial_state.position[0], obstacle.initial_state.position[1]
-        heading = obstacle.initial_state.orientation
+    def get_laneletid_of_obstacle(self, scenario, obstacle, k):
+        position = obstacle.occupancy_at_time(k).shape.center
+        x, y = position[0], position[1]
+        heading = obstacle.occupancy_at_time(k).shape.orientation
         x_1, y_1 = np.array([x, y]) + np.array([1, 1 * np.tan(heading)])
         tmp = np.array([[x, y], [x_1, y_1]])
 
         return scenario.lanelet_network.find_lanelet_by_position(tmp)[0][0]
 
-    def get_obstacles_on_neighboring_lane(self, ego, scenario, left = True):
+    def get_obstacles_on_neighboring_lane(self, ego, scenario, k, left = True):
 
-        near_obstacles = self.get_near_obstacles(ego, scenario)
+        near_obstacles = self.get_near_obstacles(ego, scenario, k)
 
         lanelet_ego = self.get_laneletid_of_egocar(scenario, ego)
 
@@ -1494,14 +1496,14 @@ class ReactivePlanner(object):
 
         cars_on_left_lane = []
         for obstacle in near_obstacles:
-            if self.get_laneletid_of_obstacle(scenario, obstacle) == neighboring_line:
+            if self.get_laneletid_of_obstacle(scenario, obstacle, k) == neighboring_line:
                 cars_on_left_lane.append(obstacle)
 
         return cars_on_left_lane
 
-    def check_lane_change_possible(self, scenario, ego, left = True):
+    def check_lane_change_possible(self, scenario, ego, obstacles_ahead, k, left=True):
 
-        obstacles_on_neighboring_lane = self.get_obstacles_on_neighboring_lane(ego, scenario, left)
+        obstacles_on_neighboring_lane = self.get_obstacles_on_neighboring_lane(ego, scenario, k, left)
 
         vehicle_position = ego._initial_state.position
         rotation_matrix = [[np.cos(ego._initial_state.orientation), -np.sin(ego._initial_state.orientation)],
@@ -1511,12 +1513,15 @@ class ReactivePlanner(object):
         number_neighbors = len(obstacles_on_neighboring_lane)
         for obstacle in obstacles_on_neighboring_lane:
 
-            obstacle_position = obstacle.initial_state.position
+            obstacle_position = obstacle.occupancy_at_time(k).shape.center
             transformed_obstacle_position_rounded = np.round(np.matmul(obstacle_position - vehicle_position, rotation_matrix), 1)
 
             if obstacle.obstacle_shape.length/2 < \
                     abs(transformed_obstacle_position_rounded[0]) - vehicle_parameter.length/2: #abs(ego._initial_state.shape.length/2):
-                number_neighbors = number_neighbors - 1
+
+                if obstacle.initial_state.velocity > obstacles_ahead[0]:
+                    print("Car on left lane is faster: ", obstacle.initial_state.velocity-obstacles_ahead[0])
+                    number_neighbors = number_neighbors - 1
 
         if number_neighbors == 0:
             print("Lanechange possible!")
