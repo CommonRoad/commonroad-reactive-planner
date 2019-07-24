@@ -1,0 +1,230 @@
+<?xml version='1.0' encoding='utf-8'?>
+
+<commonRoad commonRoadVersion='2017a' benchmarkID='minimalWorkingExample' date='2017-03-30' timeStepSize='0.1'>
+<!-- (1) Road Network -->
+	<lanelet id='10'>
+		<leftBound>
+			<point>
+				<x>-15.0</x>
+				<y>2.0</y>
+			</point>
+			<point>
+				<x>0.0</x>
+				<y>2.0</y>
+			</point>
+			<lineMarking>dashed</lineMarking>
+		</leftBound>
+		<rightBound>
+			<point>
+				<x>-15.0</x>
+				<y>-2.0</y>
+			</point>
+			<point>
+				<x>0.0</x>
+				<y>-2.0</y>
+			</point>
+			<lineMarking>solid</lineMarking>
+		</rightBound>
+		<successor ref='11'/>
+		<adjacentLeft ref='12' drivingDir='opposite'/>		
+		<speedLimit>16.67</speedLimit>
+	</lanelet>
+	<lanelet id='11'>
+		<leftBound>
+			<point>
+				<x>0.0</x>
+				<y>2.0</y>
+			</point>
+			<point>
+				<x>15.0</x>
+				<y>2.0</y>
+			</point>
+			<lineMarking>dashed</lineMarking>
+		</leftBound>
+		<rightBound>
+			<point>
+				<x>0.0</x>
+				<y>-2.0</y>
+			</point>
+			<point>
+				<x>15.0</x>
+				<y>-2.0</y>
+			</point>
+			<lineMarking>solid</lineMarking>
+		</rightBound>
+		<predecessor ref='10'/>
+		<adjacentLeft ref='13' drivingDir='opposite'/>		
+		<speedLimit>16.67</speedLimit>
+	</lanelet>
+	<lanelet id='12'>
+		<leftBound>
+			<point>
+				<x>0.0</x>
+				<y>2.0</y>
+			</point>
+			<point>
+				<x>-15.0</x>
+				<y>2.0</y>
+			</point>
+			<lineMarking>dashed</lineMarking>
+		</leftBound>
+		<rightBound>
+			<point>
+				<x>0.0</x>
+				<y>6.0</y>
+			</point>
+			<point>
+				<x>-15.0</x>
+				<y>6.0</y>
+			</point>
+			<lineMarking>solid</lineMarking>
+		</rightBound>
+		<predecessor ref='13'/>
+		<adjacentLeft ref='10' drivingDir='opposite'/>
+	</lanelet>
+	<lanelet id='13'>
+		<leftBound>
+			<point>
+				<x>15.0</x>
+				<y>2.0</y>
+			</point>
+			<point>
+				<x>0.0</x>
+				<y>2.0</y>
+			</point>
+			<lineMarking>dashed</lineMarking>
+		</leftBound>
+		<rightBound>
+			<point>
+				<x>15.0</x>
+				<y>6.0</y>
+			</point>
+			<point>
+				<x>0.0</x>
+				<y>6.0</y>
+			</point>
+			<lineMarking>solid</lineMarking>
+		</rightBound>
+		<successor ref='12'/>
+		<adjacentLeft ref='11' drivingDir='opposite'/>
+	</lanelet>
+	
+<!-- (2) Traffic -->
+	<!-- (2.1) Static Obstacle -->
+	<obstacle id='57'>
+		<role>static</role>
+		<type>parkedVehicle</type>
+		<shape>
+			<rectangle>
+				<length>4.2</length>
+				<width>1.9</width>
+				<orientation>1.5708</orientation>
+				<center>
+					<x>1.0</x>
+					<y>4.0</y>
+				</center>
+			</rectangle>
+		</shape>
+	</obstacle>
+
+	<!-- (2.2) Dynamic Obstacle with known behavior -->
+	<obstacle id='58'>
+		<role>dynamic</role>
+		<type>car</type>
+		<shape>
+			<rectangle>
+				<length>4.2</length>
+				<width>1.9</width>
+			</rectangle>
+		</shape>
+		<trajectory>
+			<state>
+				<position>
+					<point>
+						<x>-10.0</x>
+						<y>0.0</y>
+					</point>
+				</position>
+				<orientation>
+					<exact>0.0</exact>
+				</orientation>
+				<time>
+					<exact>0.0</exact>
+				</time>
+				<velocity>
+					<exact>15.0</exact>
+				</velocity>
+				<acceleration>
+					<exact>0.0</exact>
+				</acceleration>
+			</state>
+			<state>
+				<position>
+					<point>
+						<x>-8.5</x>
+						<y>0.0</y>
+					</point>
+				</position>
+				<orientation>
+					<exact>0.0</exact>
+				</orientation>
+				<time>
+					<exact>0.1</exact>
+				</time>
+				<velocity>
+					<exact>15.0</exact>
+				</velocity>
+				<acceleration>
+					<exact>0.0</exact>
+				</acceleration>
+			</state>
+		</trajectory>		
+	</obstacle>
+	
+<!-- (3) Planning Problem -->
+	<planningProblem id='100'>
+		<initialState>
+			<position>
+				<point>
+					<x>10.0</x>
+					<y>4.0</y>
+				</point>
+			</position>
+			<orientation>
+				<exact>1.5708</exact>
+			</orientation>
+			<time>
+				<exact>0.0</exact>
+			</time>
+			<velocity>
+				<exact>15.0</exact>
+			</velocity>
+			<acceleration>
+				<exact>0.0</exact>
+			</acceleration>
+		</initialState>
+		<goalRegion>
+			<state>
+				<position>
+					<rectangle>
+						<length>2</length>
+						<width>2</width>
+						<orientation>1.5708</orientation>
+						<center>
+							<x>-10.0</x>
+							<y>4.0</y>
+						</center>
+					</rectangle>
+				</position>
+				<orientation>
+					<intervalStart>1.50</intervalStart>
+					<intervalEnd>1.65</intervalEnd>
+				</orientation>
+				<time>
+					<intervalStart>0.0</intervalStart>
+					<intervalEnd>10.0</intervalEnd>
+				</time>
+			</state>
+		</goalRegion>
+	</planningProblem>
+</commonRoad>
