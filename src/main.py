@@ -7,6 +7,7 @@ from commonroad_ccosy.geometry.trapezoid_coordinate_system import create_coordin
 from commonroad.common.solution_writer import CommonRoadSolutionWriter, VehicleModel, VehicleType, CostFunction
 import matplotlib.pyplot as plt
 import numpy as np
+import cv2
 
 from reactive_planner import ReactivePlanner
 from route_planner import RoutePlanner
@@ -55,7 +56,7 @@ if __name__ == '__main__':
         # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-10_1_T-1.xml'
         # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-8_1_T-1.xml'
     # Doesn't make the lanechange
-    scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-15_1_T-1.xml'
+    scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-15_1_T-1.xml'
     # Car in front does not get recognized
         # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-24_1_T-1.xml'
     # Do not work at all
@@ -183,6 +184,9 @@ if __name__ == '__main__':
     solution_path = '/home/julian/Desktop/solution_commonroad/'
     solution_model = 'KS'
 
+    video = True
+    picture_list = []
+
     if write_solution:
         radius = init_state.velocity / np.abs(init_state.yaw_rate)
         steering_angle = np.arctan((params_vehicle.length_front + params_vehicle.length_rear) / radius)
@@ -216,7 +220,10 @@ if __name__ == '__main__':
             solution_traj.state_list.append(state)
             solution_step += 1
 
-
+        if video:
+            picture_path = ("/home/julian/Desktop/solution_commonroad/video/file%d.png" % k)
+            plt.savefig(picture_path)
+            picture_list.append(picture_path)
 
         vel_is_too_slow, obstacles_ahead = planner.check_velocity_of_car_ahead_too_slow(scenario, ego, k)
 
@@ -254,3 +261,19 @@ if __name__ == '__main__':
                                                 planning_problem_id=int(route_planner.planning_problem.planning_problem_id))
         solution_writer.write_to_file(overwrite=True)
         print('Solution stored!')
+
+    if video:
+        img_array = []
+        for im in picture_list:
+            img = cv2.imread(im)
+            height, width, layers = img.shape
+            size = (width, height)
+            img_array.append(img)
+
+        out = cv2.VideoWriter('/home/julian/Desktop/solution_commonroad/video/project.mp4',cv2.VideoWriter_fourcc('m','p','4','v'), 10, size)
+
+        for i in range(len(img_array)):
+            out.write(img_array[i])
+        out.release()
+
+        print('Video created!')
