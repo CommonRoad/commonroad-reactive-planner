@@ -7,7 +7,6 @@ from commonroad_ccosy.geometry.trapezoid_coordinate_system import create_coordin
 from commonroad.common.solution_writer import CommonRoadSolutionWriter, VehicleModel, VehicleType, CostFunction
 import matplotlib.pyplot as plt
 import numpy as np
-import cv2
 
 from reactive_planner import ReactivePlanner
 from route_planner import RoutePlanner
@@ -193,10 +192,7 @@ if __name__ == '__main__':
         solution_traj = Trajectory(initial_time_step=0, state_list=state_list)
         solution_step = 1
 
-    video = True
-    picture_list = []
-
-    for k in range(0, 5):
+    for k in range(0, 10):
         print(k)
         optimal = planner.plan(x_0, collision_checker.time_slice(k), cl_states=x_cl)
         # convert to CR obstacle
@@ -219,11 +215,6 @@ if __name__ == '__main__':
 
             solution_traj.state_list.append(state)
             solution_step += 1
-
-        if video:
-            picture_path = ("/home/julian/Desktop/solution_commonroad/video/file%d.png" % k)
-            plt.savefig(picture_path)
-            picture_list.append(picture_path)
 
 
 
@@ -263,20 +254,3 @@ if __name__ == '__main__':
                                                 planning_problem_id=int(route_planner.planning_problem.planning_problem_id))
         solution_writer.write_to_file(overwrite=True)
         print('Solution stored!')
-
-    if video:
-        img_array = []
-        for im in picture_list:
-            img = cv2.imread(im)
-            height, width, layers = img.shape
-            size = (width, height)
-            img_array.append(img)
-
-        out = cv2.VideoWriter('/home/julian/Desktop/solution_commonroad/video/project.avi', cv2.VideoWriter_fourcc(*'DIVX'),
-                              10, size)
-
-        for i in range(len(img_array)):
-            out.write(img_array[i])
-        out.release()
-
-        print('Video created!')
