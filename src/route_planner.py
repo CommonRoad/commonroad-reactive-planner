@@ -649,7 +649,7 @@ class RoutePlanner:
         distance, start_index = spatial.KDTree(self.reference_paths[target_lanelet.lanelet_id]).query(position)
         tmp = np.array([position])
         temp1 = np.concatenate((self.reference_paths[current_lanelet.lanelet_id][0:end_index], tmp), axis=0)
-        reference_path = np.concatenate((temp1, self.reference_paths[target_lanelet.lanelet_id][start_index:]), axis=0)
+        reference_path = np.concatenate((temp1, self.reference_paths[target_lanelet.lanelet_id][start_index+5:]), axis=0)
         # smooth reference path until curvature is smaller or equal max_curvature_reference_path
         resampling_step_reference_path = 1.5
         max_curvature_reference_path = 0.1
@@ -659,7 +659,7 @@ class RoutePlanner:
             reference_path = resample_polyline(reference_path, resampling_step_reference_path)
             max_curvature = max(abs(compute_curvature_from_polyline(reference_path)))
 
-        return reference_path
+        return reference_path, self.reference_paths[current_lanelet.lanelet_id][0:end_index]
 
 
 if __name__ == '__main__':
@@ -807,7 +807,7 @@ if __name__ == '__main__':
 
     #lane = scenario.lanelet_network.find_lanelet_by_id(28)
 
-    #new_path, part1, part2 = route_planner.set_reference_lane(-1, route_planner.planning_problem.initial_state.position)
+    part1, part2 = route_planner.set_reference_lane(-1, route_planner.planning_problem.initial_state.position)
 
     start = time.time()
     #draw_object(scenario.lanelet_network, draw_params={'lanelet_network': {'lanelet': {'show_label': False}}})
@@ -815,8 +815,10 @@ if __name__ == '__main__':
 
 
 
-    for path in reference_path0.values():
-        plt.plot(path[:, 0], path[:, 1], '-*b', linewidth=4, zorder=50)
+    #for path in reference_path0.values():
+    #    plt.plot(path[:, 0], path[:, 1], '-*b', linewidth=4, zorder=50)
+    plt.plot(part2[:, 0], part2[:, 1], '-b', linewidth=7, zorder=50)
+    plt.plot(part1[:, 0], part1[:, 1], '-k', linewidth=3, zorder=50)
 
     #plt.plot(lane.center_vertices[:, 0], lane.center_vertices[:, 1], '-r', linewidth=7, zorder=50)
     #plt.plot(part2[:, 0], part2[:, 1], '-b', linewidth=7, zorder=50)
