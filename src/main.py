@@ -4,6 +4,7 @@ from commonroad.visualization.draw_dispatch_cr import draw_object
 from commonroad.visualization.plot_helper import set_non_blocking
 from commonroad.scenario.trajectory import State
 from commonroad_ccosy.geometry.trapezoid_coordinate_system import create_coordinate_system_from_polyline
+from commonroad.common.solution_writer import CommonRoadSolutionWriter, VehicleModel, VehicleType, CostFunction
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -27,27 +28,27 @@ if __name__ == '__main__':
     # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/cooperative/C-USA_US101-33_1_T-1.xml'
 
     # A few steps (2,30)
-        # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-27_1_T-1.xml'
-        # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-2_1_T-1.xml'
-        # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-6_1_T-1.xml'
-        # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-16_1_T-1.xml'
-        # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-9_1_T-1.xml'
-        # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-7_1_T-1.xml'
-        # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-14_1_T-1.xml'
-        # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-17_1_T-1.xml'
-        # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-4_1_T-1.xml'
-        # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-19_1_T-1.xml'
-        # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-12_1_T-1.xml'
-        # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-5_1_T-1.xml'
-        # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-26_1_T-1.xml'
-        # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-13_1_T-1.xml'
-        # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-28_1_T-1.xml'
-        # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/hand-crafted/DEU_A9-1_1_T-1.xml'
+    # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-27_1_T-1.xml'
+    # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-2_1_T-1.xml'
+    # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-6_1_T-1.xml'
+    # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-16_1_T-1.xml'
+    # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-9_1_T-1.xml'
+    # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-7_1_T-1.xml'
+    # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-14_1_T-1.xml'
+    # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-17_1_T-1.xml'
+    # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-4_1_T-1.xml'
+    # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-19_1_T-1.xml'
+    # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-12_1_T-1.xml'
+    # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-5_1_T-1.xml'
+    # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-26_1_T-1.xml'
+    # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-13_1_T-1.xml'
+    # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-28_1_T-1.xml'
+    # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/hand-crafted/DEU_A9-1_1_T-1.xml'
             # Wird von Auto gerammt
-                # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-23_1_T-1.xml'
+    # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-23_1_T-1.xml'
             # Kreuzung!
-                # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/hand-crafted/DEU_Muc-3_1_T-1.xml'
-                # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/hand-crafted/DEU_Ffb-2_1_T-1.xml'
+    # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/hand-crafted/DEU_Muc-3_1_T-1.xml'
+    # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/hand-crafted/DEU_Ffb-2_1_T-1.xml'
 
     # No Step (3,30)
         # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-22_1_T-1.xml'
@@ -174,6 +175,17 @@ if __name__ == '__main__':
 
     x_cl = None
 
+
+    write_solution = True
+    if write_solution:
+        radius = init_state.velocity / np.abs(init_state.yaw_rate)
+        steering_angle = np.arctan((params_vehicle.length_front + params_vehicle.length_rear) / radius)
+        init_state.steering_angle = steering_angle
+        state_list = list()
+        state_list.append(init_state)
+        solution_traj = Trajectory(initial_time_step=0, state_list=state_list)
+        solution_step = 1
+
     for k in range(0, 150):
         print(k)
         optimal = planner.plan(x_0, collision_checker.time_slice(k), cl_states=x_cl)
@@ -186,6 +198,19 @@ if __name__ == '__main__':
         x_cl = (optimal[2][1], optimal[3][1])
 
         print("Goal state is: {}".format(optimal[1].state_list[-1]))
+
+        if write_solution:
+            state = x_0
+            radius = state.velocity / np.abs(state.yaw_rate)
+            steering_angle = np.arctan((params_vehicle.length_front + params_vehicle.length_rear) / radius)
+
+            state.steering_angle = steering_angle
+            state.time_step = solution_step
+
+            solution_traj.state_list.append(state)
+            solution_step += 1
+
+
 
         vel_is_too_slow, obstacles_ahead = planner.check_velocity_of_car_ahead_too_slow(scenario, ego, k)
 
