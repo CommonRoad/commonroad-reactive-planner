@@ -2,7 +2,7 @@ from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_c
 from commonroad.common.file_reader import CommonRoadFileReader
 from commonroad.visualization.draw_dispatch_cr import draw_object
 from commonroad.visualization.plot_helper import set_non_blocking
-from commonroad.scenario.trajectory import State
+from commonroad.scenario.trajectory import State, Trajectory
 from commonroad_ccosy.geometry.trapezoid_coordinate_system import create_coordinate_system_from_polyline
 from commonroad.common.solution_writer import CommonRoadSolutionWriter, VehicleModel, VehicleType, CostFunction
 import matplotlib.pyplot as plt
@@ -23,7 +23,7 @@ if __name__ == '__main__':
     # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-29_1_T-1.xml'
     # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-21_1_T-1.xml'
     # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-11_1_T-1.xml'
-    # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-18_1_T-1.xml'
+    scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-18_1_T-1.xml'
     # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/cooperative/C-USA_US101-32_1_T-1.xml'
     # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/cooperative/C-USA_US101-33_1_T-1.xml'
 
@@ -158,10 +158,13 @@ if __name__ == '__main__':
     # create collision checker for scenario
     collision_checker = create_collision_checker(scenario)
 
-    # create initial state
-    x, y = route_planner.planning_problem.initial_state.position
-    heading = route_planner.planning_problem.initial_state.orientation
-    x_0 = State(**{'position':np.array([x,y]),'orientation':heading, 'velocity':route_planner.planning_problem.initial_state.velocity, 'acceleration':0,'yaw_rate':0})
+    # get initial state
+    init_state = route_planner.planning_problem.initial_state
+    x, y = init_state.position
+    heading = init_state.orientation
+    velocity = init_state.velocity
+    yaw_rate = init_state.yaw_rate
+    x_0 = State(**{'position':np.array([x,y]),'orientation':heading, 'velocity':velocity, 'acceleration':0,'yaw_rate':yaw_rate})
 
     # Set planning parameters and vehicle parameters
     params_planning = PlanningParameter(velocity_reaching=True)
@@ -177,6 +180,9 @@ if __name__ == '__main__':
 
 
     write_solution = True
+    solution_path = '/home/julian/Desktop/solution_commonroad/'
+    solution_model = 'KS'
+
     if write_solution:
         radius = init_state.velocity / np.abs(init_state.yaw_rate)
         steering_angle = np.arctan((params_vehicle.length_front + params_vehicle.length_rear) / radius)
@@ -186,7 +192,7 @@ if __name__ == '__main__':
         solution_traj = Trajectory(initial_time_step=0, state_list=state_list)
         solution_step = 1
 
-    for k in range(0, 150):
+    for k in range(0, 10):
         print(k)
         optimal = planner.plan(x_0, collision_checker.time_slice(k), cl_states=x_cl)
         # convert to CR obstacle
@@ -225,3 +231,26 @@ if __name__ == '__main__':
 
     print('Done')
     plt.show(block=False)
+
+    if (solution_model == 'KS') & write_solution:
+        solution_writer = CommonRoadSolutionWriter(solution_path, scenario.benchmark_id, params_planning.t_step_size,
+                                                   VehicleType.FORD_ESCORT,
+                                                   VehicleModel.KS, CostFunction.WX1)
+        solution_writer.add_solution_trajectory(trajectory=solution_traj,
+                                                planning_problem_id=int(route_planner.planning_problem.planning_problem_id))
+        solution_writer.write_to_file(overwrite=True)
+        print('Solution stored!')
+
+    elif (solution_model == 'PM') & write_solution:
+        for state in solution_traj.state_list:
+            state.velocity_y = np.sin(state.orientation) * state.velocity
+            state.velocity = np.cos(state.orientation) * state.velocity
+
+        solution_writer = CommonRoadSolutionWriter(solution_path, scenario.benchmark_id, params_planning.t_step_size,
+                                                   VehicleType.FORD_ESCORT,
+                                                   VehicleModel.PM, CostFunction.WX1)
+
+        solution_writer.add_solution_trajectory(trajectory=solution_traj,
+                                                planning_problem_id=int(route_planner.planning_problem.planning_problem_id))
+        solution_writer.write_to_file(overwrite=True)
+        print('Solution stored!')
