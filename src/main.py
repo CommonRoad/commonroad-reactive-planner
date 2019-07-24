@@ -55,7 +55,7 @@ if __name__ == '__main__':
         # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-10_1_T-1.xml'
         # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-8_1_T-1.xml'
     # Doesn't make the lanechange
-        # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-15_1_T-1.xml'
+    scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-15_1_T-1.xml'
     # Car in front does not get recognized
         # scenario_path = '/home/julian/Desktop/commonroadlibrary/commonroad-scenarios/NGSIM/US101/USA_US101-24_1_T-1.xml'
     # Do not work at all
@@ -141,7 +141,7 @@ if __name__ == '__main__':
 
     # set reference path
     route_planner = RoutePlanner(scenario.lanelet_network, scenario_path)
-    route_planner.create_reference_path_network()
+    #route_planner.create_reference_path_network()
     route_planner.plan_all_reference_paths()
 
     source_position = route_planner.planning_problem.initial_state.position
@@ -198,7 +198,7 @@ if __name__ == '__main__':
         # convert to CR obstacle
         ego = planner.convert_cr_trajectory_to_object(optimal[0])
 
-        planner.plotting(k, scenario, planning_problem_set, reference_path, ego, only_new_time_step = True)
+        planner.plotting(k, scenario, planning_problem_set, reference_path, ego, only_new_time_step = False)
 
         x_0 = optimal[0].state_list[1]
         x_cl = (optimal[2][1], optimal[3][1])

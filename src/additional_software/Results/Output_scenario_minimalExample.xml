@@ -1,0 +1,146 @@
+<?xml version="1.0"?>
+<commonRoad benchmarkID="Scenarios/scenario_minimalExample.xml" commonRoadVersion="2017a" date="23-5-2018" timeStepSize="0.100000001">
+	<lanelet id="10">
+		<leftBound>
+			<point>
+				<x>-15.000000</x>
+				<y>2.000000</y>
+			</point>
+			<point>
+				<x>0.000000</x>
+				<y>2.000000</y>
+			</point>
+		</leftBound>
+		<rightBound>
+			<point>
+				<x>-15.000000</x>
+				<y>-2.000000</y>
+			</point>
+			<point>
+				<x>0.000000</x>
+				<y>-2.000000</y>
+			</point>
+		</rightBound>
+		<succecessor ref="11" />
+		<adjacentLeft drivingDir="opposite" ref="12" />
+		<speedLimit>16.670000</speedLimit>
+	</lanelet>
+	<lanelet id="11">
+		<leftBound>
+			<point>
+				<x>0.000000</x>
+				<y>2.000000</y>
+			</point>
+			<point>
+				<x>15.000000</x>
+				<y>2.000000</y>
+			</point>
+		</leftBound>
+		<rightBound>
+			<point>
+				<x>0.000000</x>
+				<y>-2.000000</y>
+			</point>
+			<point>
+				<x>15.000000</x>
+				<y>-2.000000</y>
+			</point>
+		</rightBound>
+		<predecessor ref="10" />
+		<adjacentLeft drivingDir="opposite" ref="13" />
+		<speedLimit>16.670000</speedLimit>
+	</lanelet>
+	<lanelet id="12">
+		<leftBound>
+			<point>
+				<x>0.000000</x>
+				<y>2.000000</y>
+			</point>
+			<point>
+				<x>-15.000000</x>
+				<y>2.000000</y>
+			</point>
+		</leftBound>
+		<rightBound>
+			<point>
+				<x>0.000000</x>
+				<y>6.000000</y>
+			</point>
+			<point>
+				<x>-15.000000</x>
+				<y>6.000000</y>
+			</point>
+		</rightBound>
+		<predecessor ref="13" />
+		<adjacentLeft drivingDir="opposite" ref="10" />
+		<speedLimit>179769313486231570814527423731704356798070567525844996598917476803157260780028538760589558632766878171540458953514382464234321326889464182768467546703537516986049910576551282076245490090389328944075868508455133942304583236903222948165808559332123348274797826204144723168738177180919299881250404026184124858368.000000</speedLimit>
+	</lanelet>
+	<lanelet id="13">
+		<leftBound>
+			<point>
+				<x>15.000000</x>
+				<y>2.000000</y>
+			</point>
+			<point>
+				<x>0.000000</x>
+				<y>2.000000</y>
+			</point>
+		</leftBound>
+		<rightBound>
+			<point>
+				<x>15.000000</x>
+				<y>6.000000</y>
+			</point>
+			<point>
+				<x>0.000000</x>
+				<y>6.000000</y>
+			</point>
+		</rightBound>
+		<succecessor ref="12" />
+		<adjacentLeft drivingDir="opposite" ref="11" />
+		<speedLimit>179769313486231570814527423731704356798070567525844996598917476803157260780028538760589558632766878171540458953514382464234321326889464182768467546703537516986049910576551282076245490090389328944075868508455133942304583236903222948165808559332123348274797826204144723168738177180919299881250404026184124858368.000000</speedLimit>
+	</lanelet>
+	<obstacle id="57">
+		<role>static</role>
+		<type>parkedVehicle</type>
+		<occupancySet>
+			<occupancy>
+				<shape>
+					<polygon>
+						<point>
+							<x>0.050008</x>
+							<y>1.899997</y>
+						</point>
+						<point>
+							<x>0.049992</x>
+							<y>6.099997</y>
+						</point>
+						<point>
+							<x>1.949992</x>
+							<y>6.100003</y>
+						</point>
+						<point>
+							<x>1.950008</x>
+							<y>1.900003</y>
+						</point>
+					</polygon>
+				</shape>
+				<time>
+					<exact>0</exact>
+				</time>
+			</occupancy>
+		</occupancySet>
+	</obstacle>
+	<obstacle id="58">
+		<role>dynamic</role>
+		<type>car</type>
+		<occupancySet>
+			<occupancy>
+				<shape />
+				<time>
+					<exact>0</exact>
+				</time>
+			</occupancy>
+		</occupancySet>
+	</obstacle>
+</commonRoad>
