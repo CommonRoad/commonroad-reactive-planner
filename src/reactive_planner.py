@@ -790,105 +790,6 @@ class ReactivePlanner(object):
 
         return (x_0_lon, x_0_lat)
 
-    '''
-    def plan(self, x_0: State, cc: object, cl_states=None) -> tuple:
-        """
-        Plans an optimal trajectory
-        :param x_0: Initial state as CR state (CR = cartesian)
-        :param cc:  CollisionChecker object
-        :param cl_states: Curvilinear state if replanning is used
-        :return: Optimal trajectory as tuple
-        """
-        self.x_0 = x_0
-
-        # compute initial states
-        if cl_states is not None:
-            x_0_lon, x_0_lat = cl_states
-        else:
-            x_0_lon, x_0_lat = self._compute_initial_states(x_0)
-
-
-        print('<Reactive Planner>: initial state is: lon = {} / lat = {}'.format(x_0_lon, x_0_lat))
-
-        # create empty bundle
-        bundle = TrajectoryBundle()
-        # initial index of sampling set to use
-        i = 0
-
-        # sample until trajectory has been found or sampling sets are empty
-        while bundle.empty() and i < self._sampling_level:
-            print('<ReactivePlanner>: Starting at sampling density {} of {}'.format(i + 1, self._sampling_level))
-            print('<ReactivePlanner>: Sampling {} trajectories'.format(self.no_of_samples(i)))
-            # 1 Start
-            # plan trajectory bundle
-            # return: trajectory bundle with all sample trajectories.
-            bundle = self._create_trajectory_bundle(self._desired_speed, x_0_lon, x_0_lat, samp_level=i)
-
-
-            bundle_old = bundle
-            # 1 Ende
-            # 2 Start
-            # check feasibility
-            bundle = self._get_feasible_trajectories(bundle, cc, x_0)
-            # geht nur mit feasible trajectorien:   optimal_trajectory = bundle.updated_optimal_trajectory() if not bundle.empty() else None
-
-            # print statistics
-            print('<ReactivePlanner>: Rejected {} infeasible trajectories due to kinematics'.format(
-                self.no_of_infeasible_trajectories_kinematics()))
-            print('<ReactivePlanner>: Rejected {} infeasible trajectories due to collisions'.format(
-                self.no_of_infeasible_trajectories_collision()))
-            # 2 Ende
-
-            i = i + 1
-            if bundle.empty() and x_0.velocity <= 0.1:
-                # create artifical standstill trajectory
-                print('Adding standstill trajectory')
-                traj_lon = QuarticTrajectory(t_start_s=0, duration_s=self.horizon, desired_horizon=self.horizon,
-                                                    start_state=x_0_lon,
-                                                    desired_velocity=self._desired_speed)
-                traj_lat = QuinticTrajectory(t_start_s=0, desired_horizon=self.horizon,
-                                                       start_state=x_0_lat)
-                p = TrajectorySample(0, traj_lon, traj_lat, 0)
-                p.cartesian = CartesianSample(np.repeat(x_0.position[0], self.N), np.repeat(x_0.position[1], self.N),
-                                              np.repeat(x_0.orientation, self.N), np.repeat(0, self.N),
-                                              np.repeat(0, self.N), np.repeat(0, self.N), np.repeat(0, self.N))
-                p.curvilinear = CurviLinearSample(np.repeat(x_0_lon[0], self.N), np.repeat(x_0_lat[0], self.N),
-                                                  np.repeat(x_0.orientation, self.N), np.repeat(x_0_lat[1], self.N),
-                                                  np.repeat(x_0_lat[2], self.N), np.repeat(x_0_lon[1], self.N),
-                                                  np.repeat(x_0_lon[2], self.N))
-                bundle.add_trajectory(p)
-                bundle_old = bundle
-
-        # check if feasible trajectory exists -> emergency mode
-        if bundle.empty():
-            print('<ReactivePlanner>: Could not find any trajectory out of {} trajectories'.format(
-                sum([self.no_of_samples(i) for i in range(self._sampling_level)])))
-            self._feasible_trajectories = bundle_old.trajectory_bundle
-            print('<ReactivePlanner>: Cannot find trajectory with default sampling parameters. '
-                  'Switching to emergency mode!')
-
-        # store feasible trajectories
-        self._feasible_trajectories = bundle.trajectory_bundle if not bundle.empty() else None
-
-        # find optimal trajectory
-        optimal_trajectory = bundle.updated_optimal_trajectory() if not bundle.empty() else None
-        if not bundle.empty():
-            #print("here")
-            self._min_cost = bundle_old.min_costs()
-            self._max_cost = bundle_old.max_costs()
-            print(self._min_cost, self._max_cost)
-            #self._min_cost = bundle.min_costs()
-            #self._max_cost = bundle.max_costs()
-            #print(self._min_cost, self._max_cost)
-            # self.draw_trajectory_set(self._feasible_trajectories)
-            print('Found optimal trajectory with costs = {}, which corresponds to {} percent of seen costs'.format(
-                optimal_trajectory.total_cost,
-                ((optimal_trajectory.total_cost - self._min_cost) / (self._max_cost - self._min_cost))))
-
-        return self._compute_trajectory_pair(optimal_trajectory) if not bundle.empty() else None
-    '''
-
-    #Fabian Lazy evaluation
     def plan(self, x_0: State, cc: object, cl_states=None) -> tuple:
         """
         Plans an optimal trajectory
@@ -988,11 +889,6 @@ class ReactivePlanner(object):
         #self._feasible_trajectories = bundle.trajectory_bundle if not bundle.empty() else None
 
         return None
-
-    # Fabian Ende
-
-
-
 
     def _compute_trajectory_pair(self, trajectory: TrajectorySample) -> tuple:
         """
