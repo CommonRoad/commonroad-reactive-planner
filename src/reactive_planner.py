@@ -21,6 +21,9 @@ from parameter_classes import VehModelParameters, SamplingParameters
 from polyline import compute_curvature_from_polyline, compute_orientation_from_polyline, compute_pathlength_from_polyline
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType, StaticObstacle
 
+import matplotlib.pyplot as plt
+from commonroad.visualization.draw_dispatch_cr import draw_object
+
 from State_Machine import CarHighlevelStates
 
 __author__ = "Christian Pek"
@@ -787,105 +790,6 @@ class ReactivePlanner(object):
 
         return (x_0_lon, x_0_lat)
 
-    '''
-    def plan(self, x_0: State, cc: object, cl_states=None) -> tuple:
-        """
-        Plans an optimal trajectory
-        :param x_0: Initial state as CR state (CR = cartesian)
-        :param cc:  CollisionChecker object
-        :param cl_states: Curvilinear state if replanning is used
-        :return: Optimal trajectory as tuple
-        """
-        self.x_0 = x_0
-
-        # compute initial states
-        if cl_states is not None:
-            x_0_lon, x_0_lat = cl_states
-        else:
-            x_0_lon, x_0_lat = self._compute_initial_states(x_0)
-
-
-        print('<Reactive Planner>: initial state is: lon = {} / lat = {}'.format(x_0_lon, x_0_lat))
-
-        # create empty bundle
-        bundle = TrajectoryBundle()
-        # initial index of sampling set to use
-        i = 0
-
-        # sample until trajectory has been found or sampling sets are empty
-        while bundle.empty() and i < self._sampling_level:
-            print('<ReactivePlanner>: Starting at sampling density {} of {}'.format(i + 1, self._sampling_level))
-            print('<ReactivePlanner>: Sampling {} trajectories'.format(self.no_of_samples(i)))
-            # 1 Start
-            # plan trajectory bundle
-            # return: trajectory bundle with all sample trajectories.
-            bundle = self._create_trajectory_bundle(self._desired_speed, x_0_lon, x_0_lat, samp_level=i)
-
-
-            bundle_old = bundle
-            # 1 Ende
-            # 2 Start
-            # check feasibility
-            bundle = self._get_feasible_trajectories(bundle, cc, x_0)
-            # geht nur mit feasible trajectorien:   optimal_trajectory = bundle.updated_optimal_trajectory() if not bundle.empty() else None
-
-            # print statistics
-            print('<ReactivePlanner>: Rejected {} infeasible trajectories due to kinematics'.format(
-                self.no_of_infeasible_trajectories_kinematics()))
-            print('<ReactivePlanner>: Rejected {} infeasible trajectories due to collisions'.format(
-                self.no_of_infeasible_trajectories_collision()))
-            # 2 Ende
-
-            i = i + 1
-            if bundle.empty() and x_0.velocity <= 0.1:
-                # create artifical standstill trajectory
-                print('Adding standstill trajectory')
-                traj_lon = QuarticTrajectory(t_start_s=0, duration_s=self.horizon, desired_horizon=self.horizon,
-                                                    start_state=x_0_lon,
-                                                    desired_velocity=self._desired_speed)
-                traj_lat = QuinticTrajectory(t_start_s=0, desired_horizon=self.horizon,
-                                                       start_state=x_0_lat)
-                p = TrajectorySample(0, traj_lon, traj_lat, 0)
-                p.cartesian = CartesianSample(np.repeat(x_0.position[0], self.N), np.repeat(x_0.position[1], self.N),
-                                              np.repeat(x_0.orientation, self.N), np.repeat(0, self.N),
-                                              np.repeat(0, self.N), np.repeat(0, self.N), np.repeat(0, self.N))
-                p.curvilinear = CurviLinearSample(np.repeat(x_0_lon[0], self.N), np.repeat(x_0_lat[0], self.N),
-                                                  np.repeat(x_0.orientation, self.N), np.repeat(x_0_lat[1], self.N),
-                                                  np.repeat(x_0_lat[2], self.N), np.repeat(x_0_lon[1], self.N),
-                                                  np.repeat(x_0_lon[2], self.N))
-                bundle.add_trajectory(p)
-                bundle_old = bundle
-
-        # check if feasible trajectory exists -> emergency mode
-        if bundle.empty():
-            print('<ReactivePlanner>: Could not find any trajectory out of {} trajectories'.format(
-                sum([self.no_of_samples(i) for i in range(self._sampling_level)])))
-            self._feasible_trajectories = bundle_old.trajectory_bundle
-            print('<ReactivePlanner>: Cannot find trajectory with default sampling parameters. '
-                  'Switching to emergency mode!')
-
-        # store feasible trajectories
-        self._feasible_trajectories = bundle.trajectory_bundle if not bundle.empty() else None
-
-        # find optimal trajectory
-        optimal_trajectory = bundle.updated_optimal_trajectory() if not bundle.empty() else None
-        if not bundle.empty():
-            #print("here")
-            self._min_cost = bundle_old.min_costs()
-            self._max_cost = bundle_old.max_costs()
-            print(self._min_cost, self._max_cost)
-            #self._min_cost = bundle.min_costs()
-            #self._max_cost = bundle.max_costs()
-            #print(self._min_cost, self._max_cost)
-            # self.draw_trajectory_set(self._feasible_trajectories)
-            print('Found optimal trajectory with costs = {}, which corresponds to {} percent of seen costs'.format(
-                optimal_trajectory.total_cost,
-                ((optimal_trajectory.total_cost - self._min_cost) / (self._max_cost - self._min_cost))))
-
-        return self._compute_trajectory_pair(optimal_trajectory) if not bundle.empty() else None
-    '''
-
-    #Fabian Lazy evaluation
     def plan(self, x_0: State, cc: object, cl_states=None) -> tuple:
         """
         Plans an optimal trajectory
@@ -985,11 +889,6 @@ class ReactivePlanner(object):
         #self._feasible_trajectories = bundle.trajectory_bundle if not bundle.empty() else None
 
         return None
-
-    # Fabian Ende
-
-
-
 
     def _compute_trajectory_pair(self, trajectory: TrajectorySample) -> tuple:
         """
@@ -1259,9 +1158,45 @@ class ReactivePlanner(object):
         return scenario
 
 
+    # Raphael correct obstacle plotting
+    def plotting(self, k, scenario, planning_problem_set, reference_path, ego, only_new_time_step = True):
+        if only_new_time_step:
+            plt.figure(k, figsize=(25, 10))
+            plt.plot(reference_path[:, 0], reference_path[:, 1], '-*g', linewidth=1, zorder=10)
+            draw_object(scenario, draw_params={'time_begin': k, 'time_end': k})
+            draw_object(planning_problem_set)
+            draw_object(ego)
+            draw_object(ego.prediction.occupancy_at_time_step(1))
+            plt.axis('equal')
+            plt.show(block=False)
+            if k > 0:
+                plt.close(k-1)
+            else:
+                plt.close('start')
+        else:
+            plt.plot(reference_path[:, 0], reference_path[:, 1], '-*g', linewidth=1, zorder=10)
+            draw_object(scenario, draw_params={'time_begin': k, 'time_end': k})
+            draw_object(planning_problem_set)
+            draw_object(ego)
+            draw_object(ego.prediction.occupancy_at_time_step(1))
+
+        plt.pause(0.1)
+
+    # def updated_collision_checker(self, number_of_steps, collision_checker):
+    #     for time_slice in range(1, number_of_steps):
+    #         # print(len(collision_checker.time_slice(time_slice).obstacles()))
+    #         # print(time_slice)
+    #         if len(collision_checker.time_slice(time_slice).obstacles()) != \
+    #                 len(collision_checker.time_slice(time_slice-1).obstacles()):
+    #             for obstacle in collision_checker.time_slice(time_slice-1).obstacles():
+    #                 if obstacle not in collision_checker.time_slice(time_slice).obstacles():
+    #                     collision_checker.time_slice(time_slice).add_collision_object(obstacle)
+    #     return collision_checker
+
+
     # Raphael Highlevel
 
-    def check_current_state(self, route_planner, scenario, trajectory, reference_path):
+    def check_current_state(self, route_planner, scenario, trajectory, reference_path, obstacles_ahead, k):
 
         print(self.statemachine.state)
 
@@ -1278,43 +1213,40 @@ class ReactivePlanner(object):
 
         if self.statemachine.state == 'following':
 
+            velocity_has_to_be_changed = False
             # TODO: Vel auch anpassen, wenn Differenz nicht groß genug ist?
             ego_velocity = trajectory._initial_state.velocity
 
-            vel_is_too_slow, obstacles_ahead = self.check_velocity_of_car_ahead_too_slow(scenario, trajectory)
+            if self.check_for_possible_overtaking_lanelet(scenario, trajectory):
 
-            if vel_is_too_slow:
+                if self.check_lane_change_possible(scenario, trajectory, obstacles_ahead, k, left=True):
+                    self.statemachine.Car_ahead_too_slow(
+                        self.get_laneletid_of_egocar(scenario, trajectory),
+                        scenario.lanelet_network.find_lanelet_by_id(
+                            self.get_laneletid_of_egocar(scenario, trajectory)).adj_left)
 
-                velocity_has_to_be_changed = False
+                    print(trajectory._initial_state.position)
+                    reference_path = route_planner.set_reference_lane(-1, trajectory._initial_state.position)
 
-                if self.check_for_possible_overtaking_lanelet(scenario, trajectory):
-
-                    if self.check_lane_change_possible(scenario, trajectory, left=True):
-                        self.statemachine.Car_ahead_too_slow(
-                            self.get_laneletid_of_egocar(scenario, trajectory),
-                            scenario.lanelet_network.find_lanelet_by_id(
-                                self.get_laneletid_of_egocar(scenario, trajectory)).adj_left)
-
-                        print(trajectory._initial_state.position)
-                        reference_path = route_planner.set_reference_lane(-1, trajectory._initial_state.position)
-
-                        ego_velocity = trajectory._initial_state.velocity
-
-                    else:
-                        velocity_has_to_be_changed = True
+                    ego_velocity = trajectory._initial_state.velocity
 
                 else:
                     velocity_has_to_be_changed = True
 
-                if velocity_has_to_be_changed == True:
-                    for car in obstacles_ahead:
-                        if not hasattr(car.initial_state, 'velocity'):
-                            ego_velocity = 0
-                    if ego_velocity != 0:
-                        ego_velocity = obstacles_ahead[0].initial_state.velocity
+            else:
+                velocity_has_to_be_changed = True
 
-            if ego_velocity != trajectory._initial_state.velocity:
-                print("Changed velocity!")
+            if velocity_has_to_be_changed:
+                for car in obstacles_ahead:
+                    if not hasattr(car.initial_state, 'velocity'):
+                        ego_velocity = 0
+                        print("Changed velocity!")
+                if ego_velocity != 0:
+                    ego_velocity = obstacles_ahead[0].initial_state.velocity
+                    print("Changed velocity to: ", ego_velocity)
+
+            # if ego_velocity != trajectory._initial_state.velocity:
+            #     print("Changed velocity!")
 
             return ego_velocity, reference_path
 
@@ -1370,13 +1302,13 @@ class ReactivePlanner(object):
         else:
             return False
 
-    def check_velocity_of_car_ahead_too_slow(self, scenario, ego):
+    def check_velocity_of_car_ahead_too_slow(self, scenario, ego, k):
 
-        near_obstacles = self.get_near_obstacles(ego, scenario)
+        near_obstacles = self.get_near_obstacles(ego, scenario, k)
 
         # for obstacle in near_obstacles:
         #     print("Near Obstacles ", obstacle.initial_state.position)
-        obstacles_ahead = self.check_for_obstacles_ahead(scenario, ego, near_obstacles)
+        obstacles_ahead = self.check_for_obstacles_ahead(scenario, ego, near_obstacles, k)
 
         return self.check_if_velocity_is_too_slow(ego, obstacles_ahead), obstacles_ahead
 
@@ -1393,30 +1325,35 @@ class ReactivePlanner(object):
         # print("Vel Diff: ", car.initial_state.velocity - (ego._initial_state.velocity + allowed_velocity_difference))
         return False
 
-    def get_near_obstacles(self, ego, scenario):
+    def get_near_obstacles(self, ego, scenario, k):
 
         r = ego._initial_state.velocity * 2
         near_obstacles = []
+        # for i in range(0, len(collision_state.obstacles())-1):
+        #     obstacle = collision_state.obstacles()[i]
+        #     print(pycrcc.RectOBB.center(obstacle))
 
         for static_obstacle in scenario.static_obstacles:
-
-            distance = np.linalg.norm(static_obstacle.initial_state.position - ego._initial_state.position) \
+            position = static_obstacle.occupancy_at_time(k).shape.center
+            distance = np.linalg.norm(position - ego._initial_state.position) \
                             - static_obstacle.obstacle_shape.length
 
             if distance < r:
                 near_obstacles.append(static_obstacle)
 
         for dynamic_obstacle in scenario.dynamic_obstacles:
+            if dynamic_obstacle.occupancy_at_time(k) is not None:
+                position = dynamic_obstacle.occupancy_at_time(k).shape.center
 
-            distance = np.linalg.norm(dynamic_obstacle.initial_state.position - ego._initial_state.position) \
-                            - dynamic_obstacle.obstacle_shape.length
+                distance = np.linalg.norm(position - ego._initial_state.position) \
+                                - dynamic_obstacle.obstacle_shape.length
 
-            if distance < r:
-                near_obstacles.append(dynamic_obstacle)
+                if distance < r:
+                    near_obstacles.append(dynamic_obstacle)
 
         return near_obstacles
 
-    def check_for_obstacles_ahead(self, scenario, ego, near_obstacles):
+    def check_for_obstacles_ahead(self, scenario, ego, near_obstacles, k):
         obstacles_ahead = []
 
         # rounded_vehicle_orientation = round(ego._initial_state.orientation, 1)
@@ -1429,16 +1366,16 @@ class ReactivePlanner(object):
 
         for obstacle in near_obstacles:
 
-            laneletid_obstacle = self.get_laneletid_of_obstacle(scenario, obstacle)
+            laneletid_obstacle = self.get_laneletid_of_obstacle(scenario, obstacle, k)
 
             if laneletid_ego == laneletid_obstacle:
 
-                obstacle_position = obstacle.initial_state.position
+                obstacle_position = obstacle.occupancy_at_time(k).shape.center #.initial_state.position
                 transformed_obstacle_position = np.matmul(obstacle_position - vehicle_position, Rotation_Matrix)
 
                 if transformed_obstacle_position[0] > 0:
                     obstacles_ahead.append(obstacle)
-                    print("Ahead Obstales: ", obstacle.initial_state.position)
+                    print("Ahead Obstales: ", obstacle_position) #obstacle.initial_state.position)
 #
             #     hypotenuse_length = np.linalg.norm(transformed_obstacle_position)
 #
@@ -1472,18 +1409,21 @@ class ReactivePlanner(object):
 
         return scenario.lanelet_network.find_lanelet_by_position(tmp)[0][0]
 
-    def get_laneletid_of_obstacle(self, scenario, obstacle):
-
-        x, y = obstacle.initial_state.position[0], obstacle.initial_state.position[1]
-        heading = obstacle.initial_state.orientation
+    def get_laneletid_of_obstacle(self, scenario, obstacle, k):
+        position = obstacle.occupancy_at_time(k).shape.center
+        x, y = position[0], position[1]
+        heading = obstacle.occupancy_at_time(k).shape.orientation
         x_1, y_1 = np.array([x, y]) + np.array([1, 1 * np.tan(heading)])
         tmp = np.array([[x, y], [x_1, y_1]])
 
-        return scenario.lanelet_network.find_lanelet_by_position(tmp)[0][0]
+        if scenario.lanelet_network.find_lanelet_by_position(tmp)[0]:
+            return scenario.lanelet_network.find_lanelet_by_position(tmp)[0][0]
+        else:
+            return scenario.lanelet_network.find_lanelet_by_position(tmp)[1][0]
 
-    def get_obstacles_on_neighboring_lane(self, ego, scenario, left = True):
+    def get_obstacles_on_neighboring_lane(self, ego, scenario, k, left = True):
 
-        near_obstacles = self.get_near_obstacles(ego, scenario)
+        near_obstacles = self.get_near_obstacles(ego, scenario, k)
 
         lanelet_ego = self.get_laneletid_of_egocar(scenario, ego)
 
@@ -1494,16 +1434,17 @@ class ReactivePlanner(object):
 
         cars_on_left_lane = []
         for obstacle in near_obstacles:
-            if self.get_laneletid_of_obstacle(scenario, obstacle) == neighboring_line:
+            if self.get_laneletid_of_obstacle(scenario, obstacle, k) == neighboring_line:
                 cars_on_left_lane.append(obstacle)
 
         return cars_on_left_lane
 
-    def check_lane_change_possible(self, scenario, ego, left = True):
+    def check_lane_change_possible(self, scenario, ego, obstacles_ahead, k, left=True):
 
-        obstacles_on_neighboring_lane = self.get_obstacles_on_neighboring_lane(ego, scenario, left)
+        obstacles_on_neighboring_lane = self.get_obstacles_on_neighboring_lane(ego, scenario, k, left)
 
         vehicle_position = ego._initial_state.position
+        safety_margin = ego._initial_state.velocity / 10
         rotation_matrix = [[np.cos(ego._initial_state.orientation), -np.sin(ego._initial_state.orientation)],
                            [np.sin(ego._initial_state.orientation), np.cos(ego._initial_state.orientation)]]
 
@@ -1511,12 +1452,19 @@ class ReactivePlanner(object):
         number_neighbors = len(obstacles_on_neighboring_lane)
         for obstacle in obstacles_on_neighboring_lane:
 
-            obstacle_position = obstacle.initial_state.position
+            obstacle_position = obstacle.occupancy_at_time(k).shape.center
             transformed_obstacle_position_rounded = np.round(np.matmul(obstacle_position - vehicle_position, rotation_matrix), 1)
 
             if obstacle.obstacle_shape.length/2 < \
-                    abs(transformed_obstacle_position_rounded[0]) - vehicle_parameter.length/2: #abs(ego._initial_state.shape.length/2):
-                number_neighbors = number_neighbors - 1
+                    abs(transformed_obstacle_position_rounded[0] - vehicle_parameter.length/2 - safety_margin):
+
+                print("Distance between obstacles on neigboring lane: \n", obstacle.obstacle_shape.length/2
+                      - abs(transformed_obstacle_position_rounded[0] - vehicle_parameter.length/2 - safety_margin))
+
+                if transformed_obstacle_position_rounded > 0:
+                    if obstacle.initial_state.velocity > obstacles_ahead[0].initial_state.velocity:
+                        print("Car on left lane is faster: ", obstacle.initial_state.velocity-obstacles_ahead[0].initial_state.velocity)
+                        number_neighbors = number_neighbors - 1
 
         if number_neighbors == 0:
             print("Lanechange possible!")
