@@ -1493,10 +1493,12 @@ class ReactivePlanner(object):
                 print("Distance between obstacles on neigboring lane: \n", obstacle.obstacle_shape.length/2
                       - abs(transformed_obstacle_position_rounded[0] - vehicle_parameter.length/2 - safety_margin))
 
-                if transformed_obstacle_position_rounded > 0:
+                if transformed_obstacle_position_rounded[0] > 0:
                     if obstacle.initial_state.velocity > obstacles_ahead[0].initial_state.velocity:
                         print("Car on left lane is faster: ", obstacle.initial_state.velocity-obstacles_ahead[0].initial_state.velocity)
                         number_neighbors = number_neighbors - 1
+                else:
+                    number_neighbors = number_neighbors - 1
 
         if number_neighbors == 0:
             print("Lanechange possible!")
