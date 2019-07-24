@@ -91,6 +91,20 @@ class RoutePlanner:
                         right = lanelet_network.find_lanelet_by_id(l.adj_right)
                         edges.append((lanelet.lanelet_id, right.lanelet_id,
                                       {'weight': 0, 'same_dir': lanelet.adj_right_same_direction}))
+            if lanelet.adj_right:
+                l_right = lanelet_network.find_lanelet_by_id(lanelet.adj_right)
+                if l_right.successor:
+                    for successor in l_right.successor:
+                        if (lanelet.lanelet_id, successor,{'weight': 0, 'same_dir': lanelet.adj_right_same_direction}) not in edges:
+                            edges.append((lanelet.lanelet_id, successor,
+                                      {'weight': 0, 'same_dir': lanelet.adj_right_same_direction}))
+            if lanelet.adj_left:
+                l_left = lanelet_network.find_lanelet_by_id(lanelet.adj_left)
+                if l_left.successor:
+                    for successor in l_left.successor:
+                        if (lanelet.lanelet_id, successor,{'weight': 0, 'same_dir': lanelet.adj_left_same_direction}) not in edges:
+                            edges.append((lanelet.lanelet_id, successor,
+                                      {'weight': 0, 'same_dir': lanelet.adj_left_same_direction}))
         graph.add_nodes_from(nodes)
         graph.add_edges_from(edges)
         return graph
