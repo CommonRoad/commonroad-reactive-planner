@@ -54,7 +54,7 @@ if __name__ == '__main__':
         # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-10_1_T-1.xml'
         # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-8_1_T-1.xml'
     # Doesn't make the lanechange
-        # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-15_1_T-1.xml'
+    scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-15_1_T-1.xml'
     # Car in front does not get recognized
         # scenario_path = '/home/raphaelrg/Desktop/commonroad-scenarios/NGSIM/US101/USA_US101-24_1_T-1.xml'
     # Do not work at all
@@ -172,13 +172,13 @@ if __name__ == '__main__':
 
     x_cl = None
 
-    for k in range(0, 150):
+    for k in range(0, 99):
         print(k)
         optimal = planner.plan(x_0, collision_checker.time_slice(k), cl_states=x_cl)
         # convert to CR obstacle
         ego = planner.convert_cr_trajectory_to_object(optimal[0])
 
-        planner.plotting(k, scenario, planning_problem_set, reference_path, ego, only_new_time_step = True)
+        planner.plotting(k, scenario, planning_problem_set, reference_path, ego, only_new_time_step = False)
 
         # TODO: Reste x_0 to reach starting velocity?
         x_0 = optimal[0].state_list[1]

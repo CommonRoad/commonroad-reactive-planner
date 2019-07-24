@@ -659,7 +659,7 @@ class RoutePlanner:
             reference_path = resample_polyline(reference_path, resampling_step_reference_path)
             max_curvature = max(abs(compute_curvature_from_polyline(reference_path)))
 
-        return reference_path, self.reference_paths[current_lanelet.lanelet_id][0:end_index]
+        return reference_path #, self.reference_paths[current_lanelet.lanelet_id][0:end_index]
 
 
 if __name__ == '__main__':
@@ -674,7 +674,7 @@ if __name__ == '__main__':
 
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-22_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-23_1_T-1.xml'
-    scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-7_1_T-1.xml'
+    # scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-7_1_T-1.xml'
 
     # fixed
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-9_1_T-1.xml'
