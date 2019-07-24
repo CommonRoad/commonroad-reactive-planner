@@ -16,10 +16,10 @@ class PlanningParameter:
             self.k_distance = 2.0
 
             # time planning parameters: t_N * t_step_size = prediction_horizon
-            self.prediction_horizon = 6.0  # s
+            self.prediction_horizon = 4.0  # s
             self.t_N = 3
-            self.t_step_size = .2  # s
-            self.t_min = 0.1
+            self.t_step_size = .1  # s
+            self.t_min = 0.2
 
             # direction planning parameter
             self.d_deviation = 1
@@ -57,7 +57,7 @@ class VehicleParameter:
         self.acceleration_max = 8  # m/s²
         self.acceleration_dot_max = 0.2
         self.velocity_max = 150 / 3.6  # m/s
-        self.velocity_threshold = 6 # m/s
+        self.velocity_threshold = 600 # m/s
 
         self.curvature_max = 0.2
 
