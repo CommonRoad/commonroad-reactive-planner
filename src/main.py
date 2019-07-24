@@ -139,7 +139,7 @@ if __name__ == '__main__':
 
     # set reference path
     route_planner = RoutePlanner(scenario.lanelet_network, scenario_path)
-    route_planner.create_reference_path_network()
+    #route_planner.create_reference_path_network()
     route_planner.plan_all_reference_paths()
 
     source_position = route_planner.planning_problem.initial_state.position
