@@ -139,6 +139,8 @@ class RoutePlanner:
         split_factor = max(len(left_lanes), len(right_lanes))
         split_factor = max(1, split_factor)
         goal_split_lanelets = []
+
+        remove_goal_lanelets = set()
         if goal_index < (split_factor+1) * 2:
             # goal lanelet part has not enough center vertices -> choose preceding one if possible
             if goal_lanelet.predecessor:
@@ -156,6 +158,10 @@ class RoutePlanner:
                 goal_split_lanelets.append(self.goal_lanelet_id)
                 goal_split_lanelets = list(set(goal_split_lanelets))
                 goal_split_lanelets = [int(l) for l in goal_split_lanelets]
+
+                remove_goal_lanelets = set(goal_split_lanelets)
+                set2 = {self.goal_lanelet_id, goal_lanelet.adj_left, goal_lanelet.adj_right}
+                remove_goal_lanelets.difference(set2)
 
         split_lanelets = (np.concatenate((left_lanes, right_lanes), axis=0)).tolist()
         split_lanelets.append(goal_lanelet.lanelet_id)
@@ -250,7 +256,7 @@ class RoutePlanner:
 
         # goal = lanelet_mapping[self.goal_lanelet_id][-1]
 
-        return new_network, lanelet_mapping
+        return new_network, lanelet_mapping, remove_goal_lanelets
 
     def create_split_lanelets(self, lanelets, split_factor, lanelet_mapping, map_ids, start_id=0):
         lanelet_network = self.lanelet_network
@@ -559,7 +565,7 @@ class RoutePlanner:
 
         lanelets_leading_to_goal = list(set(lanelets_leading_to_goal))
 
-        new_network, lanelet_mapping = self.create_reference_path_network()
+        new_network, lanelet_mapping, not_leading_to_goal = self.create_reference_path_network()
         graph = self.create_discrete_graph_from_lanelet_network(lanelet_network=new_network)
 
         if self.goal_lanelet_id in lanelet_mapping:
@@ -571,6 +577,8 @@ class RoutePlanner:
 
         for start in lanelets_leading_to_goal:
             start_id = start
+            if start_id in not_leading_to_goal:
+                continue
             if start in lanelet_mapping:
                 start_id = lanelet_mapping[start][0]
 
@@ -650,9 +658,9 @@ if __name__ == '__main__':
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-2_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-4_3_T-1.xml'
 
-    scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-22_1_T-1.xml'
-    ###scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-23_1_T-1.xml'
-    ##scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-7_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-22_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-23_1_T-1.xml'
+    scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-7_1_T-1.xml'
 
     # fixed
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-9_1_T-1.xml'
