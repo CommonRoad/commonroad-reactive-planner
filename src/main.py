@@ -130,7 +130,7 @@ if __name__ == '__main__':
 
     # Initialize reactive planner
     scenario, planning_problem_set = CommonRoadFileReader(scenario_path).open()
-    plt.figure(figsize=(25, 10))
+    plt.figure('start', figsize=(25, 10))
     draw_object(scenario)
     plt.axis('equal')
     plt.show(block=False)
@@ -170,7 +170,6 @@ if __name__ == '__main__':
     planner.set_parameters(params_vehicle)
     planner.set_reference_path(reference_path)
 
-    plt.plot(reference_path[:, 0], reference_path[:, 1], '-*g', linewidth=1, zorder=10)
     x_cl = None
 
     for k in range(0, 150):
@@ -178,11 +177,8 @@ if __name__ == '__main__':
         optimal = planner.plan(x_0, collision_checker.time_slice(k), cl_states=x_cl)
         # convert to CR obstacle
         ego = planner.convert_cr_trajectory_to_object(optimal[0])
-        draw_object(scenario, draw_params={'time_begin': k, 'time_end': k})
-        #draw_object(planning_problem_set)
-        draw_object(ego)
-        draw_object(ego.prediction.occupancy_at_time_step(1))
-        plt.pause(0.1)
+
+        planner.plotting(k, scenario, planning_problem_set, reference_path, ego, only_new_time_step = True)
 
         # TODO: Reste x_0 to reach starting velocity?
         x_0 = optimal[0].state_list[1]

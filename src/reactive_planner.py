@@ -21,6 +21,9 @@ from parameter_classes import VehModelParameters, SamplingParameters
 from polyline import compute_curvature_from_polyline, compute_orientation_from_polyline, compute_pathlength_from_polyline
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType, StaticObstacle
 
+import matplotlib.pyplot as plt
+from commonroad.visualization.draw_dispatch_cr import draw_object
+
 from State_Machine import CarHighlevelStates
 
 __author__ = "Christian Pek"
@@ -1257,6 +1260,42 @@ class ReactivePlanner(object):
                     old = element
 
         return scenario
+
+
+    # Raphael correct obstacle plotting
+    def plotting(self, k, scenario, planning_problem_set, reference_path, ego, only_new_time_step = True):
+        if only_new_time_step:
+            plt.figure(k, figsize=(25, 10))
+            plt.plot(reference_path[:, 0], reference_path[:, 1], '-*g', linewidth=1, zorder=10)
+            draw_object(scenario, draw_params={'time_begin': k, 'time_end': k})
+            draw_object(planning_problem_set)
+            draw_object(ego)
+            draw_object(ego.prediction.occupancy_at_time_step(1))
+            plt.axis('equal')
+            plt.show(block=False)
+            if k > 0:
+                plt.close(k-1)
+            else:
+                plt.close('start')
+        else:
+            plt.plot(reference_path[:, 0], reference_path[:, 1], '-*g', linewidth=1, zorder=10)
+            draw_object(scenario, draw_params={'time_begin': k, 'time_end': k})
+            draw_object(planning_problem_set)
+            draw_object(ego)
+            draw_object(ego.prediction.occupancy_at_time_step(1))
+
+        plt.pause(0.1)
+
+    # def updated_collision_checker(self, number_of_steps, collision_checker):
+    #     for time_slice in range(1, number_of_steps):
+    #         # print(len(collision_checker.time_slice(time_slice).obstacles()))
+    #         # print(time_slice)
+    #         if len(collision_checker.time_slice(time_slice).obstacles()) != \
+    #                 len(collision_checker.time_slice(time_slice-1).obstacles()):
+    #             for obstacle in collision_checker.time_slice(time_slice-1).obstacles():
+    #                 if obstacle not in collision_checker.time_slice(time_slice).obstacles():
+    #                     collision_checker.time_slice(time_slice).add_collision_object(obstacle)
+    #     return collision_checker
 
 
     # Raphael Highlevel
