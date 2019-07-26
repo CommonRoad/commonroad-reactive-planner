@@ -3,13 +3,13 @@ import numpy as np
 
 from commonroad.common.util import Interval
 import xml.etree.ElementTree as ET
-from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType, StaticObstacle
+from commonroad.scenario.obstacle import ObstacleType, StaticObstacle
 from commonroad.geometry.shape import Rectangle
-from commonroad.scenario.trajectory import Trajectory, State
+from commonroad.scenario.trajectory import State
 
 class PlanningProblem():
     """
-    Class that represents the vehicle's constraints
+    Class that represents the planning problem
     """
     def __init__(self, scenario_path):
         _, self.planning_problem_set = CommonRoadFileReader(scenario_path).open()
@@ -17,7 +17,7 @@ class PlanningProblem():
 
 class Scenario(object):
     """
-    Class that represents the vehicle's constraints
+    Class that represents the scenario
     """
     def __init__(self, scenario_path):
         self.scenario_set, _ = CommonRoadFileReader(scenario_path).open()
@@ -86,7 +86,6 @@ class Scenario(object):
                     o_type = ObstacleType
                     obj = StaticObstacle(obstacle_shape=obj, initial_state=state, obstacle_type=o_type.ROAD_BOUNDARY,
                                          obstacle_id=self.scenario_set.generate_object_id())
-                    #if self._boundary_not_intersecting(self, scenario, np.array([element, old]), i, IDs[:]):
                     if self._boundary_not_intersecting(np.array([element, old]), i, IDs[:]):
                         self.scenario_set.add_objects(obj)
                     old = element
