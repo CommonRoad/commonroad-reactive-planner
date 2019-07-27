@@ -5,7 +5,6 @@ from parameter import VehicleParameter, PlanningParameter
 from trajectory_bundle import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample
 from polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
 from commonroad.common.validity import *
-from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 from commonroad.scenario.lanelet import LaneletNetwork, Lanelet
 from commonroad.prediction.prediction import TrajectoryPrediction
 from commonroad.geometry.shape import Rectangle
@@ -14,15 +13,11 @@ import pycrcc
 from pycrccosy import TrapezoidCoordinateSystem
 from commonroad_ccosy.geometry.trapezoid_coordinate_system import create_coordinate_system_from_polyline
 from typing import List
-import matplotlib.pyplot as plt
 import numpy as np
 import time, warnings
 from parameter_classes import VehModelParameters, SamplingParameters
 from polyline import compute_curvature_from_polyline, compute_orientation_from_polyline, compute_pathlength_from_polyline
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType, StaticObstacle
-
-from commonroad.common.util import Interval
-import xml.etree.ElementTree as ET
 
 import matplotlib.pyplot as plt
 from commonroad.visualization.draw_dispatch_cr import draw_object

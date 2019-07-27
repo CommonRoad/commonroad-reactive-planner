@@ -1,7 +1,5 @@
 from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_checker
-from commonroad.common.file_reader import CommonRoadFileReader
 from commonroad.visualization.draw_dispatch_cr import draw_object
-from commonroad.visualization.plot_helper import set_non_blocking
 from commonroad.scenario.trajectory import State, Trajectory
 from commonroad_ccosy.geometry.trapezoid_coordinate_system import create_coordinate_system_from_polyline
 from commonroad.common.solution_writer import CommonRoadSolutionWriter, VehicleModel, VehicleType, CostFunction
@@ -133,9 +131,8 @@ if __name__ == '__main__':
             # scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/cooperative/C-USA_Lanker-1_2_T-1.xml'
 
     # Initialize reactive planner
-    scenario, planning_problem_set = CommonRoadFileReader(scenario_path).open()
-    scenario = Scenario(scenario_path=scenario_path)
     planning_problem = PlanningProblem(scenario_path=scenario_path)
+    scenario = Scenario(scenario_path=scenario_path)
 
     scenario.add_obstacles_at_lanelet_edges()
 
@@ -147,7 +144,7 @@ if __name__ == '__main__':
     plt.pause(0.1)
 
     # set reference path
-    route_planner = RoutePlanner(scenario.scenario_set.lanelet_network, scenario_path)
+    route_planner = RoutePlanner(scenario.scenario_set.lanelet_network, scenario.scenario_path)
     #route_planner.create_reference_path_network()
     route_planner.plan_all_reference_paths()
 

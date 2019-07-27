@@ -13,7 +13,7 @@ class PlanningProblem():
     """
     def __init__(self, scenario_path):
         _, self.planning_problem_set = CommonRoadFileReader(scenario_path).open()
-        self._scenario_path = scenario_path
+        self.scenario_path = scenario_path
 
 class Scenario(object):
     """
@@ -21,7 +21,7 @@ class Scenario(object):
     """
     def __init__(self, scenario_path):
         self.scenario_set, _ = CommonRoadFileReader(scenario_path).open()
-        self._scenario_path = scenario_path
+        self.scenario_path = scenario_path
 
         
     def _boundary_not_intersecting(self, p, own_ID, total_IDs):
@@ -58,7 +58,7 @@ class Scenario(object):
 
         
         # find all lanelet IDs
-        tree = ET.parse(self._scenario_path)
+        tree = ET.parse(self.scenario_path)
         root = tree.getroot()
         IDs = []
         for child in root:
