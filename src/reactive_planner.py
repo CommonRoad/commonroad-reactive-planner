@@ -17,7 +17,7 @@ import numpy as np
 import time, warnings
 from parameter_classes import VehModelParameters, SamplingParameters
 from polyline import compute_curvature_from_polyline, compute_orientation_from_polyline, compute_pathlength_from_polyline
-from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType, StaticObstacle
+from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 
 import matplotlib.pyplot as plt
 from commonroad.visualization.draw_dispatch_cr import draw_object
@@ -183,7 +183,7 @@ class ReactivePlanner(object):
 
         # determine target lane
         target_lanelet = None
-        if lane_direction==-1:
+        if lane_direction == -1:
             if current_lanelet.adj_left_same_direction not in (False,None):
                 target_lanelet = self.lanelet_network.find_lanelet_by_id(current_lanelet.adj_left)
         elif lane_direction == 1:
@@ -224,7 +224,7 @@ class ReactivePlanner(object):
             v_interval = self._sampling_v.to_range(i+1)
             d_interval = self._sampling_d.to_range(i+1) # search with d=0 first
             # if start is self.dT => often results in singularities in linalg
-            if i==0:
+            if i == 0:
                 t_interval = np.array([self._sampling_t.up])#to_range(i+1)
             else:
                 t_interval = self._sampling_t.to_range(i)
@@ -441,7 +441,7 @@ class ReactivePlanner(object):
         # Trajectory is feasible
         return True
 
-    def _compute_cartesian_trajectory(self, trajectory: TrajectorySample):
+    def _compute_cartesian_trajectory(self, trajectory: TrajectorySample) -> TrajectorySample:
         """
         Computes the cartesian trajectory information
         :param trajectory: The trajectory to compute
@@ -684,10 +684,10 @@ class ReactivePlanner(object):
             val = TrajectoryBundle()
             if not bundle.empty():
                 for traj in bundle.trajectory_bundle:
-                    tmp = self._compute_cartesian_trajectory(traj)
-                    if tmp is not None:
-                        tmp.reevaluate_costs()
-                        val.add_trajectory(tmp)
+                    traj = self._compute_cartesian_trajectory(traj)
+                    if traj is not None:
+                        traj.reevaluate_costs()
+                        val.add_trajectory(traj)
 
             # sort valid trajectories by their costs
             val.trajectory_bundle = sorted(val.trajectory_bundle, key=lambda traj: traj.total_cost)
@@ -713,27 +713,27 @@ class ReactivePlanner(object):
                                                     desired_velocity=self._desired_speed)
                 traj_lat = QuinticTrajectory(t_start_s=0, desired_horizon=self.horizon,
                                                        start_state=x_0_lat)
-                p = TrajectorySample(0, traj_lon, traj_lat, 0)
-                p.cartesian = CartesianSample(np.repeat(x_0.position[0], self.N), np.repeat(x_0.position[1], self.N),
+                traj_stand = TrajectorySample(0, traj_lon, traj_lat, 0)
+                traj_stand.cartesian = CartesianSample(np.repeat(x_0.position[0], self.N), np.repeat(x_0.position[1], self.N),
                                               np.repeat(x_0.orientation, self.N), np.repeat(0, self.N),
                                               np.repeat(0, self.N), np.repeat(0, self.N), np.repeat(0, self.N))
-                p.curvilinear = CurviLinearSample(np.repeat(x_0_lon[0], self.N), np.repeat(x_0_lat[0], self.N),
+                traj_stand.curvilinear = CurviLinearSample(np.repeat(x_0_lon[0], self.N), np.repeat(x_0_lat[0], self.N),
                                                   np.repeat(x_0.orientation, self.N), np.repeat(x_0_lat[1], self.N),
                                                   np.repeat(x_0_lat[2], self.N), np.repeat(x_0_lon[1], self.N),
                                                   np.repeat(x_0_lon[2], self.N))
-                p = self._compute_cartesian_trajectory(p)
-                p.reevaluate_costs()
-                bundle.add_trajectory(p)
+                traj_stand = self._compute_cartesian_trajectory(traj_stand)
+                traj_stand.reevaluate_costs()
+                bundle.add_trajectory(traj_stand)
                 bundle_old = bundle
-                if self._feasible_trajectory(p, cc):
+                if self._feasible_trajectory(traj_stand, cc):
                     self._min_cost=bundle_old.min_costs()
                     self._max_cost=bundle_old.max_costs()
                     print(
                         'Found optimal trajectory with costs = {}, which corresponds to {} percent of seen costs'.format(
-                            p.total_cost,
-                            ((p.total_cost - self._min_cost) / (self._max_cost - self._min_cost))))
-                    return self._compute_trajectory_pair(p)
-            i = i + 1
+                            traj_stand.total_cost,
+                            ((traj_stand.total_cost - self._min_cost) / (self._max_cost - self._min_cost))))
+                    return self._compute_trajectory_pair(traj_stand)
+            i += 1
 
         # check if feasible trajectory exists -> emergency mode
         if bundle.empty():
@@ -1027,7 +1027,7 @@ class ReactivePlanner(object):
             #TODO: Calculate time from Velocity
             self.statemachine.set_timer_elapsed(time_for_overtaking = 5)
 
-            if self.statemachine.timer_elapsed == True:
+            if self.statemachine.timer_elapsed:
                 print("Hurrayy!")
 
 

@@ -1,11 +1,11 @@
 from commonroad.common.file_reader import CommonRoadFileReader
 import numpy as np
-
 from commonroad.common.util import Interval
 import xml.etree.ElementTree as ET
 from commonroad.scenario.obstacle import ObstacleType, StaticObstacle
 from commonroad.geometry.shape import Rectangle
 from commonroad.scenario.trajectory import State
+
 
 class PlanningProblem():
     """
@@ -14,6 +14,7 @@ class PlanningProblem():
     def __init__(self, scenario_path):
         _, self.planning_problem_set = CommonRoadFileReader(scenario_path).open()
         self.scenario_path = scenario_path
+
 
 class Scenario(object):
     """
@@ -24,26 +25,29 @@ class Scenario(object):
         self.scenario_path = scenario_path
 
         
-    def _boundary_not_intersecting(self, p, own_ID, total_IDs):
+    def _boundary_not_intersecting(self, points, own_ID, total_IDs):
         """
         Helper to check if boundary object is not intersecting/blocking any lanelet
-        :param p:           Array of a point and its predecessor describing a boundary segment
+        :param points:      Array of a point and its predecessor describing a boundary segment
         :param own_ID:      Id of the lanelet corresponding to the boundary
         :param total_IDs:   List of all lanelet Ids to check for intersection
         :return:            Boolean
         """
+
+        # number of sections, the distance between the points[0] and points[1] is split
+        # the higher the more precise
         n = 50
 
         total_IDs.remove(own_ID)
 
-        #create list of n-1 points between p[0] and p[1]
-        delta_x = p[1][0]-p[0][0]
-        delta_y = p[1][1]-p[0][1]
-        points = np.array([[p[0][0]+1/n*delta_x, p[0][1]+1/n*delta_y]])
+        # create list of n-1 points between points[0] and points[1]
+        delta_x = points[1][0]-points[0][0]
+        delta_y = points[1][1]-points[0][1]
+        points = np.array([[points[0][0]+1/n*delta_x, points[0][1]+1/n*delta_y]])
         for i in range(2,n):
-            points = np.append(points, np.array([[p[0][0]+i/n*delta_x, p[0][1]+i/n*delta_y]]), axis= 0)
+            points = np.append(points, np.array([[points[0][0]+i/n*delta_x, points[0][1]+i/n*delta_y]]), axis= 0)
 
-        # checks whether a point between p[0] and p[1] is on other lanelet
+        # checks whether a point between points[0] and points[1] is on other lanelet
         for i in total_IDs:
             if True in self.scenario_set.lanelet_network.find_lanelet_by_id(i).contains_points(points):
                 return False
@@ -64,6 +68,7 @@ class Scenario(object):
         for child in root:
             if child.tag == "lanelet":
                 IDs.append(int(child.attrib["id"]))
+
         # add obstacles
         e = 1e-6  # avoid numerical errors
         for i in IDs:
