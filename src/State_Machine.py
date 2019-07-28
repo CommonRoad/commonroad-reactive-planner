@@ -2,6 +2,7 @@ from transitions import Machine
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType, StaticObstacle
 from parameter import VehicleParameter, PlanningParameter
 import numpy as np
+from scipy import spatial
 
 class CarHighlevelStates(object):
 
@@ -38,7 +39,7 @@ class CheckTransitions:
     def __init__(self):
 
         self.statemachine = CarHighlevelStates()
-        pass
+        self.vehicleparameter = VehicleParameter()
 
     def check_current_state(self, route_planner, scenario, ego, reference_path, near_obstacles, obstacle_ahead, k):
 
@@ -106,8 +107,6 @@ class CheckTransitions:
 
     def check_if_car_on_new_lanelet(self, scenario, ego):
 
-        # distance, index = spatial.KDTree(reference_path).query(position_ego)
-
         ego_laneletid = self.get_laneletid_of_egocar(scenario, ego)
 
         if ego_laneletid == self.statemachine.new_lanelet:
@@ -117,12 +116,11 @@ class CheckTransitions:
 
     def check_if_on_new_centervertice(self, scenario, ego_position):
 
-        new_laneletid = self.statemachine.new_lanelet
-        new_lanelet = scenario.lanelet_network.find_lanelet_by_id(new_laneletid)
+        new_lanelet = scenario.lanelet_network.find_lanelet_by_id(self.statemachine.new_lanelet)
 
         distance, index = spatial.KDTree(new_lanelet.center_vertices).query(ego_position)
 
-        if distance < 1:
+        if distance < 0.5:
             return True
         else:
             return False
@@ -157,7 +155,7 @@ class CheckTransitions:
 
     def get_near_obstacles(self, ego, scenario, k):
 
-        r = ego._initial_state.velocity * 2
+        r = ego._initial_state.velocity + self.vehicleparameter.length / 2
         near_obstacles = []
         o_type = ObstacleType
 
@@ -167,7 +165,7 @@ class CheckTransitions:
                 position = static_obstacle.occupancy_at_time(k).shape.center
                 distance = np.linalg.norm(position - ego._initial_state.position)
 
-                if distance < r:
+                if distance < r + static_obstacle.obstacle_shape.length/2:
                     near_obstacles.append([static_obstacle, position, 0,
                                            self.get_laneletid_of_obstacle(scenario, static_obstacle, k)])
 
@@ -177,7 +175,7 @@ class CheckTransitions:
                 position = dynamic_obstacle.occupancy_at_time(k).shape.center
                 distance = np.linalg.norm(position - ego._initial_state.position)
 
-                if distance < r:
+                if distance < r + dynamic_obstacle.obstacle_shape.length/2:
                     near_obstacles.append([dynamic_obstacle, position, dynamic_obstacle.initial_state.velocity,
                                            self.get_laneletid_of_obstacle(scenario, dynamic_obstacle, k)])
 
@@ -215,7 +213,7 @@ class CheckTransitions:
 
         laneletid = self.get_laneletid_of_egocar(scenario, ego)
 
-        if scenario.lanelet_network.find_lanelet_by_id(laneletid).adj_left:
+        if scenario.lanelet_network.find_lanelet_by_id(laneletid).adj_left_same_direction:
             print('Overtaking lanelet exists')
             return True
 
@@ -276,19 +274,30 @@ class CheckTransitions:
             obstacle_position = obstacle[1]
             transformed_obstacle_position = np.matmul(obstacle_position - vehicle_position, rotation_matrix)
 
-            if obstacle[0].obstacle_shape.length/2 < \
-                    abs(transformed_obstacle_position[0] - vehicle_parameter.length/2 - safety_margin):
+            if transformed_obstacle_position[0] > 0:
 
-                print("Distance between obstacles on neigboring lane: ", obstacle[0].obstacle_shape.length/2
-                      - abs(transformed_obstacle_position[0] - vehicle_parameter.length/2 - safety_margin))
+                if obstacle[0].obstacle_shape.length/2 < \
+                        transformed_obstacle_position[0] - vehicle_parameter.length/2 - safety_margin:
+                    print("Enough space to neighboring car: ",
+                          abs(transformed_obstacle_position[0] - vehicle_parameter.length/2 - safety_margin)
+                          - obstacle[0].obstacle_shape.length/2)
 
-                if transformed_obstacle_position[0] > 0:
                     if obstacle[0].initial_state.velocity > obstacle_ahead[0].initial_state.velocity:
                         print("Car on left lane is faster: ",
                               obstacle[0].initial_state.velocity - obstacle_ahead[0].initial_state.velocity)
                         number_neighbors -= 1
-                else:
-                    number_neighbors -= 1
+
+            else:
+                if obstacle[0].obstacle_shape.length/2 < \
+                        abs(transformed_obstacle_position[0]) - vehicle_parameter.length/2:
+                    print("Enough space to neighboring following car: ",
+                          abs(transformed_obstacle_position[0] - vehicle_parameter.length/2 - safety_margin)
+                          - obstacle[0].obstacle_shape.length/2)
+
+                    if obstacle[0].initial_state.velocity < ego._initial_state.velocity:
+                        print("Car on left lane following is slower: ",
+                              ego._initial_state.velocity - obstacle[0].initial_state.velocity)
+                        number_neighbors -= 1
 
         if number_neighbors == 0:
             print("Lanechange possible!")

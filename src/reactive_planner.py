@@ -1,6 +1,3 @@
-
-from scipy import spatial
-
 from parameter import VehicleParameter, PlanningParameter
 from trajectory_bundle import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample
 from polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
@@ -955,7 +952,6 @@ class ReactivePlanner(object):
         prediction = TrajectoryPrediction(trajectory,shape)
 
         return DynamicObstacle(42, ObstacleType.CAR,shape, trajectory.state_list[0],prediction)
-
 
     def trigger_state_machine(self, scenario, optimal, ego, reference_path, route_planner, k):
 
