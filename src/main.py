@@ -16,15 +16,15 @@ if __name__ == '__main__':
     print('Creating velocity reaching bundle....')
 
     # Finish
-    scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Over-1_1.xml'
-    # scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-20_1_T-1.xml'
+    #scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Over-1_1.xml'
+    scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-20_1_T-1.xml'
     # scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-25_1_T-1.xml'
     # scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-3_1_T-1.xml'
     # scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-1_1_T-1.xml'
     # scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-29_1_T-1.xml'
     # scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-21_1_T-1.xml'
     # scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-11_1_T-1.xml'
-    #scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-18_1_T-1.xml'
+    scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-18_1_T-1.xml'
     # scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/cooperative/C-USA_US101-32_1_T-1.xml'
     # scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/cooperative/C-USA_US101-33_1_T-1.xml'
 
@@ -56,7 +56,7 @@ if __name__ == '__main__':
         # scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-10_1_T-1.xml'
         # scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-8_1_T-1.xml'
     # Doesn't make the lanechange
-    #scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-15_1_T-1.xml'
+    scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-15_1_T-1.xml'
     # Car in front does not get recognized
         # scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-24_1_T-1.xml'
     # Do not work at all
@@ -106,8 +106,8 @@ if __name__ == '__main__':
             # scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_Gar-1_1_T-1.xml'
         # zu wenige center vertices -> zu geringe auflösung für discrete/lane change
             # scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_Muc-4_1_T-1.xml'
-    scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Merge-1_1_T-1.xml'
-            # scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Over-1_1.xml'
+    #scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Merge-1_1_T-1.xml'
+    #scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_Over-1_1.xml'
             # scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_Hhr-1_1.xml'
             # scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/hand-crafted/DEU_Ffb-1_3_T-1.xml'
             # scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/hand-crafted/ZAM_HW-1_1_S-1.xml'
