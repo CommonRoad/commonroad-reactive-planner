@@ -84,9 +84,9 @@ class Scenario(object):
                         len_obj = np.sqrt(delta_x ** 2 + delta_y ** 2)
                         x_obj = element[0] - 0.5 * len_obj * np.cos(ang) * np.sign(delta_x)
                         y_obj = element[1] - 0.5 * len_obj * np.sin(ang) * np.sign(delta_x)
-                        obj = Rectangle(length=len_obj, width=0.05)
+                        obj = Rectangle(length=len_obj, width=1e-6)
                         state = State(position=np.array([x_obj, y_obj]), orientation=ang, velocity=0,
-                                      time_step=Interval(0, 30))
+                                      time_step=Interval(0, 200))
                         o_type = ObstacleType
                         obj = StaticObstacle(obstacle_shape=obj, initial_state=state, obstacle_type=o_type.ROAD_BOUNDARY,
                                              obstacle_id=self.scenario_set.generate_object_id())
@@ -108,9 +108,9 @@ class Scenario(object):
                         len_obj = np.sqrt(delta_x ** 2 + delta_y ** 2)
                         x_obj = element[0] - 0.5 * len_obj * np.cos(ang) * np.sign(delta_x)
                         y_obj = element[1] - 0.5 * len_obj * np.sin(ang) * np.sign(delta_x)
-                        obj = Rectangle(length=len_obj, width=-0.05)
+                        obj = Rectangle(length=len_obj, width=-1e-6)
                         state = State(position=np.array([x_obj, y_obj]), orientation=ang, velocity=0,
-                                      time_step=Interval(0, 30))
+                                      time_step=Interval(0, 200))
                         o_type = ObstacleType
                         obj = StaticObstacle(obstacle_shape=obj, initial_state=state, obstacle_type=o_type.ROAD_BOUNDARY,
                                              obstacle_id=self.scenario_set.generate_object_id())
