@@ -955,7 +955,7 @@ class ReactivePlanner(object):
 
     def trigger_state_machine(self, scenario, optimal, ego, reference_path, route_planner, k):
 
-        near_obstacles, obstacle_ahead = self.checktransitions.get_obstacles_around(scenario.scenario_set, ego, k)
+        near_obstacles, obstacle_ahead = self.checktransitions.get_obstacles_around(scenario, ego, k)
 
         x_0 = optimal[0].state_list[1]
         x_cl = (optimal[2][1], optimal[3][1])
@@ -966,7 +966,7 @@ class ReactivePlanner(object):
             if vel_difference_overtaking:
                 print("Car ahead is too slow! Overtaking-Difference: ", vel_difference_overtaking)
 
-                changed_velocity, reference_path = self.checktransitions.check_current_state(route_planner, scenario.scenario_set, ego,
+                changed_velocity, reference_path = self.checktransitions.check_current_state(route_planner, scenario, ego,
                                                                                reference_path, near_obstacles, obstacle_ahead, k)
 
                 x_0.velocity = changed_velocity

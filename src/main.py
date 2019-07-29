@@ -225,7 +225,7 @@ if __name__ == '__main__':
             plt.savefig(picture_path)
             picture_list.append(picture_path)
 
-        x_0, x_cl, reference_path = planner.trigger_state_machine(scenario, optimal, ego, reference_path, route_planner, k)
+        x_0, x_cl, reference_path = planner.trigger_state_machine(scenario.scenario_set, optimal, ego, reference_path, route_planner, k)
 
     print('Done')
     plt.show(block=False)

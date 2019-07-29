@@ -246,47 +246,55 @@ class CheckTransitions:
 
     def get_obstacle_ahead(self, scenario, ego, near_obstacles):
 
-        vehicle_position = ego._initial_state.position
+        ego_position = ego._initial_state.position
+        ego_laneletid = self.get_laneletid_of_egocar(scenario, ego)
+
         nearest_obstacle = None
 
+        # Matrix to rotate lanelet-network around orientation of ego vehicle
         rotation_matrix = [[np.cos(ego._initial_state.orientation), -np.sin(ego._initial_state.orientation)],
                            [np.sin(ego._initial_state.orientation), np.cos(ego._initial_state.orientation)]]
 
-        laneletid_ego = self.get_laneletid_of_egocar(scenario, ego)
 
         for obstacle in near_obstacles:
 
-            if laneletid_ego == obstacle[3]:
+            # Compare lanelet-IDs
+            if ego_laneletid == obstacle[3]:
 
-                transformed_obstacle_position = np.matmul(obstacle[1] - vehicle_position, rotation_matrix)
+                # Center obstacles around ego_position and rotate coordinate system
+                transformed_obstacle_position = np.matmul(obstacle[1] - ego_position, rotation_matrix)
 
+                # Obstacle is in front
                 if transformed_obstacle_position[0] > 0:
                     print("Ahead Obstacle: ", obstacle[1])
                     if nearest_obstacle is None:
                         nearest_obstacle = [obstacle, transformed_obstacle_position[0]]
+                    # Get the obstacle that is closest to the ego
                     elif transformed_obstacle_position[0] < nearest_obstacle[1]:
                         nearest_obstacle = [obstacle, transformed_obstacle_position[0]]
 
         if nearest_obstacle is not None:
             return nearest_obstacle[0]
-        else:
-            return None
+
+        return None
 
     def get_obstacles_on_neighboring_lane(self, ego, scenario, near_obstacles, left = True):
 
         lanelet_ego = self.get_laneletid_of_egocar(scenario, ego)
 
         if left:
-            neighboring_line = scenario.lanelet_network.find_lanelet_by_id(lanelet_ego).adj_left
+            neighboring_lanelet_id = scenario.lanelet_network.find_lanelet_by_id(lanelet_ego).adj_left
         else:
-            neighboring_line = scenario.lanelet_network.find_lanelet_by_id(lanelet_ego).adj_right
+            neighboring_lanelet_id = scenario.lanelet_network.find_lanelet_by_id(lanelet_ego).adj_right
 
-        cars_on_left_lane = []
+        obstacles_on_neighboring_lane = []
+
         for obstacle in near_obstacles:
-            if obstacle[3] == neighboring_line:
-                cars_on_left_lane.append(obstacle)
+            # Compare lanelet-IDs
+            if obstacle[3] == neighboring_lanelet_id:
+                obstacles_on_neighboring_lane.append(obstacle)
 
-        return cars_on_left_lane
+        return obstacles_on_neighboring_lane
 
     # Get lanelet-IDs
     def get_laneletid_of_egocar(self, scenario, ego):
@@ -309,25 +317,3 @@ class CheckTransitions:
             return scenario.lanelet_network.find_lanelet_by_position(tmp)[0][0]
         else:
             return scenario.lanelet_network.find_lanelet_by_position(tmp)[1][0]
-
-    # Helper functions
-    def create_new_cl_state(self, x_0, x_cl,  changed_velocity):
-
-        # compute curvilinear position
-        s, d = self._cosy.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
-        # compute orientation in curvilinear coordinate frame
-        theta_cl = x_0.orientation - np.interp(s, self._ref_pos, self._theta_ref)
-
-        # compute curvatures
-        kr = np.interp(s, self._ref_pos, self._ref_curv)
-
-        # compute d prime and d prime prime -> derivation after arclength
-        d_p = (1 - kr * d) * np.tan(theta_cl)
-
-        # compute s dot and s dot dot -> derivation after time
-        s_d = changed_velocity * np.cos(theta_cl) / (1 - np.interp(s, self._ref_pos, self._ref_curv) * d)
-
-        x_cl[0][1] = s_d
-        x_cl[1][1] = d_p
-
-        return x_cl
