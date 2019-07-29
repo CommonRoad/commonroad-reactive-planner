@@ -71,7 +71,7 @@ class Scenario(object):
         e = 1e-6  # for avoiding numerical errors
         # iterate over all lanelets
         for i in IDs:
-            # checks, whether adjunctive lanelet on the left exists
+            # checks, whether an adjacent lanelet on the left exists
             if self.scenario_set.lanelet_network.find_lanelet_by_id(i).adj_left is None:
                 old = self.scenario_set.lanelet_network.find_lanelet_by_id(i).left_vertices[0]
                 # iterate over all discrete points of the left vertex
@@ -95,7 +95,7 @@ class Scenario(object):
                     # store current element
                     old = element
 
-            # checks, whether adjunctive lanelet on the right exists
+            # checks, whether an adjacent lanelet on the right exists
             if self.scenario_set.lanelet_network.find_lanelet_by_id(i).adj_right is None:
                 old = self.scenario_set.lanelet_network.find_lanelet_by_id(i).right_vertices[0]
                 # iterate over all discrete points of the right vertex
