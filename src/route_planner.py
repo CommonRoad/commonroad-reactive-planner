@@ -150,7 +150,7 @@ class RoutePlanner:
         left_lanes, right_lanes, max_length = self.get_adjacent_lanelets_list(self.goal_lanelet_id)
 
         # compute split factor (subtract 1, because source lanelet is in list)
-        split_factor = max(len(left_lanes), len(right_lanes))
+        split_factor = max(len(left_lanes), len(right_lanes)) + 1
         split_factor = max(1, split_factor)
         goal_split_lanelets = []
 
@@ -267,8 +267,6 @@ class RoutePlanner:
         # create new lanelet network for graph
         new_network = LaneletNetwork()
         new_network = new_network.create_from_lanelet_list(all_lanelets)
-
-        # goal = lanelet_mapping[self.goal_lanelet_id][-1]
 
         return new_network, lanelet_mapping, remove_goal_lanelets
 
@@ -574,18 +572,20 @@ class RoutePlanner:
         lanelets_leading_to_goal = set()
         for lanelet in self.lanelet_network.lanelets:
             if lanelet.lanelet_id != self.goal_lanelet_id:
+
                 _lanelets = self.find_all_lanelets_leading_to_goal(lanelet.lanelet_id, allow_overtaking=False)
                 lanelets_leading_to_goal |= _lanelets
 
-        lanelets_leading_to_goal = list(set(lanelets_leading_to_goal))
+        lanelets_from_source = nx.descendants(self.graph, source_lanelet.lanelet_id)
+        lanelets_from_source.add(source_lanelet.lanelet_id)
+        lanelets_leading_to_goal = list(set(lanelets_leading_to_goal).intersection(set(lanelets_from_source)))
 
         new_network, lanelet_mapping, not_leading_to_goal = self.create_reference_path_network()
-        graph = self.create_discrete_graph_from_lanelet_network(lanelet_network=new_network)
-
         if self.goal_lanelet_id in lanelet_mapping:
             goal = lanelet_mapping[self.goal_lanelet_id][-1]
         else:
             goal = self.goal_lanelet_id
+        graph = self.create_discrete_graph_from_lanelet_network(lanelet_network=new_network)
 
         reference_paths = {}
 
@@ -649,7 +649,7 @@ class RoutePlanner:
         distance, start_index = spatial.KDTree(self.reference_paths[target_lanelet.lanelet_id]).query(position)
         tmp = np.array([position])
         temp1 = np.concatenate((self.reference_paths[current_lanelet.lanelet_id][0:end_index], tmp), axis=0)
-        reference_path = np.concatenate((temp1, self.reference_paths[target_lanelet.lanelet_id][start_index+5:]), axis=0)
+        reference_path = np.concatenate((temp1, self.reference_paths[target_lanelet.lanelet_id][start_index+3:]), axis=0)
         # smooth reference path until curvature is smaller or equal max_curvature_reference_path
         resampling_step_reference_path = 1.5
         max_curvature_reference_path = 0.1
@@ -659,7 +659,7 @@ class RoutePlanner:
             reference_path = resample_polyline(reference_path, resampling_step_reference_path)
             max_curvature = max(abs(compute_curvature_from_polyline(reference_path)))
 
-        return reference_path #, self.reference_paths[current_lanelet.lanelet_id][0:end_index]
+        return reference_path
 
 
 if __name__ == '__main__':
@@ -672,9 +672,9 @@ if __name__ == '__main__':
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-2_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/Peachtree/USA_Peach-4_3_T-1.xml'
 
-    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-22_1_T-1.xml'
+    scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-22_1_T-1.xml'
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-23_1_T-1.xml'
-    # scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-7_1_T-1.xml'
+    #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-7_1_T-1.xml'
 
     # fixed
     #scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-9_1_T-1.xml'
@@ -807,18 +807,15 @@ if __name__ == '__main__':
 
     #lane = scenario.lanelet_network.find_lanelet_by_id(28)
 
-    part1, part2 = route_planner.set_reference_lane(-1, route_planner.planning_problem.initial_state.position)
+    part1 = route_planner.set_reference_lane(1, route_planner.planning_problem.initial_state.position)
 
     start = time.time()
     #draw_object(scenario.lanelet_network, draw_params={'lanelet_network': {'lanelet': {'show_label': False}}})
 
-
-
-
-    #for path in reference_path0.values():
-    #    plt.plot(path[:, 0], path[:, 1], '-*b', linewidth=4, zorder=50)
-    plt.plot(part2[:, 0], part2[:, 1], '-b', linewidth=7, zorder=50)
-    plt.plot(part1[:, 0], part1[:, 1], '-k', linewidth=3, zorder=50)
+    for path in reference_path0.values():
+        plt.plot(path[:, 0], path[:, 1], '-*b', linewidth=4, zorder=50)
+    #plt.plot(reference_path0[:, 0], reference_path0[:, 1], '-b', linewidth=7, zorder=50)
+    #plt.plot(part1[:, 0], part1[:, 1], '-k', linewidth=3, zorder=50)
 
     #plt.plot(lane.center_vertices[:, 0], lane.center_vertices[:, 1], '-r', linewidth=7, zorder=50)
     #plt.plot(part2[:, 0], part2[:, 1], '-b', linewidth=7, zorder=50)
