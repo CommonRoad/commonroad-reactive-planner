@@ -15,7 +15,7 @@ class PlanningParameter:
             self.k_time = 10.0
             self.k_distance = 15.0
 
-            # time planning parameters: t_N * t_step_size = prediction_horizon
+            # time planning parameters
             self.prediction_horizon = 3.0  # s
             self.t_N = 3
             self.t_step_size = .1  # s
@@ -35,7 +35,7 @@ class PlanningParameter:
             self.k_time = 10.0
             self.k_distance = 10.0  # 2.0
 
-            # time planning parameters: t_N * t_step_size = prediction_horizon
+            # time planning parameters
             self.prediction_horizon = 3.0  # s
             self.t_N = 30
             self.t_step_size = .2  # s
@@ -123,7 +123,7 @@ draw_params_scenario = {'scenario': {
                                 'rectangle': basic_shape_parameters_dynamic,
                                 'circle': basic_shape_parameters_dynamic
                             },
-                             'trajectory': {'facecolor': '#000000'}
+                            'trajectory': {'facecolor': '#000000'}
                         },
                         'static_obstacle': {
                            'shape': {
@@ -144,6 +144,4 @@ draw_params_scenario = {'scenario': {
                                        'show_label': False,
                                        'draw_linewidth': 0.5,
                                        'fill_lanelet': True,
-                                       'facecolor': '#e8e8e8'}},
-                   },
-}
+                                       'facecolor': '#e8e8e8'}}, }, }
