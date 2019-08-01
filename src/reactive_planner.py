@@ -1,6 +1,3 @@
-
-from scipy import spatial
-
 from parameter import VehicleParameter, PlanningParameter
 from trajectory_bundle import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample
 from polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
@@ -22,7 +19,7 @@ from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 import matplotlib.pyplot as plt
 from commonroad.visualization.draw_dispatch_cr import draw_object
 
-from State_Machine import CarHighlevelStates
+from State_Machine import CarHighlevelStates, CheckTransitions
 
 __author__ = "Christian Pek"
 __copyright__ = "TUM Cyber-Physical Systems Group"
@@ -110,6 +107,8 @@ class ReactivePlanner(object):
 
         # State machine
         self.statemachine = CarHighlevelStates()
+
+        self.checktransitions = CheckTransitions()
 
         # switch between low and high velocity mode
         self._velocity_threshold = vehicle_params.velocity_threshold
@@ -610,6 +609,29 @@ class ReactivePlanner(object):
                              color=color)
                 # plt.show()
 
+    def plotting(self, k, scenario, planning_problem_set, reference_path, ego, only_new_time_step = True):
+        if only_new_time_step:
+            plt.figure(k, figsize=(25, 10))
+            plt.plot(reference_path[:, 0], reference_path[:, 1], '-*g', linewidth=1, zorder=10)
+            draw_object(scenario, draw_params={'time_begin': k, 'time_end': k})
+            draw_object(planning_problem_set)
+            draw_object(ego)
+            draw_object(ego.prediction.occupancy_at_time_step(1))
+            plt.axis('equal')
+            plt.show(block=False)
+            if k > 0:
+                plt.close(k-1)
+            else:
+                plt.close('start')
+        else:
+            plt.plot(reference_path[:, 0], reference_path[:, 1], '-*g', linewidth=1, zorder=10)
+            draw_object(scenario, draw_params={'time_begin': k, 'time_end': k})
+            draw_object(planning_problem_set)
+            draw_object(ego)
+            draw_object(ego.prediction.occupancy_at_time_step(1))
+
+        plt.pause(0.1)
+
     def _compute_initial_states(self, x_0: State) -> (np.ndarray, np.ndarray):
         """
         Computes the initial states for the polynomial planner based on a TrajPoint object
@@ -931,321 +953,33 @@ class ReactivePlanner(object):
 
         return DynamicObstacle(42, ObstacleType.CAR,shape, trajectory.state_list[0],prediction)
 
-    # Raphael correct obstacle plotting
-    def plotting(self, k, scenario, planning_problem_set, reference_path, ego, only_new_time_step = True):
-        if only_new_time_step:
-            plt.figure(k, figsize=(25, 10))
-            plt.plot(reference_path[:, 0], reference_path[:, 1], '-*g', linewidth=1, zorder=10)
-            draw_object(scenario, draw_params={'time_begin': k, 'time_end': k})
-            draw_object(planning_problem_set)
-            draw_object(ego)
-            draw_object(ego.prediction.occupancy_at_time_step(1))
-            plt.axis('equal')
-            plt.show(block=False)
-            if k > 0:
-                plt.close(k-1)
-            else:
-                plt.close('start')
-        else:
-            plt.plot(reference_path[:, 0], reference_path[:, 1], '-*g', linewidth=1, zorder=10)
-            draw_object(scenario, draw_params={'time_begin': k, 'time_end': k})
-            draw_object(planning_problem_set)
-            draw_object(ego)
-            draw_object(ego.prediction.occupancy_at_time_step(1))
+    def trigger_state_machine(self, scenario, optimal, ego, reference_path, route_planner, k):
 
-        plt.pause(0.1)
+        near_obstacles, obstacle_ahead = self.checktransitions.get_obstacles_around(scenario, ego, k)
 
-    # def updated_collision_checker(self, number_of_steps, collision_checker):
-    #     for time_slice in range(1, number_of_steps):
-    #         # print(len(collision_checker.time_slice(time_slice).obstacles()))
-    #         # print(time_slice)
-    #         if len(collision_checker.time_slice(time_slice).obstacles()) != \
-    #                 len(collision_checker.time_slice(time_slice-1).obstacles()):
-    #             for obstacle in collision_checker.time_slice(time_slice-1).obstacles():
-    #                 if obstacle not in collision_checker.time_slice(time_slice).obstacles():
-    #                     collision_checker.time_slice(time_slice).add_collision_object(obstacle)
-    #     return collision_checker
+        x_0 = optimal[0].state_list[1]
+        x_cl = (optimal[2][1], optimal[3][1])
 
+        if obstacle_ahead is not None:
+            vel_difference_overtaking, vel_difference = self.checktransitions.check_if_velocity_is_too_slow(ego, obstacle_ahead)
 
-    # Raphael Highlevel
+            if vel_difference_overtaking:
+                print("Car ahead is too slow! Overtaking-Difference: ", vel_difference_overtaking)
 
-    def check_current_state(self, route_planner, scenario, trajectory, reference_path, obstacles_ahead, k):
+                changed_velocity, reference_path = self.checktransitions.check_current_state(route_planner, scenario, ego,
+                                                                               reference_path, near_obstacles, obstacle_ahead, k)
 
-        print(self.statemachine.state)
+                x_0.velocity = changed_velocity
+                x_cl = self._compute_initial_states(x_0)
+                # x_cl = planner.create_new_cl_state(x_0, x_cl, changed_velocity)
 
-        if self.statemachine.state == 'lane_change_left':
+                self.set_reference_path(reference_path)
+                plt.plot(reference_path[:, 0], reference_path[:, 1], '-*g', linewidth=1, zorder=10)
 
-            ego_velocity = trajectory._initial_state.velocity
-            ego_position = trajectory._initial_state.position
+            elif vel_difference:
+                print("Car ahead is too slow! Following-Difference: ", vel_difference)
 
-            if self.check_if_car_on_new_lanelet(scenario, trajectory):
-                if self.check_if_on_new_centervertice(scenario, ego_position):
-                    self.statemachine.on_new_centerline()
+                x_0.velocity -= vel_difference
+                x_cl = self._compute_initial_states(x_0)
 
-            return ego_velocity, reference_path
-
-        if self.statemachine.state == 'following':
-
-            velocity_has_to_be_changed = False
-            # TODO: Vel auch anpassen, wenn Differenz nicht groß genug ist?
-            ego_velocity = trajectory._initial_state.velocity
-
-            if self.check_for_possible_overtaking_lanelet(scenario, trajectory):
-
-                if self.check_lane_change_possible(scenario, trajectory, obstacles_ahead, k, left=True):
-                    self.statemachine.Car_ahead_too_slow(
-                        self.get_laneletid_of_egocar(scenario, trajectory),
-                        scenario.lanelet_network.find_lanelet_by_id(
-                            self.get_laneletid_of_egocar(scenario, trajectory)).adj_left)
-
-                    print(trajectory._initial_state.position)
-                    reference_path = route_planner.set_reference_lane(-1, trajectory._initial_state.position)
-
-                    ego_velocity = trajectory._initial_state.velocity
-
-                else:
-                    velocity_has_to_be_changed = True
-
-            else:
-                velocity_has_to_be_changed = True
-
-            if velocity_has_to_be_changed:
-                for car in obstacles_ahead:
-                    if not hasattr(car.initial_state, 'velocity'):
-                        ego_velocity = 0
-                        print("Changed velocity!")
-                if ego_velocity != 0:
-                    ego_velocity = obstacles_ahead[0].initial_state.velocity
-                    print("Changed velocity to: ", ego_velocity)
-
-            # if ego_velocity != trajectory._initial_state.velocity:
-            #     print("Changed velocity!")
-
-            return ego_velocity, reference_path
-
-        if self.statemachine.state == 'on_overtaking_line':
-            #TODO: Calculate time from Velocity
-            self.statemachine.set_timer_elapsed(time_for_overtaking = 5)
-
-            if self.statemachine.timer_elapsed:
-                print("Hurrayy!")
-
-
-    def create_new_cl_state(self, x_0, x_cl,  changed_velocity):
-
-        # compute curvilinear position
-        s, d = self._cosy.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
-        # compute orientation in curvilinear coordinate frame
-        theta_cl = x_0.orientation - np.interp(s, self._ref_pos, self._theta_ref)
-
-        # compute curvatures
-        kr = np.interp(s, self._ref_pos, self._ref_curv)
-
-        # compute d prime and d prime prime -> derivation after arclength
-        d_p = (1 - kr * d) * np.tan(theta_cl)
-
-        # compute s dot and s dot dot -> derivation after time
-        s_d = changed_velocity * np.cos(theta_cl) / (1 - np.interp(s, self._ref_pos, self._ref_curv) * d)
-
-        x_cl[0][1] = s_d
-        x_cl[1][1] = d_p
-
-        return x_cl
-
-    def check_if_car_on_new_lanelet(self, scenario, ego):
-
-        # distance, index = spatial.KDTree(reference_path).query(position_ego)
-
-        ego_laneletid = self.get_laneletid_of_egocar(scenario, ego)
-
-        if ego_laneletid == self.statemachine.new_lanelet:
-            return True
-        else:
-            return False
-
-    def check_if_on_new_centervertice(self, scenario, ego_position):
-
-        new_laneletid = self.statemachine.new_lanelet
-        new_lanelet = scenario.lanelet_network.find_lanelet_by_id(new_laneletid)
-
-        distance, index = spatial.KDTree(new_lanelet.center_vertices).query(ego_position)
-
-        if distance < 1:
-            return True
-        else:
-            return False
-
-    def check_velocity_of_car_ahead_too_slow(self, scenario, ego, k):
-
-        near_obstacles = self.get_near_obstacles(ego, scenario, k)
-
-        # for obstacle in near_obstacles:
-        #     print("Near Obstacles ", obstacle.initial_state.position)
-        obstacles_ahead = self.check_for_obstacles_ahead(scenario, ego, near_obstacles, k)
-
-        return self.check_if_velocity_is_too_slow(ego, obstacles_ahead), obstacles_ahead
-
-    def check_if_velocity_is_too_slow(self, ego, obstacles_ahead):
-        allowed_velocity_difference = ego._initial_state.velocity / 10
-        for car in obstacles_ahead:
-            if not hasattr(car.initial_state, 'velocity'):
-                print("Static obstacle ahead!")
-                return True
-            elif car.initial_state.velocity < ego._initial_state.velocity + allowed_velocity_difference:
-                print("Car ahead is too slow! Difference: ",
-                      car.initial_state.velocity - (ego._initial_state.velocity + allowed_velocity_difference))
-                return True
-        # print("Vel Diff: ", car.initial_state.velocity - (ego._initial_state.velocity + allowed_velocity_difference))
-        return False
-
-    def get_near_obstacles(self, ego, scenario, k):
-
-        r = ego._initial_state.velocity * 2
-        near_obstacles = []
-        o_type = ObstacleType
-        # for i in range(0, len(collision_state.obstacles())-1):
-        #     obstacle = collision_state.obstacles()[i]
-        #     print(pycrcc.RectOBB.center(obstacle))
-
-        for static_obstacle in scenario.static_obstacles:
-            if static_obstacle.obstacle_type is not o_type.ROAD_BOUNDARY:
-                position = static_obstacle.occupancy_at_time(k).shape.center
-                distance = np.linalg.norm(position - ego._initial_state.position) \
-                                - static_obstacle.obstacle_shape.length
-
-                if distance < r:
-                    near_obstacles.append(static_obstacle)
-
-        for dynamic_obstacle in scenario.dynamic_obstacles:
-            if dynamic_obstacle.occupancy_at_time(k) is not None and dynamic_obstacle.obstacle_type is not o_type.ROAD_BOUNDARY:
-                position = dynamic_obstacle.occupancy_at_time(k).shape.center
-
-                distance = np.linalg.norm(position - ego._initial_state.position) \
-                                - dynamic_obstacle.obstacle_shape.length
-
-                if distance < r:
-                    near_obstacles.append(dynamic_obstacle)
-
-        return near_obstacles
-
-    def check_for_obstacles_ahead(self, scenario, ego, near_obstacles, k):
-        obstacles_ahead = []
-
-        # rounded_vehicle_orientation = round(ego._initial_state.orientation, 1)
-        vehicle_position = ego._initial_state.position
-
-        Rotation_Matrix = [[np.cos(ego._initial_state.orientation), -np.sin(ego._initial_state.orientation)],
-                           [np.sin(ego._initial_state.orientation), np.cos(ego._initial_state.orientation)]]
-
-        laneletid_ego = self.get_laneletid_of_egocar(scenario, ego)
-
-        for obstacle in near_obstacles:
-
-            laneletid_obstacle = self.get_laneletid_of_obstacle(scenario, obstacle, k)
-
-            if laneletid_ego == laneletid_obstacle:
-
-                obstacle_position = obstacle.occupancy_at_time(k).shape.center #.initial_state.position
-                transformed_obstacle_position = np.matmul(obstacle_position - vehicle_position, Rotation_Matrix)
-
-                if transformed_obstacle_position[0] > 0:
-                    obstacles_ahead.append(obstacle)
-                    print("Ahead Obstales: ", obstacle_position) #obstacle.initial_state.position)
-#
-            #     hypotenuse_length = np.linalg.norm(transformed_obstacle_position)
-#
-            #     angel = np.arcsin(transformed_obstacle_position[1] / hypotenuse_length)
-#
-            #     print("Obst-Car vector angle: ", angel)
-            #     # print("Car orient: ", rounded_vehicle_orientation)
-#
-            #     if - 0.2 < angel < 0.2:
-            #         obstacles_ahead.append(obstacle)
-            #         print("Obstales that are ahead: ", obstacle.initial_state.position)
-
-        return obstacles_ahead
-
-    def check_for_possible_overtaking_lanelet(self, scenario, ego):
-
-        laneletid = self.get_laneletid_of_egocar(scenario, ego)
-
-        if scenario.lanelet_network.find_lanelet_by_id(laneletid).adj_left:
-            print('Overtaking lanelet exists')
-            return True
-
-        return False
-
-    def get_laneletid_of_egocar(self, scenario, ego):
-
-        x, y = ego._initial_state.position[0], ego._initial_state.position[1]
-        heading = ego._initial_state.orientation
-        x_1, y_1 = np.array([x, y]) + np.array([1, 1 * np.tan(heading)])
-        tmp = np.array([[x, y], [x_1, y_1]])
-
-        return scenario.lanelet_network.find_lanelet_by_position(tmp)[0][0]
-
-    def get_laneletid_of_obstacle(self, scenario, obstacle, k):
-        position = obstacle.occupancy_at_time(k).shape.center
-        x, y = position[0], position[1]
-        heading = obstacle.occupancy_at_time(k).shape.orientation
-        x_1, y_1 = np.array([x, y]) + np.array([1, 1 * np.tan(heading)])
-        tmp = np.array([[x, y], [x_1, y_1]])
-
-        if scenario.lanelet_network.find_lanelet_by_position(tmp)[0]:
-            return scenario.lanelet_network.find_lanelet_by_position(tmp)[0][0]
-        else:
-            return scenario.lanelet_network.find_lanelet_by_position(tmp)[1][0]
-
-    def get_obstacles_on_neighboring_lane(self, ego, scenario, k, left = True):
-
-        near_obstacles = self.get_near_obstacles(ego, scenario, k)
-
-        lanelet_ego = self.get_laneletid_of_egocar(scenario, ego)
-
-        if left:
-            neighboring_line = scenario.lanelet_network.find_lanelet_by_id(lanelet_ego).adj_left
-        else:
-            neighboring_line = scenario.lanelet_network.find_lanelet_by_id(lanelet_ego).adj_right
-
-        cars_on_left_lane = []
-        for obstacle in near_obstacles:
-            if self.get_laneletid_of_obstacle(scenario, obstacle, k) == neighboring_line:
-                cars_on_left_lane.append(obstacle)
-
-        return cars_on_left_lane
-
-    def check_lane_change_possible(self, scenario, ego, obstacles_ahead, k, left=True):
-
-        obstacles_on_neighboring_lane = self.get_obstacles_on_neighboring_lane(ego, scenario, k, left)
-
-        vehicle_position = ego._initial_state.position
-        safety_margin = ego._initial_state.velocity / 10
-        rotation_matrix = [[np.cos(ego._initial_state.orientation), -np.sin(ego._initial_state.orientation)],
-                           [np.sin(ego._initial_state.orientation), np.cos(ego._initial_state.orientation)]]
-
-        vehicle_parameter = VehicleParameter()
-        number_neighbors = len(obstacles_on_neighboring_lane)
-        for obstacle in obstacles_on_neighboring_lane:
-
-            obstacle_position = obstacle.occupancy_at_time(k).shape.center
-            transformed_obstacle_position_rounded = np.round(np.matmul(obstacle_position - vehicle_position, rotation_matrix), 1)
-
-            if obstacle.obstacle_shape.length/2 < \
-                    abs(transformed_obstacle_position_rounded[0] - vehicle_parameter.length/2 - safety_margin):
-
-                print("Distance between obstacles on neigboring lane: \n", obstacle.obstacle_shape.length/2
-                      - abs(transformed_obstacle_position_rounded[0] - vehicle_parameter.length/2 - safety_margin))
-
-                if transformed_obstacle_position_rounded[0] > 0:
-                    if obstacle.initial_state.velocity > obstacles_ahead[0].initial_state.velocity:
-                        print("Car on left lane is faster: ", obstacle.initial_state.velocity-obstacles_ahead[0].initial_state.velocity)
-                        number_neighbors = number_neighbors - 1
-                else:
-                    number_neighbors = number_neighbors - 1
-
-        if number_neighbors == 0:
-            print("Lanechange possible!")
-            return True
-        else:
-            print("No lanechange due to neighboring Obstacles!")
-            return False
+        return x_0, x_cl, reference_path
