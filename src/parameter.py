@@ -13,13 +13,13 @@ class PlanningParameter:
             self.k_jerk_lat = 5.0
             self.k_jerk_lon = 5.0
             self.k_time = 10.0
-            self.k_distance = 2.0
+            self.k_distance = 15.0
 
             # time planning parameters
             self.prediction_horizon = 3.0  # s
             self.t_N = 3
-            self.t_step_size = .2  # s
-            self.t_min = 0.1
+            self.t_step_size = .1  # s
+            self.t_min = 0.2
 
             # direction planning parameter
             self.d_deviation = 2
