@@ -116,7 +116,48 @@ In the current main.py an example for using the two latter methods is provided a
 | USA_US101-28_1_T-1|                   |               |                     
 | USA_US101-29_1_T-1|                   |               | 
 
+# high-level state machine
+The high-level state machine is triggered from the reactive planner. It computes a reference path to the goal that is currently useful. In its current state it has two states:
+- Following
+    - Drives on its current reference path
+    - For a car in front which cannot be overtaken the high-level state machine reduces the ego car velocity to the velocity of the car in front.
+- Lane change left
+    - State while overtaking a car.
+    - No other lane change will be triggered until tha car is on ist new desired lane
 
+In its current state it is still heavily dependent on the parameters of the planner. All of the following scenerios are supported by the planner:
+
+|   NGSIM/US101     | Hand-Crafted  |Cooperative          |
+|-------------------| ------------- |---------------------|
+| USA_US101-1_1_T-1 |DEU_A9-1_1_T-1 |C-USA_US101-31_1_T-1 |
+| USA_US101-2_1_T-1 |DEU_A9-2_1_T-1 |C-USA_US101-32_1_T-1 |
+| USA_US101-3_1_T-1 |DEU_A99-1_1_T-1|C-USA_US101-33_1_T-1 |
+| USA_US101-4_1_T-1 |DEU_B471-1_1_T-1 |      |
+| USA_US101-6_1_T-1 |DEU_Muc-4_1_T-1 |  |    
+| USA_US101-5_1_T-1 |DEU_Ffb-1_2_S-1| |         
+| USA_US101-7_1_T-1 |DEU_Ffb-2_1_T-1| |           
+| USA_US101-8_1_T-1 |DEU_Ffb-2_2_Sgit-1| |            
+| USA_US101-9_1_T-1 |Deu_Gar-1_1_T-1| |           
+| USA_US101-10_1_T-1|ZAM_HW-1_1_S-1 | | 
+| USA_US101-11_1_T-1|ZAM_Intersect-1_1_S-1| |
+| USA_US101-12_1_T-1|ZAM_Intersect-1_2_S-1| |
+| USA_US101-13_1_T-1|ZAM_Merge-1_1_T-1| |
+| USA_US101-14_1_T-1|ZAM_Over-1_1   |  |
+| USA_US101-15_1_T-1|ZAM_Urban-1_1_S-1| |
+| USA_US101-16_1_T-1|DEU_Muc-3_1_T-1| |
+| USA_US101-17_1_T-1|DEU_Muc-2_1_T-1| |
+| USA_US101-18_1_T-1|DEU_Muc-1_1_T-1| |
+| USA_US101-19_1_T-1|                   |               |                     
+| USA_US101-20_1_T-1|                   |               |                     
+| USA_US101-21_1_T-1|                   |               |                     
+| USA_US101-22_1_T-1||               |
+| USA_US101-23_1_T-1| |               |
+| USA_US101-24_1_T-1||               |
+| USA_US101-25_1_T-1|                   |
+| USA_US101-26_1_T-1|                   |               |                     
+| USA_US101-27_1_T-1|                   |               |                     
+| USA_US101-28_1_T-1|                   |               |                     
+| USA_US101-29_1_T-1|                   |               | 
 ## Literature
 [1] Magdici, S. and Althoff, M. *Fail-Safe Motion Planning of Autonomous Vehicles*. Proc. of the 19th International IEEE Conference on Intelligent Transportation Systems, 2016.
 

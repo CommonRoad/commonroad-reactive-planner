@@ -979,7 +979,7 @@ class ReactivePlanner(object):
             draw_object(scenario, draw_params={'time_begin': k})
             draw_object(planning_problem_set)
             draw_object(ego)
-            draw_object(ego.prediction.occupancy_at_time_step(k))
+            #draw_object(ego.prediction.occupancy_at_time_step(k))
             plt.axis('equal')
             plt.show(block=False)
             if k > 0:
@@ -991,7 +991,7 @@ class ReactivePlanner(object):
             draw_object(scenario, draw_params={'time_begin': k})
             draw_object(planning_problem_set)
             draw_object(ego)
-            draw_object(ego.prediction.occupancy_at_time_step(k))
+            #draw_object(ego.prediction.occupancy_at_time_step(k))
 
         plt.pause(0.1)
 
