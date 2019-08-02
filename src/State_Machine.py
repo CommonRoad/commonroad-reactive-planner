@@ -1,5 +1,5 @@
 from transitions import Machine
-from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType, StaticObstacle
+from commonroad.scenario.obstacle import ObstacleType
 from parameter import VehicleParameter, PlanningParameter
 import numpy as np
 from scipy import spatial
@@ -22,7 +22,6 @@ class CarHighlevelStates(object):
         self.machine = Machine(model=self, states=CarHighlevelStates.states,
                                transitions=CarHighlevelStates.transitions, initial='following')
 
-
     def set_lanelet_ids(self, old_lanelet = None, new_lanelet = None):
         self.old_lanelet = old_lanelet
         self.new_lanelet = new_lanelet
@@ -37,27 +36,22 @@ class CarHighlevelStates(object):
         return False
 
 
-class CheckTransitions:
+class StateMachine:
     def __init__(self, scenario):
 
         self._scenario = scenario
-        self.statemachine = CarHighlevelStates()
-        self.vehicleparameter = VehicleParameter()
-        self.route_planner = RoutePlanner(scenario.scenario_path)
+        self._states = CarHighlevelStates()
+        self._vehicleparameter = VehicleParameter()
+        self._route_planner = RoutePlanner(scenario.scenario_path)
 
-        '''
-        Checks velocity of car in front and triggers the state machine eventually
-        :param optimal: Current position, trajectory of the ego vehicle
-        :param k: Time step of main function
-        '''
 
     def init_reference_path(self):
         '''
         Initializes reference path
         :return: Reference path to be set
         '''
-        source_position = self.route_planner.planning_problem.initial_state.position
-        reference_path = self.route_planner.set_reference_lane(0, source_position)
+        source_position = self._route_planner.planning_problem.initial_state.position
+        reference_path = self._route_planner.set_reference_lane(0, source_position)
         return reference_path
 
     def check_if_velocity_is_too_slow(self, ego, obstacle_ahead):
@@ -99,20 +93,20 @@ class CheckTransitions:
         :param k: Time step of main function
         :return: Velocity ego car, new reference path
         '''
-        print("Current State: ", self.statemachine.state)
+        print("Current State: ", self._states.state)
 
         ego_velocity = ego._initial_state.velocity
         ego_position = ego._initial_state.position
 
-        if self.statemachine.state == 'lane_change_left':
+        if self._states.state == 'lane_change_left':
 
             if self.check_if_car_on_new_lanelet(scenario, ego):
                 if self.check_if_car_on_new_centervertice(scenario, ego):
-                    self.statemachine.on_new_centerline()
+                    self._states.on_new_centerline()
 
             return ego_velocity, reference_path
 
-        if self.statemachine.state == 'following':
+        if self._states.state == 'following':
 
             velocity_has_to_be_changed = False
 
@@ -122,9 +116,9 @@ class CheckTransitions:
                     old_lanelet = self.get_laneletid_of_egocar(scenario, ego)
                     new_lanelet = scenario.lanelet_network.find_lanelet_by_id(self.get_laneletid_of_egocar(scenario, ego)).adj_left
 
-                    self.statemachine.Car_ahead_too_slow(old_lanelet,new_lanelet)
+                    self._states.Car_ahead_too_slow(old_lanelet,new_lanelet)
 
-                    reference_path = self.route_planner.set_reference_lane(-1, ego_position)
+                    reference_path = self._route_planner.set_reference_lane(-1, ego_position)
 
                 else:
                     # No lanechange possible due to neighboring obstacles
@@ -156,7 +150,7 @@ class CheckTransitions:
         '''
         ego_laneletid = self.get_laneletid_of_egocar(scenario, ego)
 
-        if ego_laneletid == self.statemachine.new_lanelet:
+        if ego_laneletid == self._states.new_lanelet:
             return True
 
         return False
@@ -168,7 +162,7 @@ class CheckTransitions:
         :param ego: Data of ego vehicle
         :return: True if ego vehicle is on new center vertices
         '''
-        new_lanelet = scenario.lanelet_network.find_lanelet_by_id(self.statemachine.new_lanelet)
+        new_lanelet = scenario.lanelet_network.find_lanelet_by_id(self._states.new_lanelet)
         ego_position = ego._initial_state.position
 
         distance, index = spatial.KDTree(new_lanelet.center_vertices).query(ego_position)
@@ -281,7 +275,7 @@ class CheckTransitions:
         o_type = ObstacleType
 
         # Radius in which obstacles get recognized
-        r = ego._initial_state.velocity *2 + self.vehicleparameter.length / 2
+        r = ego._initial_state.velocity *2 + self._vehicleparameter.length / 2
 
         for static_obstacle in scenario.static_obstacles:
             if static_obstacle.obstacle_type is not o_type.ROAD_BOUNDARY:
