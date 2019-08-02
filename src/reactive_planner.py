@@ -37,7 +37,10 @@ __status__ = "Alpha"
 class ReactivePlanner(object):
     def __init__(self, v_desired=14, collision_check_in_cl: bool = False, scenario=None):
 
+        # Store scenario
         self._scenario = scenario
+
+        # Ego vehicle data
         self._ego = None
 
         params = PlanningParameter(velocity_reaching=True)
@@ -118,9 +121,13 @@ class ReactivePlanner(object):
         # switch between low and high velocity mode
         self._velocity_threshold = vehicle_params.velocity_threshold
 
+        # Initialization reference path
         self._init_reference_path()
 
     def _init_reference_path(self):
+        """
+        Initailly set reference path by calling state machine
+        """
         reference = self.checktransitions.init_reference_path()
         self.set_reference_path(reference)
         pass
@@ -955,8 +962,17 @@ class ReactivePlanner(object):
 
         return DynamicObstacle(42, ObstacleType.CAR,shape, trajectory.state_list[0],prediction)
 
-    # Raphael correct obstacle plotting
+
     def plotting(self, k, scenario, planning_problem_set, reference_path, ego, only_new_time_step = True):
+        '''
+        Plotting of the scenario.
+        :param k: Time step of main function
+        :param scenario: Scenario data
+        :param planning_problem_set: Current parameters of planning problem
+        :param reference_path: The current reference path
+        :param ego: Data of ego vehicle
+        :param only_new_time_step: If True the figure gets completly updated every time step
+        '''
         if only_new_time_step:
             plt.figure(k, figsize=(25, 10))
             plt.plot(reference_path[:, 0], reference_path[:, 1], '-*g', linewidth=1, zorder=10)
@@ -980,6 +996,11 @@ class ReactivePlanner(object):
         plt.pause(0.1)
 
     def trigger_state_machine(self, optimal, k):
+        '''
+        Checks velocity of car in front and triggers the state machine eventually
+        :param optimal: Current position, trajectory of the ego vehicle
+        :param k: Time step of main function
+        '''
         self._ego = self.convert_cr_trajectory_to_object(optimal[0])
 
         near_obstacles, obstacle_ahead = self.checktransitions.get_obstacles_around(self._scenario.scenario_set, self._ego, k)

@@ -45,14 +45,28 @@ class CheckTransitions:
         self.vehicleparameter = VehicleParameter()
         self.route_planner = RoutePlanner(scenario.scenario_path)
 
+        '''
+        Checks velocity of car in front and triggers the state machine eventually
+        :param optimal: Current position, trajectory of the ego vehicle
+        :param k: Time step of main function
+        '''
+
     def init_reference_path(self):
+        '''
+        Initializes reference path
+        :return: Reference path to be set
+        '''
         source_position = self.route_planner.planning_problem.initial_state.position
         reference_path = self.route_planner.set_reference_lane(0, source_position)
         return reference_path
 
-    # Check functions for Trigger
     def check_if_velocity_is_too_slow(self, ego, obstacle_ahead):
-
+        '''
+        Checks if the velocity of the car ahead is too slow
+        :param ego: Data of ego vehicle
+        :param obstacle_ahead: Obstacle ahead of ego car
+        :return:
+        '''
         # Velocity differences between ego and the obstacle ahead
         vel_difference_overtaking = 0
         vel_difference = 0
@@ -75,7 +89,16 @@ class CheckTransitions:
         return vel_difference_overtaking, vel_difference
 
     def check_current_state(self, scenario, ego, reference_path, near_obstacles, obstacle_ahead, k):
-
+        '''
+        Main function to check and eventually change the current state
+        :param scenario: Current scenario
+        :param ego: Data of ego vehicle
+        :param reference_path: Current reference path
+        :param near_obstacles: Obstacles around car [obstacle, position, velocity, lanelet_id]
+        :param obstacle_ahead: Obstacle ahead of ego car
+        :param k: Time step of main function
+        :return: Velocity ego car, new reference path
+        '''
         print("Current State: ", self.statemachine.state)
 
         ego_velocity = ego._initial_state.velocity
@@ -125,7 +148,12 @@ class CheckTransitions:
 
     # Check functions for 'lane_chenge_left' State
     def check_if_car_on_new_lanelet(self, scenario, ego):
-
+        '''
+        Checks if ego vehicle is on new lanelet
+        :param scenario: Current scenario
+        :param ego: Data of ego vehicle
+        :return: True if ego vehicle is on new lanelet
+        '''
         ego_laneletid = self.get_laneletid_of_egocar(scenario, ego)
 
         if ego_laneletid == self.statemachine.new_lanelet:
@@ -134,7 +162,12 @@ class CheckTransitions:
         return False
 
     def check_if_car_on_new_centervertice(self, scenario, ego):
-
+        '''
+        Checks if ego vehicle is on new center vertices
+        :param scenario: Current scenario
+        :param ego: Data of ego vehicle
+        :return: True if ego vehicle is on new center vertices
+        '''
         new_lanelet = scenario.lanelet_network.find_lanelet_by_id(self.statemachine.new_lanelet)
         ego_position = ego._initial_state.position
 
@@ -145,9 +178,13 @@ class CheckTransitions:
 
         return False
 
-    # Check functions for 'following' State
     def check_for_possible_overtaking_lanelet(self, scenario, ego):
-
+        '''
+        Checks if ego vehicle has a possible overtaking lanelet
+        :param scenario: Current scenario
+        :param ego: Data of ego vehicle
+        :return:
+        '''
         laneletid = self.get_laneletid_of_egocar(scenario, ego)
 
         if scenario.lanelet_network.find_lanelet_by_id(laneletid).adj_left_same_direction:
@@ -157,7 +194,15 @@ class CheckTransitions:
         return False
 
     def check_lane_change_possible(self, scenario, ego, near_obstacles, obstacle_ahead, left=True):
-
+        '''
+        Checks distance to obstacles on neighboring lane and decides if a lane change is possible
+        :param scenario: Current scenario
+        :param ego: Data of ego vehicle
+        :param near_obstacles: Obstacles around car [obstacle, position, velocity, lanelet_id]
+        :param obstacle_ahead: Obstacle ahead of ego car
+        :param left: Boolean if left or right lane gets checked
+        :return: True if lane Change possible
+        '''
         obstacles_on_neighboring_lane = self.get_obstacles_on_neighboring_lane(ego, scenario, near_obstacles, left)
         # Number is used to count down all obstacles that fulfill the checks (see below)
         number_neighbors = len(obstacles_on_neighboring_lane)
@@ -211,7 +256,13 @@ class CheckTransitions:
 
     # Get Obstacle functions
     def get_obstacles_around(self, scenario, ego, k):
-
+        '''
+        Computes obstacles around and in front of the ego vehicle
+        :param scenario: Current scenario
+        :param ego: Data of ego vehicle
+        :param k: Time step of main function
+        :return: near_obstacles, obstacle_ahead
+        '''
         near_obstacles = self.get_near_obstacles(ego, scenario, k)
 
         obstacle_ahead = self.get_obstacle_ahead(scenario, ego, near_obstacles)
@@ -219,7 +270,13 @@ class CheckTransitions:
         return near_obstacles, obstacle_ahead
 
     def get_near_obstacles(self, ego, scenario, k):
-
+        '''
+        Computes obstacles around the ego vehicle
+        :param ego: Data of ego vehicle
+        :param scenario: Current scenario
+        :param k: Time step of main function
+        :return: near_obstacles
+        '''
         near_obstacles = []
         o_type = ObstacleType
 
@@ -251,7 +308,13 @@ class CheckTransitions:
         return near_obstacles
 
     def get_obstacle_ahead(self, scenario, ego, near_obstacles):
-
+        '''
+        Computes in front of the ego vehicle
+        :param scenario: Current scenario
+        :param ego: Data of ego vehicle
+        :param near_obstacles: Obstacles around car [obstacle, position, velocity, lanelet_id]
+        :return: obstacle_ahead
+        '''
         ego_position = ego._initial_state.position
         ego_laneletid = self.get_laneletid_of_egocar(scenario, ego)
 
@@ -285,7 +348,14 @@ class CheckTransitions:
         return None
 
     def get_obstacles_on_neighboring_lane(self, ego, scenario, near_obstacles, left = True):
-
+        '''
+        Computes and returns obstacles on the neighboring lane
+        :param ego: Data of ego vehicle
+        :param scenario: Current scenario
+        :param near_obstacles: Obstacles around car [obstacle, position, velocity, lanelet_id]
+        :param left: Boolean if left or right lane gets checked
+        :return: Obstacles on neighboring lane
+        '''
         lanelet_ego = self.get_laneletid_of_egocar(scenario, ego)
 
         if left:
@@ -304,7 +374,12 @@ class CheckTransitions:
 
     # Get lanelet-IDs
     def get_laneletid_of_egocar(self, scenario, ego):
-
+        '''
+        Gets lanelet id of ego vehicle
+        :param scenario: Current scenario
+        :param ego: Data of ego vehicle
+        :return: lanelet id of ego vehicle
+        '''
         x, y = ego._initial_state.position[0], ego._initial_state.position[1]
         heading = ego._initial_state.orientation
         x_1, y_1 = np.array([x, y]) + np.array([1, 1 * np.tan(heading)])
@@ -313,6 +388,13 @@ class CheckTransitions:
         return scenario.lanelet_network.find_lanelet_by_position(tmp)[0][0]
 
     def get_laneletid_of_obstacle(self, scenario, obstacle, k):
+        '''
+        Gets lanelet id of an obstacle
+        :param scenario: Current scenario
+        :param ego: Data of ego vehicle
+        :param k: Time step of main function
+        :return: lanelet id of an obstacle
+        '''
         position = obstacle.occupancy_at_time(k).shape.center
         x, y = position[0], position[1]
         heading = obstacle.occupancy_at_time(k).shape.orientation
