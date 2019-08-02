@@ -989,7 +989,7 @@ class ReactivePlanner(object):
         :param k: Time step of main function
         """
         # get obstacles that are close to the ego vehicle and the one obstacle directly in front of the ego vehicle
-        near_obstacles, obstacle_ahead = self._statemachine.get_obstacles_around(self._scenario.scenario_set, self._ego, k)
+        near_obstacles, obstacle_ahead = self._statemachine.get_obstacles_around(self._ego, k)
 
         # there exists an obstacle in front of the ego vehicle
         if obstacle_ahead is not None:
@@ -1003,11 +1003,8 @@ class ReactivePlanner(object):
                 print("Car ahead is too slow! Overtaking-Difference: ", vel_difference_overtaking)
 
                 # compute new velocity and reference path
-                velocity, reference_path = self._statemachine.check_current_state(self._scenario.scenario_set,
-                                                                                             self._ego,
-                                                                                             self._reference,
-                                                                                             near_obstacles,
-                                                                                             obstacle_ahead, k)
+                velocity, reference_path = self._statemachine.check_current_state(self._ego, self._reference,
+                                                                                  near_obstacles, obstacle_ahead, k)
                 self.set_reference_path(reference_path)
 
             # adapt velocity for following
