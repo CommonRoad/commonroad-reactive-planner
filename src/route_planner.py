@@ -1,7 +1,5 @@
 import networkx as nx
 import numpy as np
-import xml.etree.ElementTree as ET
-from commonroad.common.file_reader import CommonRoadFileReader
 from polyline import compute_curvature_from_polyline, chaikins_corner_cutting, resample_polyline
 from commonroad.visualization.draw_dispatch_cr import draw_object
 from commonroad.scenario.lanelet import Lanelet, LaneletNetwork
@@ -18,7 +16,8 @@ class RoutePlanner:
         """
 
         if planning_problem.planning_problem_set:
-            self.planning_problem = planning_problem.planning_problem_set.find_planning_problem_by_id(int(planning_problem.problem_id))
+            self.planning_problem = planning_problem.planning_problem_set.find_planning_problem_by_id(
+                int(planning_problem.problem_id))
 
         # Find goal region
         self.goal_lanelet_position = None
@@ -29,7 +28,8 @@ class RoutePlanner:
                 self.goal_lanelet_id = self.goal_lanes[0][0]
             else:
                 self.goal_lanelet_position = self.planning_problem.goal.state_list[0].position.center
-                self.goal_lanes = scenario.scenario_set.lanelet_network.find_lanelet_by_position(np.array(self.goal_lanelet_position, ndmin=2))
+                self.goal_lanes = scenario.scenario_set.lanelet_network.find_lanelet_by_position(
+                    np.array(self.goal_lanelet_position, ndmin=2))
                 self.goal_lanelet_id = self.goal_lanes[0][0]
         else:
             # set initial lanelet as goal lanelet if not other specified
@@ -51,7 +51,7 @@ class RoutePlanner:
 
         self.plan_all_reference_paths()
 
-    def create_graph_from_lanelet_network_lane_change(self, lanelet_network: LaneletNetwork=None) -> nx.DiGraph():
+    def create_graph_from_lanelet_network_lane_change(self, lanelet_network: LaneletNetwork = None) -> nx.DiGraph:
         """
         Build a graph from the lanelet network. The length of a lanelet is assigned as weight to
             its outgoing edges as in Bender P., Ziegler J., Stiller C., "Lanelets: Efficient Map
@@ -67,34 +67,58 @@ class RoutePlanner:
         graph = nx.DiGraph()
         nodes = list()
         edges = list()
+
+        # check for each lanelet for diagonal successors
         for lanelet in lanelet_network.lanelets:
             nodes.append(lanelet.lanelet_id)
+
+            # check if lanelet has successor
             if lanelet.successor:
                 lane = lanelet_network.find_lanelet_by_id(lanelet.successor[0])
                 edges.append((lanelet.lanelet_id, lane.lanelet_id, {'weight': lanelet.distance[-1]}))
+
+                # check for diagonal left successing lanelet
                 if lane.adj_left:
                     edges.append((lanelet.lanelet_id, lane.adj_right,
                                   {'weight': 0, 'same_dir': lanelet.adj_left_same_direction}))
+
+                # check for diagonal right successing lanelet
                 if lane.adj_right:
                     edges.append((lanelet.lanelet_id, lane.adj_right,
                                   {'weight': 0, 'same_dir': lanelet.adj_right_same_direction}))
+
+            # check if successing lanelet of right lanelet (e.g. turning lane highway)
             if lanelet.adj_right:
                 l_right = lanelet_network.find_lanelet_by_id(lanelet.adj_right)
+
+                # check for diagonal right successing lanelet
                 if l_right.successor:
-                    if (lanelet.lanelet_id, l_right.successor[0],{'weight': 0, 'same_dir': lanelet.adj_right_same_direction}) not in edges:
+
+                    # if not already in graph add it
+                    if (lanelet.lanelet_id, l_right.successor[0],
+                         {'weight': 0, 'same_dir': lanelet.adj_right_same_direction}) not in edges:
                         edges.append((lanelet.lanelet_id, l_right.successor[0],
-                                    {'weight': 0, 'same_dir': lanelet.adj_right_same_direction}))
+                                      {'weight': 0, 'same_dir': lanelet.adj_right_same_direction}))
+
+            # check if successing lanelet of right lanelet (e.g. turning lane highway)
             if lanelet.adj_left:
                 l_left = lanelet_network.find_lanelet_by_id(lanelet.adj_left)
+
+                # check for diagonal left successing lanelet
                 if l_left.successor:
-                    if (lanelet.lanelet_id, l_left.successor[0],{'weight': 0, 'same_dir': lanelet.adj_left_same_direction}) not in edges:
+
+                    # if not already in graph add it
+                    if (lanelet.lanelet_id, l_left.successor[0],
+                         {'weight': 0, 'same_dir': lanelet.adj_left_same_direction}) not in edges:
                         edges.append((lanelet.lanelet_id, l_left.successor[0],
-                                    {'weight': 0, 'same_dir': lanelet.adj_left_same_direction}))
+                                      {'weight': 0, 'same_dir': lanelet.adj_left_same_direction}))
+
+        # add all nodes and edges to graph
         graph.add_nodes_from(nodes)
         graph.add_edges_from(edges)
         return graph
 
-    def create_graph_from_lanelet_network(self, lanelet_network=None):
+    def create_graph_from_lanelet_network(self, lanelet_network: LaneletNetwork = None) -> nx.DiGraph:
         """
         Build a graph from the lanelet network. The length of a lanelet is assigned as weight to
             its outgoing edges as in Bender P., Ziegler J., Stiller C., "Lanelets: Efficient Map
@@ -112,14 +136,22 @@ class RoutePlanner:
         edges = list()
         for lanelet in lanelet_network.lanelets:
             nodes.append(lanelet.lanelet_id)
+
+            # add edge if successing lanelet
             if lanelet.successor:
                 edges.append((lanelet.lanelet_id, lanelet.successor[0], {'weight': lanelet.distance[-1]}))
+
+            # add edge if right lanelet
             if lanelet.adj_left:
                 edges.append((lanelet.lanelet_id, lanelet.adj_left,
                               {'weight': 0, 'same_dir': lanelet.adj_left_same_direction}))
+
+            # add edge if left lanelet
             if lanelet.adj_right:
                 edges.append((lanelet.lanelet_id, lanelet.adj_right,
                               {'weight': 0, 'same_dir': lanelet.adj_right_same_direction}))
+
+        # add all nodes and edges to graph
         graph.add_nodes_from(nodes)
         graph.add_edges_from(edges)
         return graph
@@ -148,10 +180,10 @@ class RoutePlanner:
         goal_split_lanelets = []
         remove_goal_lanelets = set()
 
-        if goal_index < (split_factor+1) * 2:
+        if goal_index < (split_factor + 1) * 2:
             # goal lanelet part has not enough center vertices -> choose preceding one if possible
-            if goal_lanelet.predecessor:
 
+            if goal_lanelet.predecessor:
                 # get adjactent lanelets of predecessing lanelet
                 pred_goal_lanelet = self.lanelet_network.find_lanelet_by_id(goal_lanelet.predecessor[0])
 
@@ -191,6 +223,7 @@ class RoutePlanner:
 
         # map existing IDs to IDs of new lanelets
         num = 0
+
         # Increase number in array with unique IDs according to split factor
         for lanelet in split_lanelets:
             lanelet_mapping[lanelet] = map_ids[num: num + split_factor + 1]
@@ -207,7 +240,8 @@ class RoutePlanner:
         other_lanelets = self.convert_old_lanelets(split_lanelets=current_lanelets, lanelet_mapping=lanelet_mapping)
 
         # split lanelets up
-        created_lanelets, end_id, lanelet_mapping= self.create_split_lanelets(split_lanelets, split_factor, lanelet_mapping, map_ids)
+        created_lanelets, end_id, lanelet_mapping = self.create_split_lanelets(split_lanelets, split_factor,
+                                                                               lanelet_mapping, map_ids)
         # append all not split lanelets
         all_lanelets = (np.concatenate((created_lanelets, other_lanelets), axis=0)).tolist()
 
@@ -215,9 +249,11 @@ class RoutePlanner:
         goal_created_lanelets = []
         if goal_split_lanelets != []:
             # split_factor = 2
-            goal_created_lanelets, end_id, lanelet_mapping = self.create_split_lanelets(lanelets=goal_split_lanelets, split_factor=1,
-                                                                       lanelet_mapping=lanelet_mapping, map_ids=map_ids,
-                                                                       start_id=end_id)
+            goal_created_lanelets, end_id, lanelet_mapping = self.create_split_lanelets(
+                lanelets=goal_split_lanelets, split_factor=1,
+                lanelet_mapping=lanelet_mapping, map_ids=map_ids,
+                start_id=end_id)
+
         # add them to the rest
         all_lanelets = (np.concatenate((all_lanelets, goal_created_lanelets), axis=0)).tolist()
 
@@ -227,7 +263,7 @@ class RoutePlanner:
 
         return new_network, lanelet_mapping, remove_goal_lanelets
 
-    def convert_old_lanelets(self, split_lanelets, lanelet_mapping: dict):
+    def convert_old_lanelets(self, split_lanelets: list, lanelet_mapping: dict):
         """
         Converts lanelet information (successor, predecessor, adj_left, adj_right) according to lanelet_mapping
         information from old lanelet IDs to new lanelet IDs
@@ -236,7 +272,8 @@ class RoutePlanner:
         :return:
         """
 
-        other_lanelets= []
+        other_lanelets = []
+
         # get all other lanelets (not split up) we need to also save them in new lanelet network
         for lanelet in self.lanelet_network.lanelets:
             if lanelet.lanelet_id in split_lanelets:
@@ -271,11 +308,13 @@ class RoutePlanner:
                         new = True
                 if new:
                     # take new lanelet IDs into account from lanelet mapping
-                    temp_lane = Lanelet(left_vertices=lanelet.left_vertices, center_vertices=lanelet.center_vertices,
+                    temp_lane = Lanelet(left_vertices=lanelet.left_vertices,
+                                        center_vertices=lanelet.center_vertices,
                                         right_vertices=lanelet.right_vertices,
                                         lanelet_id=lanelet.lanelet_id,
                                         predecessor=temp_pred, successor=temp_suc,
-                                        adjacent_left=temp_l, adjacent_left_same_direction=lanelet.adj_left_same_direction,
+                                        adjacent_left=temp_l,
+                                        adjacent_left_same_direction=lanelet.adj_left_same_direction,
                                         adjacent_right=temp_r,
                                         adjacent_right_same_direction=lanelet.adj_right_same_direction,
                                         speed_limit=lanelet.speed_limit)
@@ -285,7 +324,8 @@ class RoutePlanner:
                     other_lanelets.append(lanelet)
         return other_lanelets
 
-    def create_split_lanelets(self, lanelets, split_factor, lanelet_mapping, map_ids, start_id=0):
+    def create_split_lanelets(self, lanelets: list, split_factor: int, lanelet_mapping: dict, map_ids: list,
+                              start_id: int = 0):
         """
         Split lanelets up into split_factor x sublanelets
         :param lanelets: lanelets to be split up
@@ -298,6 +338,7 @@ class RoutePlanner:
         created_lanelets = []
         lanes = []
         id = start_id
+
         # split each lanelet
         for lanelet_id in lanelets:
             lanelet = self.lanelet_network.find_lanelet_by_id(lanelet_id)
@@ -312,7 +353,7 @@ class RoutePlanner:
             lanes = np.split(np.array(lanelet.center_vertices[0:lanelet_length]), split_array)
 
             if len(lanes[-1]) <= 1:
-                lanes = lanes[0:len(lanes)-1]
+                lanes = lanes[0:len(lanes) - 1]
                 map_ids.remove((lanelet_mapping[lanelet_id])[-1])
                 del (lanelet_mapping[lanelet_id])[-1]
 
@@ -327,6 +368,7 @@ class RoutePlanner:
                         pred_list.append(lanelet_mapping[pred][0])
                 else:
                     pred_list.append(pred)
+
             # convert for valid initialization for lanelet
             if pred_list == []:
                 pred_list = None
@@ -336,7 +378,8 @@ class RoutePlanner:
                 temp_right = None
                 temp_left = None
                 suc_list = []
-                if not(lanelet_id == self.goal_lanelet_id and i == len(lanes)-1):
+                if not (lanelet_id == self.goal_lanelet_id and i == len(lanes) - 1):
+
                     # get successor from lanelet_mapping
                     if i == split_factor and lanelet_id == self.goal_lanelet_id:
                         suc_list.append(map_ids[id + 1])
@@ -349,6 +392,7 @@ class RoutePlanner:
                                 suc_list.append(suc)
                     else:
                         suc_list.append(map_ids[id + 1])
+
                     # if suc_list is empty set it to None, otherwise problems with new lanelet
                     if suc_list == []:
                         suc_list = None
@@ -386,16 +430,19 @@ class RoutePlanner:
                                       adjacent_right_same_direction=lanelet.adj_right_same_direction,
                                       speed_limit=lanelet.speed_limit)
                 id += 1
+
                 # store new lanelet
                 created_lanelets.append(new_lanelet)
+
                 # reset pred_list for next lanelet
                 pred_list = []
+
                 # append current lanelet as pred for next lanelet
                 pred_list.append(new_lanelet.lanelet_id)
 
         return created_lanelets, id, lanelet_mapping
 
-    def get_adjacent_lanelets_list(self, lanelet_id):
+    def get_adjacent_lanelets_list(self, lanelet_id: int):
         """
         Recursively gets adj_left and adj_right lanelets of current lanelet id
         :param lanelet: current lanelet id
@@ -409,16 +456,19 @@ class RoutePlanner:
         temp_id = lanelet_id
         while left:
             current_lanelet = self.lanelet_network.find_lanelet_by_id(lanelet_id)
+
             # only append lanelets from the same direction
             if current_lanelet.adj_left_same_direction is True:
                 list_left.append(current_lanelet.adj_left)
                 lanelet_id = current_lanelet.adj_left
             else:
                 left = False
+
         # reset lanelet_id for right while loop
         lanelet_id = temp_id
         while right:
             current_lanelet = self.lanelet_network.find_lanelet_by_id(lanelet_id)
+
             # only append lanelets from the same direction
             if current_lanelet.adj_right_same_direction is True:
                 list_right.append(current_lanelet.adj_right)
@@ -427,17 +477,32 @@ class RoutePlanner:
                 right = False
         return list_left, list_right
 
-    def find_all_shortest_paths(self, graph, source_lanelet_id, target_lanelet_id):
+    def find_all_shortest_paths(self, graph: nx.DiGraph, source_lanelet_id: int, target_lanelet_id: int):
+        """
+         Find all shortest paths using networkx module
+         :param graph: Graph to search
+         :param source_lanelet_id: ID of source lanelet
+         :param target_lanelet_id: ID of goal lanelet
+         :return: list of simple paths with lanelet IDs
+         """
         return list(nx.all_shortest_paths(graph,
                                           source=source_lanelet_id,
                                           target=target_lanelet_id))
 
-    def find_all_simple_paths(self, graph, source_lanelet_id, target_lanelet_id):
+    def find_all_simple_paths(self, graph: nx.DiGraph, source_lanelet_id: int, target_lanelet_id: int):
+        """
+        Find all simple paths using networkx module
+        :param graph: Graph to search
+        :param source_lanelet_id: ID of source lanelet
+        :param target_lanelet_id: ID of goal lanelet
+        :return: list of simple paths with lanelet IDs
+        """
         return list(nx.all_simple_paths(graph,
                                         source=source_lanelet_id,
                                         target=target_lanelet_id))
 
-    def find_all_lanelets_leading_to_goal(self, source_lanelet_id, allow_overtaking=True, graph=None):
+    def find_all_lanelets_leading_to_goal(self, source_lanelet_id: int, allow_overtaking: bool = True,
+                                          graph: nx.DiGraph = None):
         """
         Finds all lanelets connecting source to goal lanelet
         :param source_lanelet_id: lanelet to start searching
@@ -445,9 +510,12 @@ class RoutePlanner:
         :param graph: graph created from lanelet network to search
         :return: list of lanelet ids
         """
+
         if graph is None:
             graph = self.graph
         lanelet_ids_leading_to_goal = set()
+
+        # if source lanelet is goal lanelet we only take adjacent lanelets
         if source_lanelet_id == self.goal_lanelet_id:
             cur_lanelet = self.lanelet_network.find_lanelet_by_id(source_lanelet_id)
             lanelet_ids_leading_to_goal.add(source_lanelet_id)
@@ -457,6 +525,8 @@ class RoutePlanner:
                     lanelet_ids_leading_to_goal.add(cur_lanelet.adj_left)
             if cur_lanelet.adj_right and cur_lanelet.adj_right_same_direction:
                 lanelet_ids_leading_to_goal.add(cur_lanelet.adj_right)
+
+        # else get lanelet IDs according to reachable simple paths
         else:
             simple_paths = self.find_all_simple_paths(graph, source_lanelet_id, self.goal_lanelet_id)
             for p in simple_paths:
@@ -465,15 +535,17 @@ class RoutePlanner:
                 for i, l_id in enumerate(p[1:-1]):
                     cur_lanelet = self.lanelet_network.find_lanelet_by_id(l_id)
                     if ((l_id == pre_lanelet.adj_left and
-                             not pre_lanelet.adj_left_same_direction) or
+                         not pre_lanelet.adj_left_same_direction) or
                             (l_id == pre_lanelet.adj_right and
-                                 not pre_lanelet.adj_right_same_direction)):
+                             not pre_lanelet.adj_right_same_direction)):
                         if p[i + 2] in cur_lanelet.successor:
                             flag = False
                             break
                     pre_lanelet = cur_lanelet
                 if flag:
                     lanelet_ids_leading_to_goal = lanelet_ids_leading_to_goal.union(set(p))
+
+            # if we allow overtaking we also consider opposite driving direction
             if allow_overtaking:
                 overtaking_lanelets = set()
                 for lanelet_id in lanelet_ids_leading_to_goal:
@@ -481,10 +553,19 @@ class RoutePlanner:
                     if lanelet.adj_left and not pre_lanelet.adj_left_same_direction:
                         overtaking_lanelets.add(lanelet.adj_left)
                 lanelet_ids_leading_to_goal = lanelet_ids_leading_to_goal.union(overtaking_lanelets)
+
         return lanelet_ids_leading_to_goal
 
-    def find_reference_path_to_goal(self, source_lanelet_id, goal_lanelet_id=None, lanelet_network=None, graph=None):
-        """ Not working in many situations."""
+    def find_reference_path_to_goal(self, source_lanelet_id: int, goal_lanelet_id: int = None,
+                                    lanelet_network: LaneletNetwork = None, graph: nx.DiGraph = None):
+        """
+        Not working in many situations: Finds the shortest path from start to goal and generates reference path
+        :param source_lanelet_id: source lanelet ID
+        :param goal_lanelet_id: goal lanelet ID
+        :param lanelet_network: lanelet network
+        :param graph: search graph
+        :return: reference path
+        """
 
         if graph is None:
             graph = self.graph
@@ -496,6 +577,7 @@ class RoutePlanner:
             goal_lanelet_id = self.goal_lanelet_id
 
         shortest_paths = self.find_all_shortest_paths(graph, source_lanelet_id, goal_lanelet_id)
+
         # take the first shortest path (there might be more than one)
         if shortest_paths == []:
             source_lanelet = lanelet_network.find_lanelet_by_id(source_lanelet_id)
@@ -524,7 +606,6 @@ class RoutePlanner:
                     reference_lanelets.append(lanelet)
                 else:
                     reference_lanelets.append(lanelet)
-
         center_vertices = reference_lanelets[0].center_vertices
         for i in range(1, len(reference_lanelets)):
             if np.isclose(center_vertices[-1],
@@ -536,12 +617,9 @@ class RoutePlanner:
                                               reference_lanelets[i].center_vertices[idx:]))
         return center_vertices
 
-    def find_reference_path_and_lanelets_leading_to_goal(
-            self,
-            allow_overtaking: bool,
-            source_position=None,
-            resampling_step_reference_path: float = 0.5,
-            max_curvature_reference_path: float = 0.2):
+    def find_reference_path_and_lanelets_leading_to_goal(self, allow_overtaking: bool, source_position: np.array = None,
+                                                         resampling_step_reference_path: float = 0.5,
+                                                         max_curvature_reference_path: float = 0.2):
         """
         Search for path from lanelet leading to goal + find all lanelets connecting start to goal
         :param allow_overtaking:True if overtaking on left opposite lanelets is allowed
@@ -572,9 +650,9 @@ class RoutePlanner:
             max_curvature = max(abs(compute_curvature_from_polyline(reference_path)))
         return reference_path, lanelets_leading_to_goal
 
-    def plan_all_reference_paths(self, source_position=None,
-                       resampling_step_reference_path: float = 1.5,
-                       max_curvature_reference_path: float = 0.2):
+    def plan_all_reference_paths(self, source_position: np.array = None,
+                                 resampling_step_reference_path: float = 1.5,
+                                 max_curvature_reference_path: float = 0.2):
         """
         Finds a new reference path to perform a lane change
         :param source_position: np.array[x,y]: current vehicle position
@@ -588,16 +666,20 @@ class RoutePlanner:
         sourcelanelets = self.lanelet_network.find_lanelet_by_position(np.array([source_position]))
         source_lanelet = self.lanelet_network.find_lanelet_by_id(sourcelanelets[0][0])
 
+        # get adjacent lanelets of current lanelet
         adjacent_left, adjacent_right = self.get_adjacent_lanelets_list(source_lanelet.lanelet_id)
         adjacent = (np.concatenate((adjacent_left, adjacent_right), axis=0)).tolist()
 
         flag = False
+
+        # for some scenarios we need to consider adjacent lanelets of successing lanelet (e.g. turning lanelet)
         if source_lanelet.successor:
             suc = self.lanelet_network.find_lanelet_by_id(source_lanelet.successor[0])
             if suc.adj_left_same_direction is True or suc.adj_right_same_direction is True:
                 flag = True
 
         from_source = set()
+
         # if we have highway scenarios, we need also to consider all lanelets reachable from source
         if adjacent != [] or flag is True:
             from_source = nx.descendants(self.graph, source_lanelet.lanelet_id)
@@ -607,6 +689,8 @@ class RoutePlanner:
         adjacent = [int(l) for l in adjacent]
         lanelets_leading_to_goal = set()
         lanelets_leading_to_goal.add(self.goal_lanelet_id)
+
+        # find all lanelets leading to goal
         for lanelet in adjacent:
             if lanelet not in lanelets_leading_to_goal:
                 _lanelets = self.find_all_lanelets_leading_to_goal(lanelet, allow_overtaking=False)
@@ -614,6 +698,7 @@ class RoutePlanner:
 
         lanelets_leading_to_goal = list(set(lanelets_leading_to_goal))
 
+        # create all discretized lanelet network and new search graph from lanelet network
         new_network, lanelet_mapping, not_leading_to_goal = self.create_reference_path_network()
         graph = self.create_graph_from_lanelet_network_lane_change(lanelet_network=new_network)
 
@@ -624,6 +709,7 @@ class RoutePlanner:
 
         reference_paths = {}
 
+        # generate all reference paths
         for start in lanelets_leading_to_goal:
             start_id = start
             if start_id in not_leading_to_goal:
@@ -632,9 +718,10 @@ class RoutePlanner:
                 start_id = lanelet_mapping[start][0]
 
             reference_path = self.find_reference_path_to_goal(
-                start_id, goal, lanelet_network= new_network, graph=graph)
+                start_id, goal, lanelet_network=new_network, graph=graph)
             if reference_path is None:
                 reference_path = source_lanelet.center_vertices
+
             # smooth reference path until curvature is smaller or equal max_curvature_reference_path
             max_curvature = max_curvature_reference_path + 0.2
             while max_curvature > max_curvature_reference_path:
@@ -647,14 +734,14 @@ class RoutePlanner:
         self.reference_paths = reference_paths
         return reference_paths, lanelets_leading_to_goal
 
-    def set_reference_lane(self, lane_direction: int, position):
+    def set_reference_lane(self, lane_direction: int, position: np.array):
         """
         compute new reference path based on relative lane position.
         :param lane_direction: 0=curernt lane >0=right lanes, <0=left lanes
         :param position: current position
         :return: new reference lane vertices
         """
-        assert self.lanelet_network is not None,\
+        assert self.lanelet_network is not None, \
             'lanelet network must be provided during initialization for using get_reference_of_lane().'
 
         # get current lanelet
@@ -662,7 +749,8 @@ class RoutePlanner:
         if len(current_ids) > 0:
             current_lanelet = self.lanelet_network.find_lanelet_by_id(current_ids[0])
         else:
-            raise ValueError('set_reference_lane: x0 is not located on any lane and no previous reference available.')
+            raise ValueError(
+                'set_reference_lane: x0 is not located on any lane and no previous reference available.')
 
         # determine target lane
         target_lanelet = None
@@ -677,10 +765,12 @@ class RoutePlanner:
 
         # inform user if lane change is possible
         if target_lanelet is None:
-            warnings.warn('set_reference_lane: No adjacent lane in direction {}, stay in current lane.'.format(lane_direction), stacklevel=2)
+            warnings.warn('set_reference_lane: No adjacent lane in direction {}, stay in current lane.'.format(
+                lane_direction), stacklevel=2)
             target_lanelet = current_lanelet
         else:
-            print('<reactive_planner> Changed reference lanelet from {} to {}.'.format(current_lanelet.lanelet_id, target_lanelet.lanelet_id))
+            print('<reactive_planner> Changed reference lanelet from {} to {}.'.format(current_lanelet.lanelet_id,
+                                                                                       target_lanelet.lanelet_id))
 
         # get indices where to cut new and old reference lanelets center vertices
         distance, end_index = spatial.KDTree(self.reference_paths[current_lanelet.lanelet_id]).query(position)
@@ -689,7 +779,8 @@ class RoutePlanner:
         # concatenate new and old reference paths
         tmp = np.array([position])
         temp1 = np.concatenate((self.reference_paths[current_lanelet.lanelet_id][0:end_index], tmp), axis=0)
-        reference_path = np.concatenate((temp1, self.reference_paths[target_lanelet.lanelet_id][start_index+3:]), axis=0)
+        reference_path = np.concatenate((temp1, self.reference_paths[target_lanelet.lanelet_id][start_index + 3:]),
+                                        axis=0)
 
         # smooth reference path until curvature is smaller or equal max_curvature_reference_path
         resampling_step_reference_path = 1.5
@@ -702,18 +793,28 @@ class RoutePlanner:
 
         return reference_path
 
+    # Example: usage of route planner
 
-# Example: usage of route planner
+
 if __name__ == '__main__':
-    scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-23_1_T-1.xml'
-    scenario, planning_problem_set = CommonRoadFileReader(scenario_path).open()
+    from scenario_classes import PlanningProblem, Scenario
 
-    plt.figure(figsize=(25, 10))
-    draw_object(scenario.lanelet_network, draw_params={'lanelet_network': {'lanelet': {'show_label': True}}})
-    draw_object(planning_problem_set)
+    scenario_path = '/home/friederike/Masterpraktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-15_1_T-1.xml'
+
+    # create scenario object
+    scenario = Scenario(scenario_path=scenario_path)
+
+    # create planning problem object
+    planning_problem = PlanningProblem(scenario_path=scenario_path)
 
     # initialize route planner
-    route_planner = RoutePlanner(scenario_path)
+    route_planner = RoutePlanner(scenario, planning_problem)
+
+    # plot scenario
+    plt.figure(figsize=(25, 10))
+    draw_object(scenario.scenario_set.lanelet_network,
+                draw_params={'lanelet_network': {'lanelet': {'show_label': True}}})
+    draw_object(planning_problem.planning_problem_set)
 
     # reference path network generation
     reference_paths, lanelets_leading_to_goal = route_planner.plan_all_reference_paths(
@@ -723,9 +824,10 @@ if __name__ == '__main__':
     # plot reference path
     for path in reference_paths.values():
         plt.plot(path[:, 0], path[:, 1], '-*b', linewidth=4, zorder=50)
+
     # plot all lanelets leading to goal
     for id in lanelets_leading_to_goal:
-        lane = scenario.lanelet_network.find_lanelet_by_id(id)
+        lane = scenario.scenario_set.lanelet_network.find_lanelet_by_id(id)
         draw_object(lane, draw_params={'lanelet': {
             'left_bound_color': 'yellow',
             'right_bound_color': 'yellow',

@@ -8,7 +8,7 @@ from route_planner import RoutePlanner
 class CarHighlevelStates(object):
 
     # define states
-    states =['following', 'lane_change_left']
+    states = ['following', 'lane_change_left']
     
     # define transitions
     transitions = [{'trigger': 'Car_ahead_too_slow',    'source': 'following',          'dest': 'lane_change_left',
@@ -62,9 +62,6 @@ class StateMachine:
         # store scenario object
         self._scenario = scenario
 
-        # store planning problem object
-        self._planning_problem = planning_problem
-
         # create states object
         self._states = CarHighlevelStates()
 
@@ -72,7 +69,7 @@ class StateMachine:
         self._vehicleparameter = VehicleParameter()
 
         # create rout planner object
-        self._route_planner = RoutePlanner(self._scenario, self._planning_problem)
+        self._route_planner = RoutePlanner(self._scenario, planning_problem)
 
     def init_reference_path(self):
         """
