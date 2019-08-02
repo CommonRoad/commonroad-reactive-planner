@@ -1,6 +1,3 @@
-
-from scipy import spatial
-
 from parameter import VehicleParameter, PlanningParameter
 from trajectory_bundle import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample
 from polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
@@ -14,15 +11,15 @@ from pycrccosy import TrapezoidCoordinateSystem
 from commonroad_ccosy.geometry.trapezoid_coordinate_system import create_coordinate_system_from_polyline
 from typing import List
 import numpy as np
-import time, warnings
+import time
+import warnings
 from parameter_classes import VehModelParameters, SamplingParameters
 from polyline import compute_curvature_from_polyline, compute_orientation_from_polyline, compute_pathlength_from_polyline
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
-
+from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_checker
 import matplotlib.pyplot as plt
 from commonroad.visualization.draw_dispatch_cr import draw_object
-
-from State_Machine import CarHighlevelStates, CheckTransitions
+from State_Machine import StateMachine
 
 __author__ = "Christian Pek"
 __copyright__ = "TUM Cyber-Physical Systems Group"
@@ -32,16 +29,20 @@ __maintainer__ = "Christian Pek"
 __email__ = "Christian.Pek@tum.de"
 __status__ = "Alpha"
 
-
-
 class ReactivePlanner(object):
-    def __init__(self, v_desired=14, collision_check_in_cl: bool = False, scenario=None):
+    def __init__(self, scenario: object, planning_problem: object, v_desired=14, collision_check_in_cl: bool = False,):
 
         # Store scenario
         self._scenario = scenario
 
-        # Ego vehicle data
-        self._ego = None
+        # Store planning problem
+        self._planning_problem = planning_problem
+
+        # create collision_checker
+        self._collision_checker = create_collision_checker(scenario.scenario_set)
+
+        # transitions machine
+        self._statemachine = StateMachine(self._scenario)
 
         params = PlanningParameter(velocity_reaching=True)
         self.set_parameters(params)
@@ -59,8 +60,6 @@ class ReactivePlanner(object):
 
         assert is_positive(self.N) and is_natural_number(self.N), '<ReactivePlanner>: provided N is not correct! dt = {}'.format(
             self.N)
-        #assert np.isclose(self.horizon, self.N * self.dT), '<ReactivePlanner>: Provided time horizon information is not correct!'
-        #assert np.isclose(self.N * self.dT, self.horizon)
 
         # Set direction sampling options
         self.d_deviation = params.d_deviation
@@ -73,8 +72,11 @@ class ReactivePlanner(object):
         # Create default VehModelParameters
         self.constraints = VehModelParameters(vehicle_params.acceleration_max, vehicle_params.acceleration_dot_max, vehicle_params.kappa_max, vehicle_params.kappa_dot_max)
 
-        # Current State
-        self.x_0:State = None
+        # Current state
+        self._x_0:State = None
+
+        # Ego vehicle state
+        self._ego = None
 
         # Set reference
         self._cosy:TrapezoidCoordinateSystem = None
@@ -114,10 +116,6 @@ class ReactivePlanner(object):
         # compute sampling sets
         self._setup_sampling_sets()
 
-        # State machine
-        self.statemachine = CarHighlevelStates()
-        self.checktransitions = CheckTransitions(self._scenario)
-
         # switch between low and high velocity mode
         self._velocity_threshold = vehicle_params.velocity_threshold
 
@@ -128,7 +126,7 @@ class ReactivePlanner(object):
         """
         Initailly set reference path by calling state machine
         """
-        reference = self.checktransitions.init_reference_path()
+        reference = self._statemachine.init_reference_path()
         self.set_reference_path(reference)
         pass
 
@@ -143,7 +141,6 @@ class ReactivePlanner(object):
         elif type(parameters).__name__ == VehicleParameter:
             self.params_vehicle = parameters
 
-
     def set_desired_speed(self, v_desired):
         """
         Sets desired velocity and calculates velocity for each sample
@@ -151,11 +148,10 @@ class ReactivePlanner(object):
         :return: velocity in m/s
         """
         self._desired_speed = v_desired
-        if self.x_0 is not None:
-            reference_speed = self.x_0.velocity
+        if self._x_0 is not None:
+            reference_speed = self._x_0.velocity
         else:
             reference_speed = self._desired_speed
-
 
         min_v = max(0, reference_speed - (self.horizon) * self.constraints.a_max)
         max_v = max(min_v+1.0,self._desired_speed)
@@ -189,7 +185,7 @@ class ReactivePlanner(object):
         assert self.lanelet_network is not None,\
             'lanelet network must be provided during initialization for using get_reference_of_lane().' \
             ''
-        current_ids = self.lanelet_network.find_lanelet_by_position([self.x_0.position])[0]
+        current_ids = self.lanelet_network.find_lanelet_by_position([self._x_0.position])[0]
         if len(current_ids) > 0:
             current_lanelet = self.lanelet_network.find_lanelet_by_id(current_ids[0])
         else:
@@ -229,7 +225,6 @@ class ReactivePlanner(object):
 
         self.set_reference_path(reference)
 
-
     def _setup_sampling_sets(self):
         """
         Sets up the sampling sets for planning (needs further refining)
@@ -243,7 +238,7 @@ class ReactivePlanner(object):
             d_interval = self._sampling_d.to_range(i+1) # search with d=0 first
             # if start is self.dT => often results in singularities in linalg
             if i == 0:
-                t_interval = np.array([self._sampling_t.up])#to_range(i+1)
+                t_interval = np.array([self._sampling_t.up]) # to_range(i+1)
             else:
                 t_interval = self._sampling_t.to_range(i)
 
@@ -251,11 +246,6 @@ class ReactivePlanner(object):
             vs = set(v_interval.flatten())
             ds = set(d_interval.flatten())
             ts = set(t_interval.flatten())
-
-            # for j in range(i):
-            #     # vs = vs - v_sets[j]
-            #     ds = ds - d_sets[j]
-            #     # ts = ts - t_sets[j]
 
             v_sets.append(vs)
             d_sets.append(ds)
@@ -324,7 +314,6 @@ class ReactivePlanner(object):
 
         NOTE: Here, no collision or feasibility check is done!
         """
-
         # get parameters for planning
         params = PlanningParameter(velocity_reaching = True)
 
@@ -343,6 +332,7 @@ class ReactivePlanner(object):
                 trajectory_long = QuinticTrajectory(t_start_s=0, duration_s=t, desired_horizon=self.horizon,
                                                      start_state=x_0_lon, end_state=end_state_lon,
                                                     desired_velocity=self._desired_speed)
+
                 # set costs for sampled longitudinal trajectory sample
                 time_cost = 1.0 / t
                 distance_cost = (desired_speed - v) ** 2
@@ -360,6 +350,7 @@ class ReactivePlanner(object):
                         trajectory_lat = QuinticTrajectory(t_start_s=0, duration_s=s_lon_goal,
                                                            desired_horizon=self.horizon,
                                                            start_state=x_0_lat, end_state=end_state_lat)
+
                     # Switch to sampling over t for high velocities
                     else:
                         trajectory_lat = QuinticTrajectory(t_start_s=0, duration_s=t,
@@ -552,7 +543,6 @@ class ReactivePlanner(object):
             # Kappa
             k_r = np.interp(s[i], self._ref_pos, self._ref_curv)
             k_r_d = np.interp(s[i], self._ref_pos, self._ref_curv_d)
-            # ref_curv_prime = np.gradient(self._ref_curv, self._ref_pos)
             oneKrD = (1 - k_r * d[i])
             cosTheta = np.cos(theta_cl[-1])
             tanTheta = np.tan(theta_cl[-1])
@@ -600,7 +590,6 @@ class ReactivePlanner(object):
         trajectory.cartesian = CartesianSample(x, y, theta_gl, v, a, kappa_gl, np.append([0], np.diff(kappa_gl)))
 
         # store Curvilinear trajectory
-        # theta_cl = trajectory.cartesian.theta - np.interp(trajectory.curvilinear.s, self._ref_pos, self._ref_curv)
         trajectory.curvilinear = CurviLinearSample(s, d, theta_cl, ss=s_velocity, sss=s_acceleration, dd=d_velocity,
                                                    ddd=d_acceleration)
 
@@ -616,7 +605,6 @@ class ReactivePlanner(object):
         if trajectory_bundle is not None:
 
             for i in range(0, len(trajectory_bundle), step):
-                # trajectory = _compute_cartesian_trajectory(trajectory_bundle[i], self.dT, self._ref_pos,self._ref_curv,self._re)
                 color = (trajectory_bundle[i].total_cost - self._min_cost) / (self._max_cost - self._min_cost)
                 color = (color, color, color)
                 color = 'gray'
@@ -637,8 +625,10 @@ class ReactivePlanner(object):
 
         # compute curvilinear position
         s, d = self._cosy.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
+
         # compute orientation in curvilinear coordinate frame
         theta_cl = x_0.orientation - np.interp(s, self._ref_pos, self._theta_ref)
+
         # compute curvatures
         kr = np.interp(s, self._ref_pos, self._ref_curv)
         kr_d = np.interp(s, self._ref_pos, self._ref_curv_d)
@@ -656,8 +646,6 @@ class ReactivePlanner(object):
                         kr_d * d + kr * d_p))
         s_dd /= ((1 - kr * d) / (np.cos(theta_cl)))
 
-        # d_d =(1-kr*d)*np.tan(theta_cl) #x_0.v * np.sin(theta_cl)
-
         x_0_lon = [s, s_d, s_dd]
         x_0_lat = [d, d_p, d_pp]
 
@@ -667,21 +655,24 @@ class ReactivePlanner(object):
 
         return (x_0_lon, x_0_lat)
 
-    def plan(self, x_0: State, cc: object, cl_states=None, k=None) -> tuple:
+    def plan(self, x_0: State, cl_states=None, k=None) -> tuple:
         """
-        Plans an optimal trajectory using lazy evaluation
+        Plans an optimal trajectory using lazy evaluation and updates ego state, if one is found
         :param x_0: Initial state as CR state (CR = cartesian)
-        :param cc:  CollisionChecker object
         :param cl_states: Curvilinear state if replanning is used
         :return: Optimal trajectory as tuple or None, if no trajectory is found.
         """
-        self.x_0 = x_0
+        self._x_0 = x_0
+        cc = self._collision_checker.time_slice(k)
 
         # compute initial states
         if cl_states is not None:
             x_0_lon, x_0_lat = cl_states
         else:
-            x_0_lon, x_0_lat = self._compute_initial_states(x_0)
+            x_0_lon, x_0_lat = self._compute_initial_states(self._x_0)
+        
+        if k > 0:
+            self.trigger_state_machine(k)
 
         print('<Reactive Planner>: initial state is: lon = {} / lat = {}'.format(x_0_lon, x_0_lat))
 
@@ -723,10 +714,10 @@ class ReactivePlanner(object):
                             ((traj.total_cost - self._min_cost) / (self._max_cost - self._min_cost))))
                     optimal = self._compute_trajectory_pair(traj)
 
-                    # call trigger for state machine
-                    self.trigger_state_machine(optimal, k)
-                    return optimal
+                    # update ego state
+                    self._ego = self.convert_cr_trajectory_to_object(optimal[0])
 
+                    return optimal
 
             # add standstill trajectory, if no feasible trajectory was found
             bundle = TrajectoryBundle()
@@ -761,8 +752,9 @@ class ReactivePlanner(object):
                             ((traj_stand.total_cost - self._min_cost) / (self._max_cost - self._min_cost))))
                     optimal = self._compute_trajectory_pair(traj_stand)
 
-                    # call trigger for state machine
-                    self.trigger_state_machine(optimal, k)
+                    # update ego state
+                    self._ego = self.convert_cr_trajectory_to_object(optimal[0])
+
                     return optimal
             i += 1
 
@@ -774,6 +766,7 @@ class ReactivePlanner(object):
             print('<ReactivePlanner>: Cannot find trajectory with default sampling parameters. '
                   'Switching to emergency mode!')
 
+        # no feasible trajectory found
         return None
 
     def _compute_trajectory_pair(self, trajectory: TrajectorySample) -> tuple:
@@ -907,7 +900,6 @@ class ReactivePlanner(object):
             tray_in_any_lanelet = np.logical_or(tray_in_any_lanelet, adj_candidate[k].contains_points(traj_pos_cart))
         boundary_crossed = not all(tray_in_any_lanelet)
 
-
         for k in range(len(adj_candidate)):
             if v_max > adj_candidate[k].speed_limit * 1.1:
                 print(v_max)
@@ -962,24 +954,19 @@ class ReactivePlanner(object):
 
         return DynamicObstacle(42, ObstacleType.CAR,shape, trajectory.state_list[0],prediction)
 
-
-    def plotting(self, k, scenario, planning_problem_set, reference_path, ego, only_new_time_step = True):
-        '''
+    def plotting(self, k, only_new_time_step=True):
+        """
         Plotting of the scenario.
         :param k: Time step of main function
-        :param scenario: Scenario data
-        :param planning_problem_set: Current parameters of planning problem
-        :param reference_path: The current reference path
-        :param ego: Data of ego vehicle
         :param only_new_time_step: If True the figure gets completly updated every time step
-        '''
+        """
         if only_new_time_step:
             plt.figure(k, figsize=(25, 10))
-            plt.plot(reference_path[:, 0], reference_path[:, 1], '-*g', linewidth=1, zorder=10)
-            draw_object(scenario, draw_params={'time_begin': k})
-            draw_object(planning_problem_set)
-            draw_object(ego)
-            #draw_object(ego.prediction.occupancy_at_time_step(k))
+            plt.plot(self._reference[:, 0], self._reference[:, 1], '-*g', linewidth=1, zorder=10)
+            draw_object(self._scenario.scenario_set, draw_params={'time_begin': k})
+            draw_object(self._planning_problem.planning_problem_set)
+            draw_object(self._ego)
+            draw_object(self._ego.prediction.occupancy_at_time_step(k))
             plt.axis('equal')
             plt.show(block=False)
             if k > 0:
@@ -987,46 +974,48 @@ class ReactivePlanner(object):
             else:
                 plt.close('start')
         else:
-            plt.plot(reference_path[:, 0], reference_path[:, 1], '-*g', linewidth=1, zorder=10)
-            draw_object(scenario, draw_params={'time_begin': k})
-            draw_object(planning_problem_set)
-            draw_object(ego)
-            #draw_object(ego.prediction.occupancy_at_time_step(k))
+            plt.plot(self._reference[:, 0], self._reference[:, 1], '-*g', linewidth=1, zorder=10)
+            draw_object(self._scenario.scenario_set, draw_params={'time_begin': k})
+            draw_object(self._planning_problem.planning_problem_set)
+            draw_object(self._ego)
+            draw_object(self._ego.prediction.occupancy_at_time_step(k))
 
         plt.pause(0.1)
 
-    def trigger_state_machine(self, optimal, k):
-        '''
-        Checks velocity of car in front and triggers the state machine eventually
-        :param optimal: Current position, trajectory of the ego vehicle
+    def trigger_state_machine(self, k):
+        """
+        Checks velocity of car in front and triggers the state machine eventually.
+        If necessary reference path and desired velocity are updated.
         :param k: Time step of main function
-        '''
-        self._ego = self.convert_cr_trajectory_to_object(optimal[0])
+        """
+        # get obstacles that are close to the ego vehicle and the one obstacle directly in front of the ego vehicle
+        near_obstacles, obstacle_ahead = self._statemachine.get_obstacles_around(self._scenario.scenario_set, self._ego, k)
 
-        near_obstacles, obstacle_ahead = self.checktransitions.get_obstacles_around(self._scenario.scenario_set, self._ego, k)
-
-        x_0 = optimal[0].state_list[1]
-
-
+        # there exists an obstacle in front of the ego vehicle
         if obstacle_ahead is not None:
-            vel_difference_overtaking, vel_difference = self.checktransitions.check_if_velocity_is_too_slow(self._ego,
+            # call state machine
+            vel_difference_overtaking, vel_difference = self._statemachine.check_if_velocity_is_too_slow(self._ego,
                                                                                                             obstacle_ahead)
-            velocity = x_0.velocity
+            velocity = self._x_0.velocity
 
+            # initiate overtaking
             if vel_difference_overtaking:
                 print("Car ahead is too slow! Overtaking-Difference: ", vel_difference_overtaking)
 
-                velocity, reference_path = self.checktransitions.check_current_state(self._scenario.scenario_set,
+                # compute new velocity and reference path
+                velocity, reference_path = self._statemachine.check_current_state(self._scenario.scenario_set,
                                                                                              self._ego,
                                                                                              self._reference,
                                                                                              near_obstacles,
                                                                                              obstacle_ahead, k)
                 self.set_reference_path(reference_path)
 
+            # adapt velocity for following
             elif vel_difference:
                 print("Car ahead is too slow! Following-Difference: ", vel_difference)
 
-                velocity = x_0.velocity - vel_difference
+                # update velocity
+                velocity = self._x_0.velocity - vel_difference
 
             self.set_desired_speed(velocity)
         pass
