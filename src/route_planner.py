@@ -11,29 +11,14 @@ from scipy import spatial
 
 
 class RoutePlanner:
-    def __init__(self, scenario_path):
+    def __init__(self, scenario: object, planning_problem: object):
         """
         Initialize route planner
         :param scenario_path: path to scenario xml file
         """
 
-        self.scenario, planning_problem_set = CommonRoadFileReader(scenario_path).open()
-
-        # Find planning problem
-        if not planning_problem_set:
-            root = ET.parse(scenario_path).getroot()
-            for lane in root.findall('lanelet'):
-                laneletid = lane.get('id')
-                print("Lanelet ID" + laneletid)
-                break
-            print('No Planning Problem specified for this scenario! Lanelet ', laneletid, ' is chosen.')
-        else:
-            root = ET.parse(scenario_path).getroot()
-            for problem in root.findall('planningProblem'):
-                problem_id = problem.get('id')
-                print("Planning Prob ID" + problem_id)
-                break
-            self.planning_problem = planning_problem_set.find_planning_problem_by_id(int(problem_id))
+        if planning_problem.planning_problem_set:
+            self.planning_problem = planning_problem.planning_problem_set.find_planning_problem_by_id(int(planning_problem.problem_id))
 
         # Find goal region
         self.goal_lanelet_position = None
@@ -44,21 +29,21 @@ class RoutePlanner:
                 self.goal_lanelet_id = self.goal_lanes[0][0]
             else:
                 self.goal_lanelet_position = self.planning_problem.goal.state_list[0].position.center
-                self.goal_lanes = self.scenario.lanelet_network.find_lanelet_by_position(np.array(self.goal_lanelet_position, ndmin=2))
+                self.goal_lanes = scenario.scenario_set.lanelet_network.find_lanelet_by_position(np.array(self.goal_lanelet_position, ndmin=2))
                 self.goal_lanelet_id = self.goal_lanes[0][0]
         else:
             # set initial lanelet as goal lanelet if not other specified
-            goal_lanelet = self.scenario.lanelet_network.find_lanelet_by_position(
+            goal_lanelet = scenario.scenario_set.lanelet_network.find_lanelet_by_position(
                 np.array(self.planning_problem.initial_state.position, ndmin=2))
             self.goal_lanelet_id = goal_lanelet[0][0]
             print('No Goal Region defined: Driving on initial lanelet.')
 
         if self.goal_lanelet_position is None:
-            goal_lanelet = self.scenario.lanelet_network.find_lanelet_by_id(self.goal_lanelet_id)
+            goal_lanelet = scenario.scenario_set.lanelet_network.find_lanelet_by_id(self.goal_lanelet_id)
             self.goal_lanelet_position = goal_lanelet.center_vertices[-2]
         print("goal lanelet ID" + str(self.goal_lanelet_id))
 
-        self.lanelet_network = self.scenario.lanelet_network
+        self.lanelet_network = scenario.scenario_set.lanelet_network
         self.graph = self.create_graph_from_lanelet_network()
         self.reference_paths = {}
         for lanelet in self.lanelet_network.lanelets:

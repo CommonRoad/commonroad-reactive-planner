@@ -57,10 +57,13 @@ class CarHighlevelStates(object):
 
 
 class StateMachine:
-    def __init__(self, scenario):
+    def __init__(self, scenario, planning_problem):
 
-        # create scenario object
+        # store scenario object
         self._scenario = scenario
+
+        # store planning problem object
+        self._planning_problem = planning_problem
 
         # create states object
         self._states = CarHighlevelStates()
@@ -69,7 +72,7 @@ class StateMachine:
         self._vehicleparameter = VehicleParameter()
 
         # create rout planner object
-        self._route_planner = RoutePlanner(scenario.scenario_path)
+        self._route_planner = RoutePlanner(self._scenario, self._planning_problem)
 
     def init_reference_path(self):
         """

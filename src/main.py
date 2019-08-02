@@ -62,7 +62,7 @@ if __name__ == '__main__':
         solution_traj = Trajectory(initial_time_step=0, state_list=state_list)
         solution_step = 1
 
-    for k in range(0, 2):
+    for k in range(0, 20):
         # compute optimal trajectory for given time step
         optimal = planner.plan(x_0, cl_states=x_cl, k=k)
 

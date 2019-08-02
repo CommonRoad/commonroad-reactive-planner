@@ -42,7 +42,7 @@ class ReactivePlanner(object):
         self._collision_checker = create_collision_checker(scenario.scenario_set)
 
         # transitions machine
-        self._statemachine = StateMachine(self._scenario)
+        self._statemachine = StateMachine(self._scenario, self._planning_problem)
 
         params = PlanningParameter(velocity_reaching=True)
         self.set_parameters(params)
