@@ -64,6 +64,8 @@ class RoutePlanner:
         for lanelet in self.lanelet_network.lanelets:
             self.reference_paths[lanelet.lanelet_id] = lanelet.center_vertices
 
+        self.plan_all_reference_paths()
+
     def create_graph_from_lanelet_network_lane_change(self, lanelet_network: LaneletNetwork=None) -> nx.DiGraph():
         """
         Build a graph from the lanelet network. The length of a lanelet is assigned as weight to

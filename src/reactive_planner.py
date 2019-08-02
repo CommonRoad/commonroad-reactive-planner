@@ -35,7 +35,10 @@ __status__ = "Alpha"
 
 
 class ReactivePlanner(object):
-    def __init__(self, v_desired=14, collision_check_in_cl: bool = False, lanelet_network:LaneletNetwork=None):
+    def __init__(self, v_desired=14, collision_check_in_cl: bool = False, scenario=None):
+
+        self._scenario = scenario
+        self._ego = None
 
         params = PlanningParameter(velocity_reaching=True)
         self.set_parameters(params)
@@ -79,7 +82,7 @@ class ReactivePlanner(object):
         self._ref_curv_d:np.ndarray = None
 
         # lanelet_network
-        self.lanelet_network: LaneletNetwork = lanelet_network
+        self.lanelet_network: LaneletNetwork = self._scenario.scenario_set.lanelet_network
 
         # store feasible trajectories of last run
         self._feasible_trajectories = None
@@ -110,10 +113,17 @@ class ReactivePlanner(object):
 
         # State machine
         self.statemachine = CarHighlevelStates()
-        self.checktransitions = CheckTransitions()
+        self.checktransitions = CheckTransitions(self._scenario)
 
         # switch between low and high velocity mode
         self._velocity_threshold = vehicle_params.velocity_threshold
+
+        self._init_reference_path()
+
+    def _init_reference_path(self):
+        reference = self.checktransitions.init_reference_path()
+        self.set_reference_path(reference)
+        pass
 
     def set_parameters(self, parameters):
         """
@@ -170,8 +180,8 @@ class ReactivePlanner(object):
         :return:
         """
         assert self.lanelet_network is not None,\
-            'lanelet network must be provided during initialization for using get_reference_of_lane().'
-
+            'lanelet network must be provided during initialization for using get_reference_of_lane().' \
+            ''
         current_ids = self.lanelet_network.find_lanelet_by_position([self.x_0.position])[0]
         if len(current_ids) > 0:
             current_lanelet = self.lanelet_network.find_lanelet_by_id(current_ids[0])
@@ -650,7 +660,7 @@ class ReactivePlanner(object):
 
         return (x_0_lon, x_0_lat)
 
-    def plan(self, x_0: State, cc: object, cl_states=None) -> tuple:
+    def plan(self, x_0: State, cc: object, cl_states=None, k=None) -> tuple:
         """
         Plans an optimal trajectory using lazy evaluation
         :param x_0: Initial state as CR state (CR = cartesian)
@@ -698,11 +708,18 @@ class ReactivePlanner(object):
                 if self._feasible_trajectory(traj, cc):
                     self._min_cost=bundle_old.min_costs()
                     self._max_cost=bundle_old.max_costs()
+
+                    # compute optimal trajectory pair
                     print(
                         'Found optimal trajectory with costs = {}, which corresponds to {} percent of seen costs'.format(
                             traj.total_cost,
                             ((traj.total_cost - self._min_cost) / (self._max_cost - self._min_cost))))
-                    return self._compute_trajectory_pair(traj)
+                    optimal = self._compute_trajectory_pair(traj)
+
+                    # call trigger for state machine
+                    self.trigger_state_machine(optimal, k)
+                    return optimal
+
 
             # add standstill trajectory, if no feasible trajectory was found
             bundle = TrajectoryBundle()
@@ -729,11 +746,17 @@ class ReactivePlanner(object):
                 if self._feasible_trajectory(traj_stand, cc):
                     self._min_cost=bundle_old.min_costs()
                     self._max_cost=bundle_old.max_costs()
+
+                    # compute optimal trajectory pair
                     print(
                         'Found optimal trajectory with costs = {}, which corresponds to {} percent of seen costs'.format(
                             traj_stand.total_cost,
                             ((traj_stand.total_cost - self._min_cost) / (self._max_cost - self._min_cost))))
-                    return self._compute_trajectory_pair(traj_stand)
+                    optimal = self._compute_trajectory_pair(traj_stand)
+
+                    # call trigger for state machine
+                    self.trigger_state_machine(optimal, k)
+                    return optimal
             i += 1
 
         # check if feasible trajectory exists -> emergency mode
@@ -956,37 +979,33 @@ class ReactivePlanner(object):
 
         plt.pause(0.1)
 
-    def trigger_state_machine(self, scenario, optimal, ego, reference_path, route_planner, k):
+    def trigger_state_machine(self, optimal, k):
+        self._ego = self.convert_cr_trajectory_to_object(optimal[0])
 
-        near_obstacles, obstacle_ahead = self.checktransitions.get_obstacles_around(scenario, ego, k)
+        near_obstacles, obstacle_ahead = self.checktransitions.get_obstacles_around(self._scenario.scenario_set, self._ego, k)
 
         x_0 = optimal[0].state_list[1]
-        x_cl = (optimal[2][1], optimal[3][1])
+
 
         if obstacle_ahead is not None:
-            vel_difference_overtaking, vel_difference = self.checktransitions.check_if_velocity_is_too_slow(ego,
+            vel_difference_overtaking, vel_difference = self.checktransitions.check_if_velocity_is_too_slow(self._ego,
                                                                                                             obstacle_ahead)
+            velocity = x_0.velocity
 
             if vel_difference_overtaking:
                 print("Car ahead is too slow! Overtaking-Difference: ", vel_difference_overtaking)
 
-                changed_velocity, reference_path = self.checktransitions.check_current_state(route_planner,
-                                                                                             scenario, ego,
-                                                                                             reference_path,
+                velocity, reference_path = self.checktransitions.check_current_state(self._scenario.scenario_set,
+                                                                                             self._ego,
+                                                                                             self._reference,
                                                                                              near_obstacles,
                                                                                              obstacle_ahead, k)
-
-                x_0.velocity = changed_velocity
-                x_cl = self._compute_initial_states(x_0)
-                # x_cl = planner.create_new_cl_state(x_0, x_cl, changed_velocity)
-
                 self.set_reference_path(reference_path)
-                plt.plot(reference_path[:, 0], reference_path[:, 1], '-*g', linewidth=1, zorder=10)
 
             elif vel_difference:
                 print("Car ahead is too slow! Following-Difference: ", vel_difference)
 
-                x_0.velocity -= vel_difference
-                x_cl = self._compute_initial_states(x_0)
+                velocity = x_0.velocity - vel_difference
 
-        return x_0, x_cl, reference_path
+            self.set_desired_speed(velocity)
+        pass

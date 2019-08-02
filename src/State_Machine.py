@@ -3,6 +3,7 @@ from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType, StaticOb
 from parameter import VehicleParameter, PlanningParameter
 import numpy as np
 from scipy import spatial
+from route_planner import RoutePlanner
 
 class CarHighlevelStates(object):
 
@@ -37,10 +38,17 @@ class CarHighlevelStates(object):
 
 
 class CheckTransitions:
-    def __init__(self):
+    def __init__(self, scenario):
 
+        self._scenario = scenario
         self.statemachine = CarHighlevelStates()
         self.vehicleparameter = VehicleParameter()
+        self.route_planner = RoutePlanner(scenario.scenario_path)
+
+    def init_reference_path(self):
+        source_position = self.route_planner.planning_problem.initial_state.position
+        reference_path = self.route_planner.set_reference_lane(0, source_position)
+        return reference_path
 
     # Check functions for Trigger
     def check_if_velocity_is_too_slow(self, ego, obstacle_ahead):
@@ -66,7 +74,7 @@ class CheckTransitions:
 
         return vel_difference_overtaking, vel_difference
 
-    def check_current_state(self, route_planner, scenario, ego, reference_path, near_obstacles, obstacle_ahead, k):
+    def check_current_state(self, scenario, ego, reference_path, near_obstacles, obstacle_ahead, k):
 
         print("Current State: ", self.statemachine.state)
 
@@ -93,7 +101,7 @@ class CheckTransitions:
 
                     self.statemachine.Car_ahead_too_slow(old_lanelet,new_lanelet)
 
-                    reference_path = route_planner.set_reference_lane(-1, ego_position)
+                    reference_path = self.route_planner.set_reference_lane(-1, ego_position)
 
                 else:
                     # No lanechange possible due to neighboring obstacles

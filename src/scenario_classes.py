@@ -15,6 +15,21 @@ class PlanningProblem():
         _, self.planning_problem_set = CommonRoadFileReader(scenario_path).open()
         self.scenario_path = scenario_path
 
+        self.problem_id = None
+        self.laneletid = None
+
+        if not self.planning_problem_set:
+            root = ET.parse(scenario_path).getroot()
+            for lane in root.findall('lanelet'):
+                self.laneletid = lane.get('id')
+                break
+            print('No Planning Problem specified for this scenario! Lanelet ', laneletid, ' is chosen.')
+        else:
+            root = ET.parse(scenario_path).getroot()
+            for problem in root.findall('planningProblem'):
+                self.problem_id = problem.get('id')
+                break
+
 
 class Scenario(object):
     """
@@ -23,6 +38,7 @@ class Scenario(object):
     def __init__(self, scenario_path):
         self.scenario_set, _ = CommonRoadFileReader(scenario_path).open()
         self.scenario_path = scenario_path
+        self.add_obstacles_at_lanelet_edges()
 
         
     def _boundary_not_intersecting(self, segment, own_ID, total_IDs):
