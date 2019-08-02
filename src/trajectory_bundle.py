@@ -41,9 +41,6 @@ class TrajectorySample:
         # desired_time = self.trajectory_long.desired_horizon
         desired_speed = self.trajectory_long._desired_velocity
 
-        #fabian
-        #print(type(self.cartesian))
-
         a_u = np.append(self.cartesian.a,self.ext_cartesian.a) if self.ext_cartesian is not None else self.cartesian.a
         v_u = np.append(self.cartesian.v, self.ext_cartesian.v) if self.ext_cartesian is not None else self.cartesian.v
         d_u = np.append(self.curvilinear.d, self.ext_curvilinear.d) if self.ext_cartesian is not None else self.curvilinear.d
@@ -57,8 +54,6 @@ class TrajectorySample:
         costs += np.sum((0.15*d_u)**2) + (20*d_u[-1])**2
         # orientation costs
         costs += np.sum((0.1*np.abs(theta_u))**2) + (5*(np.abs(theta_u[-1])))**2
-
-        #costs += (10*(self.trajectory_long.duration_s - desired_time)) ** 2
 
         self.total_cost = costs
 
@@ -97,31 +92,6 @@ class TrajectoryBundle:
         """
         :return: trajectory in trajectory_bundle with minimal cost. None, if trajectory bundle is empty.
         """
-        #print(self.trajectory_bundle)
-        #print("9")
         if not self.trajectory_bundle:
             return None
         return min(self.trajectory_bundle, key=lambda x: x.reevaluate_costs())
-
-    #def optimal_trajectory(self) -> Union[TrajectorySample, None]:
-    #    """
-    #    :return: trajectory in trajectory_bundle with minimal cost. None, if trajectory bundle is empty.
-    #    """
-    #    if not self.trajectory_bundle:
-    #        return None
-    #    return min(self.trajectory_bundle, key=lambda x: x.total_cost)
-    #
-    #def remove_trajectory(self, trajectory_idx: int):
-    #    """ Remove trajectory to trajectory bundle list
-    #    :param: trajectory_idx: id of trajectory to remove
-    #    """
-    #    self.trajectory_bundle.pop(trajectory_idx)
-#
-    #def optimal_trajectory_idx(self) -> Union[int, None]:
-    #    """
-    #    :return: index of trajectory in trajectory_bundle with minimal cost. None, if trajectory bundle is empty.
-    #    """
-    #    if not self.trajectory_bundle:
-    #        return None
-    #    return self.trajectory_bundle.index(min(self.trajectory_bundle, key=lambda x: x.total_cost))
-#

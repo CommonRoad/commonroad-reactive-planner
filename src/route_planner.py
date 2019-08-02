@@ -807,7 +807,7 @@ if __name__ == '__main__':
     # create planning problem object
     planning_problem = PlanningProblem(scenario_path=scenario_path)
 
-    # initialize route planner
+    # create a route planner object
     route_planner = RoutePlanner(scenario, planning_problem)
 
     # plot scenario

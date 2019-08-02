@@ -249,7 +249,7 @@ class QuinticTrajectory(PolynomialTrajectory):
         try:
             x = np.linalg.solve(a, b)
         except Exception as e:
-            print(e)
+            #print(e)
             return None
         return np.array([p_init, p_init_d, .5 * p_init_dd, x[0], x[1], x[2]])
 

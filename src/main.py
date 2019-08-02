@@ -11,6 +11,11 @@ from scenario_classes import PlanningProblem, Scenario
 if __name__ == '__main__':
     print('Creating velocity reaching bundle....')
 
+    # solution parameter
+    write_solution = True
+    solution_path = '/home/fabian/Praktikum/solution_commonroad/'
+    solution_model = 'KS'
+
     scenario_path = '/home/fabian/Praktikum/Commonroad/commonroad-scenarios/NGSIM/US101/USA_US101-15_1_T-1.xml'
 
     # create scenario object
@@ -46,11 +51,6 @@ if __name__ == '__main__':
     plt.pause(0.1)
 
     x_cl = None
-
-    # solution parameter
-    write_solution = True
-    solution_path = '/home/fabian/Praktikum/solution_commonroad/'
-    solution_model = 'KS'
 
     # initial solution
     if write_solution:
