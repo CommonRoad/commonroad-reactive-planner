@@ -976,10 +976,10 @@ class ReactivePlanner(object):
         if only_new_time_step:
             plt.figure(k, figsize=(25, 10))
             plt.plot(reference_path[:, 0], reference_path[:, 1], '-*g', linewidth=1, zorder=10)
-            draw_object(scenario, draw_params={'time_begin': k, 'time_end': k})
+            draw_object(scenario, draw_params={'time_begin': k})
             draw_object(planning_problem_set)
             draw_object(ego)
-            draw_object(ego.prediction.occupancy_at_time_step(1))
+            draw_object(ego.prediction.occupancy_at_time_step(k))
             plt.axis('equal')
             plt.show(block=False)
             if k > 0:
@@ -988,10 +988,10 @@ class ReactivePlanner(object):
                 plt.close('start')
         else:
             plt.plot(reference_path[:, 0], reference_path[:, 1], '-*g', linewidth=1, zorder=10)
-            draw_object(scenario, draw_params={'time_begin': k, 'time_end': k})
+            draw_object(scenario, draw_params={'time_begin': k})
             draw_object(planning_problem_set)
             draw_object(ego)
-            draw_object(ego.prediction.occupancy_at_time_step(1))
+            draw_object(ego.prediction.occupancy_at_time_step(k))
 
         plt.pause(0.1)
 
