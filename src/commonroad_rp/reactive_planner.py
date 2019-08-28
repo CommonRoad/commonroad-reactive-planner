@@ -1,6 +1,6 @@
 
 # commonroad imports
-from commonroad_rp.parameter import VehicleParameter, PlanningParameter, parameter_velocity_reaching
+from commonroad_rp.parameter import VehicleParameter, PlanningParameter, parameter_velocity_reaching, SamplingParameters, VehModelParameters
 from commonroad_rp.trajectory_bundle import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample
 from commonroad_rp.parameter import parameter_velocity_reaching
 from commonroad_rp.polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
@@ -28,6 +28,7 @@ from typing import List
 import matplotlib.pyplot as plt
 import numpy as np
 import time, warnings
+import os
 
 
 __author__ = "Christian Pek"
@@ -42,64 +43,10 @@ __status__ = "Alpha"
 
 
 
-class SamplingParameters(object):
-    """
-    Class that represents the sampling parameters for planning
-    """
-
-    def __init__(self, low: float, up: float, n_samples: int):
-        # Check validity of input
-        assert is_real_number(low), '<SamplingParameters>: Lower sampling bound not valid! low = {}'.format(low)
-        assert is_real_number(up), '<SamplingParameters>: Upper sampling bound not valid! up = {}'.format(up)
-        assert np.greater(up,
-                          low), '<SamplingParameters>: Upper sampling bound is not greater than lower bound! up = {} , low = {}'.format(
-            up, low)
-        assert is_positive(n_samples), '<SamplingParameters>: Step size is not valid! step size = {}'.format(step)
-        assert isinstance(n_samples, int)
-        assert n_samples > 0
-
-        self.low = low
-        self.up = up
-        self.n_samples = n_samples
-
-    def to_range(self, sampling_factor: int=1) -> np.ndarray:
-        """
-        Convert to numpy range object as [center-low,center+up] in "step" steps
-        :param sampling_factor: Multiplicative factor for number of samples
-        :return: The range [low,up] in "n_samples*sampling_factor" steps
-        """
-        if divmod(self.n_samples*sampling_factor,2) == 0:
-            samples = self.n_samples*sampling_factor + 1
-        else:
-            samples = self.n_samples * sampling_factor + 1
-
-        if sampling_factor == 0:
-            return np.array([(self.up+self.low)/2])
-        else:
-            return np.linspace(self.low, self.up, samples)
-
-    def no_of_samples(self) -> int:
-        """
-        Returns the number of elements in the range of this sampling parameters object
-        :return: The number of elements in the range
-        """
-        return len(self.to_range())
-
-
-class VehModelParameters:
-    """
-    Class that represents the vehicle's constraints
-    """
-    def __init__(self, a_max, theta_dot_max, kappa_max, kappa_dot_max):
-        self.a_max = a_max
-        self.theta_dot_max = theta_dot_max
-        self.kappa_max = kappa_max
-        self.kappa_dot_max = kappa_dot_max
-
-
 class ReactivePlanner(object):
-    def __init__(self, dt: float, t_h: float, N: int, width: float = 2.0, length: float = 5.2,
-                 v_desired=14, collision_check_in_cl: bool = False, lanelet_network:LaneletNetwork=None):
+    def __init__(self, dt: float, t_h: float, N: int, v_desired=14, collision_check_in_cl: bool = False, lanelet_network:LaneletNetwork=None):
+
+
         assert is_positive(dt), '<ReactivePlanner>: provided dt is not correct! dt = {}'.format(dt)
         assert is_positive(N) and is_natural_number(N), '<ReactivePlanner>: provided N is not correct! dt = {}'.format(
             N)
@@ -112,12 +59,11 @@ class ReactivePlanner(object):
         self.N = N
         self.dT = dt
 
-        # Set width and length
-        self._width = width
-        self._length = length
-
         # Create default VehModelParameters
-        self.constraints = VehModelParameters(VehicleParameter.acceleration_max, 0.2, 0.2, 10)
+        self.constraints = VehModelParameters()
+        # Set width and length
+        self._width = self.constraints.veh_width
+        self._length = self.constraints.veh_length
 
         # Current State
         self.x_0:State = None
@@ -293,28 +239,6 @@ class ReactivePlanner(object):
         """
         return self._infeasible_count_kinematics
 
-    def _extend_trajectory(self, s, d, s_dot, theta, v, a, duration, dT) -> tuple:
-        """
-        Extends a trajectory assuming constant motion
-        :param s: Longitudinal position
-        :param d: Lateral position
-        :param s_dot: Longitudinal velocity
-        :param theta: Orientation
-        :param v: Velocity
-        :param a: Acceleration
-        :param duration: Duration of extension
-        :param dT: Time step of extension
-        :return: Tuple (s,d,theta,v,a)
-        """
-        # compute time array
-        t = np.arange(0, duration + dT, dT)
-        s_n = s + s_dot * t
-        d_n = d + v * np.sin(theta) * t  # np.repeat(d,len(t))
-        theta_n = np.repeat(theta, len(t))
-        v_n = np.repeat(v, len(t))
-        a_n = np.repeat(a, len(t))
-
-        return (s_n, d_n, theta_n, v_n, a_n)
 
     def _create_trajectory_bundle(self, desired_speed: float, x_0_lon: np.array,
                                   x_0_lat: np.array, samp_level: int) -> TrajectoryBundle:
@@ -346,9 +270,7 @@ class ReactivePlanner(object):
 
             # Longitudinal sampling for all possible velocities
             for v in self._v_sets[samp_level]:
-                trajectory_long = QuarticTrajectory(t_start_s=0, duration_s=t, desired_horizon=self.horizon,
-                                                    start_state=x_0_lon, target_velocity=v,
-                                                    desired_velocity=self._desired_speed)
+                trajectory_long = QuarticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lon), x_d=np.array([v,0]))
                 jerk_cost = trajectory_long.squared_jerk_integral(t) / t
                 time_cost = 1.0 / t
                 distance_cost = (desired_speed - v) ** 2
@@ -360,8 +282,7 @@ class ReactivePlanner(object):
                     end_state_lat = np.array([d, 0.0, 0.0])
                     # SWITCHING TO POSITION DOMAIN FOR LATERAL TRAJECTORY PLANNING
                     s_lon_goal = trajectory_long.calc_position_at(t) - x_0_lon[0]
-                    trajectory_lat = QuinticTrajectory(t_start_s=0, duration_s=s_lon_goal, desired_horizon=self.horizon,
-                                                       start_state=x_0_lat, end_state=end_state_lat)
+                    trajectory_lat = QuinticTrajectory(tau_0=0, delta_tau=s_lon_goal, x_0=np.array(x_0_lat), x_d=end_state_lat)
                     if trajectory_lat.coeffs is not None:
 
                         jerk_cost = trajectory_lat.squared_jerk_integral(t) / t
@@ -441,7 +362,7 @@ class ReactivePlanner(object):
         _LOW_VEL_MODE = True
 
         # create time array
-        t = np.arange(0, trajectory.trajectory_long.duration_s + self.dT, self.dT)
+        t = np.arange(0, trajectory.trajectory_long.delta_tau + self.dT, self.dT)
 
         # precompute time interval information
         t2 = np.square(t)
@@ -554,11 +475,11 @@ class ReactivePlanner(object):
         a = np.array(a)
 
         # check if trajectories planning horizon is shorter than expected
-        if trajectory.trajectory_long.desired_horizon > trajectory.trajectory_long.duration_s:
+        if self.horizon > trajectory.trajectory_long.delta_tau:
             # extend trajectory
-            s_n, d_n, theta_n, v_n, a_n = self._extend_trajectory(s[-1], d[-1], s_velocity[-1], theta_cl[-1], v[-1],
+            s_n, d_n, theta_n, v_n, a_n = extend_trajectory(s[-1], d[-1], s_velocity[-1], theta_cl[-1], v[-1],
                                                                   a[-1],
-                                                                  trajectory.trajectory_long.desired_horizon - trajectory.trajectory_long.duration_s,
+                                                                  self.horizon - trajectory.trajectory_long.delta_tau,
                                                                   self.dT)
             # transform to cartesian
             x_n = list()
@@ -884,7 +805,8 @@ class ReactivePlanner(object):
 if __name__ == '__main__':
     print('Creating velocity reaching bundle....')
 
-    crfr = CommonRoadFileReader('/home/klischat/GIT_REPOS/testCaseOpt/scenarios_border_obstacles/2018b/ZAM_Over-1_1_border_obstacles_shell.xml')
+    # Load example scenario ZAM Over
+    crfr = CommonRoadFileReader('../unit_tests/scenarios/ZAM_Over-1_1.xml')
     scenario, _ = crfr.open()
     plt.figure(figsize=(25, 10))
     draw_object(scenario)
@@ -903,7 +825,7 @@ if __name__ == '__main__':
     x, y = curvilinear_cosy.convert_to_cartesian_coords(25, 0)
     x_0 = State(**{'position':np.array([x,y]),'orientation':0.04, 'velocity':10, 'acceleration':0,'yaw_rate':0})
 
-    planner:ReactivePlanner = ReactivePlanner(0.2, 6, 30)
+    planner: ReactivePlanner = ReactivePlanner(0.2, 6, 30)
     planner.set_reference_path(reference_path)
 
     x_cl = None

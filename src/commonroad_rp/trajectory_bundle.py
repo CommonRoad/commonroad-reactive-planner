@@ -94,7 +94,7 @@ class TrajectorySample:
         self.ext_curvilinear = None
 
     def reevaluate_costs(self):
-        desired_time = self.trajectory_long.desired_horizon
+        #desired_time = self.trajectory_long.desired_horizon
         desired_speed = self.trajectory_long._desired_velocity
 
         a_u = np.append(self.cartesian.a,self.ext_cartesian.a) if self.ext_cartesian is not None else self.cartesian.a

@@ -2,6 +2,8 @@ import numpy as np
 import warnings
 from abc import ABC, abstractmethod
 
+import commonroad.common.validity as val
+
 
 __author__ = "Christian Pek"
 __copyright__ = "TUM Cyber-Physical Systems Group"
@@ -22,12 +24,12 @@ class PolynomialTrajectory(ABC):
         self.delta_tau = delta_tau
         self.x_0 = x_0
         self.x_d = x_d
-        self.cost = None
+        self._cost = None
 
         # set information about polynomial trajectory
-        assert isinstance(power, float) and power >= 5
+        assert val.is_natural_number(power) and power >= 4, '<PolynomialTrajectory/power>: power not valid! power={}'.format(power)
         self._power = power
-        if power != 5:
+        if power != 5 and power != 4:
             warnings.warn('Only power of 5 currently supported!')
 
         # compute coefficients
@@ -55,7 +57,8 @@ class PolynomialTrajectory(ABC):
         Sets the coefficients of the polynomial trajectory
         :param co: The coefficients of the polynomial trajectory
         """
-        assert isinstance(co, np.ndarray) and len(co) == self.power+1
+        # todo: remove fixed len = 6 => make modular and adaptable
+        assert isinstance(co, np.ndarray) and len(co) == 6, '<PolynomialTrajectory/coeffs>: coeffs length not valid! length={}'.format(len(co))
         self._coeffs = co
         # database of already computed queries
         self._db = dict()
@@ -69,8 +72,8 @@ class PolynomialTrajectory(ABC):
         return self._delta_tau
 
     @delta_tau.setter
-    def delta_tau(self, tau):
-        assert isinstance(tau, float) and tau >= 0
+    def delta_tau(self, tau: float):
+        assert val.is_positive(tau), '<PolynomialTrajectory/delta_tau>: delta_tau not valid! delta_tau={}'.format(tau)
         self._delta_tau = tau
 
     @property
@@ -87,7 +90,7 @@ class PolynomialTrajectory(ABC):
         Sets initial value of variable describing polynomial trajectory (time or arclength)
         :param tau: New initial value
         """
-        assert isinstance(tau, float) and tau >= 0
+        assert val.is_real_number(tau) and tau >= 0, '<PolynomialTrajectory/tau_0>: tau_0 not valid! tau_0={}'.format(tau)
         self._tau_0 = tau
 
     @property
@@ -104,7 +107,7 @@ class PolynomialTrajectory(ABC):
         Sets initial state of polynomial trajectory
         :param x: New initial state
         """
-        assert isinstance(x, np.ndarray)
+        assert val.is_real_number_vector(x), '<PolynomialTrajectory/x_0>: x_0 not valid! x_0={}'.format(x)
         self._x_0 = x
 
     @property
@@ -148,7 +151,7 @@ class PolynomialTrajectory(ABC):
         Sets the cost of the polynomial trajectory
         :param cost: The new cost
         """
-        assert isinstance(cost, float) and cost >= 0
+        assert val.is_real_number(cost) and cost >= 0, '<PolynomialTrajectory/cost>: cost not valid! cost={}'.format(cost)
         self._cost = cost
 
     #todo: remove?
@@ -309,9 +312,10 @@ class QuinticTrajectory(PolynomialTrajectory):
 
 
 class QuarticTrajectory(PolynomialTrajectory):
-    def __init__(self, tau_0=0, delta_tau=0, x_0=np.zeros([3, 1]), x_d=np.zeros(2,1)):
-        super(QuarticTrajectory, self).__init__(tau_0=tau_0, delta_tau=delta_tau, x_0=x_0, x_d=x_d, power=4)
+    def __init__(self, tau_0=0, delta_tau=0, x_0=np.zeros([3, 1]), x_d=np.zeros([2,1])):
         self._desired_velocity = x_d[0]
+        super(QuarticTrajectory, self).__init__(tau_0=tau_0, delta_tau=delta_tau, x_0=x_0, x_d=x_d, power=4)
+
 
     def calc_coeffs(self):
         p_init,p_init_d,p_init_dd = self.x_0
@@ -320,9 +324,9 @@ class QuarticTrajectory(PolynomialTrajectory):
         t3 = t2 * self.delta_tau
 
         a = np.array([[3. * t2, 4. * t3],
-                      [6. * self.duration_s, 12. * t2]])
+                      [6. * self.delta_tau, 12. * t2]])
 
-        b = np.array([self.target_velocity - p_init_d - p_init_dd * self.delta_tau,
+        b = np.array([self._desired_velocity - p_init_d - p_init_dd * self.delta_tau,
                       - p_init_dd])
 
         # try to solve linear optimization problem

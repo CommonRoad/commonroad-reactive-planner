@@ -1,3 +1,72 @@
+__author__ = "Christian Pek"
+__copyright__ = "TUM Cyber-Physical Systems Group"
+__credits__ = ["BMW Group CAR@TUM, interACT"]
+__version__ = "0.1"
+__maintainer__ = "Christian Pek"
+__email__ = "Christian.Pek@tum.de"
+__status__ = "Alpha"
+
+
+from commonroad.common.validity import *
+
+import numpy as np
+
+class SamplingParameters(object):
+    """
+    Class that represents the sampling parameters for planning
+    """
+
+    def __init__(self, low: float, up: float, n_samples: int):
+        # Check validity of input
+        assert is_real_number(low), '<SamplingParameters>: Lower sampling bound not valid! low = {}'.format(low)
+        assert is_real_number(up), '<SamplingParameters>: Upper sampling bound not valid! up = {}'.format(up)
+        assert np.greater(up,
+                          low), '<SamplingParameters>: Upper sampling bound is not greater than lower bound! up = {} , low = {}'.format(
+            up, low)
+        assert is_positive(n_samples), '<SamplingParameters>: Step size is not valid! step size = {}'.format(n_samples)
+        assert isinstance(n_samples, int)
+        assert n_samples > 0
+
+        self.low = low
+        self.up = up
+        self.n_samples = n_samples
+
+    def to_range(self, sampling_factor: int=1) -> np.ndarray:
+        """
+        Convert to numpy range object as [center-low,center+up] in "step" steps
+        :param sampling_factor: Multiplicative factor for number of samples
+        :return: The range [low,up] in "n_samples*sampling_factor" steps
+        """
+        if divmod(self.n_samples*sampling_factor,2) == 0:
+            samples = self.n_samples*sampling_factor + 1
+        else:
+            samples = self.n_samples * sampling_factor + 1
+
+        if sampling_factor == 0:
+            return np.array([(self.up+self.low)/2])
+        else:
+            return np.linspace(self.low, self.up, samples)
+
+    def no_of_samples(self) -> int:
+        """
+        Returns the number of elements in the range of this sampling parameters object
+        :return: The number of elements in the range
+        """
+        return len(self.to_range())
+
+
+class VehModelParameters:
+    """
+    Class that represents the vehicle's constraints and parameters a_max=8, 0.2, 0.2, 10)
+    """
+    def __init__(self, a_max=8, theta_dot_max=0.2, kappa_max=0.2, kappa_dot_max=0.2, veh_length=5.1, veh_width=1.9):
+        self.a_max = a_max
+        self.theta_dot_max = theta_dot_max
+        self.kappa_max = kappa_max
+        self.kappa_dot_max = kappa_dot_max
+        self.veh_length = veh_length
+        self.veh_width = veh_width
+
 
 # planning parameter
 class PlanningParameter:
