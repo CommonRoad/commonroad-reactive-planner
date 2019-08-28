@@ -84,3 +84,5 @@ def extend_trajectory(s, d, s_dot, theta, v, a, duration, dT) -> tuple:
     a_n = np.repeat(a, len(t))
 
     return (s_n, d_n, theta_n, v_n, a_n)
+
+

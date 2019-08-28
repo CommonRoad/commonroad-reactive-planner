@@ -1,6 +1,14 @@
+__author__ = "Christian Pek"
+__copyright__ = "TUM Cyber-Physical Systems Group"
+__credits__ = ["BMW Group CAR@TUM, interACT"]
+__version__ = "0.1"
+__maintainer__ = "Christian Pek"
+__email__ = "Christian.Pek@tum.de"
+__status__ = "Alpha"
+
 
 # commonroad imports
-from commonroad_rp.parameter import VehicleParameter, PlanningParameter, parameter_velocity_reaching, SamplingParameters, VehModelParameters
+from commonroad_rp.parameter import SamplingParameters, VehModelParameters
 from commonroad_rp.trajectory_bundle import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample
 from commonroad_rp.parameter import parameter_velocity_reaching
 from commonroad_rp.polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
@@ -9,8 +17,6 @@ from commonroad_rp.utils import *
 from commonroad.common.validity import *
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 from commonroad.scenario.lanelet import LaneletNetwork, Lanelet
-from commonroad.common.file_reader import CommonRoadFileReader
-from commonroad.visualization.draw_dispatch_cr import draw_object
 from commonroad.prediction.prediction import TrajectoryPrediction
 from commonroad.geometry.shape import Rectangle
 from commonroad.scenario.trajectory import Trajectory,State
@@ -18,10 +24,6 @@ from commonroad.scenario.trajectory import Trajectory,State
 import pycrcc
 from pycrccosy import TrapezoidCoordinateSystem
 from commonroad_ccosy.geometry.trapezoid_coordinate_system import create_coordinate_system_from_polyline
-from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_checker
-from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_object
-import commonroad_ccosy.visualization.draw_dispatch
-from commonroad_cc.visualization.draw_dispatch import draw_object as draw_cc
 
 # python packages
 from typing import List
@@ -31,13 +33,6 @@ import time, warnings
 import os
 
 
-__author__ = "Christian Pek"
-__copyright__ = "TUM Cyber-Physical Systems Group"
-__credits__ = ["BMW Group CAR@TUM, interACT"]
-__version__ = "0.1"
-__maintainer__ = "Christian Pek"
-__email__ = "Christian.Pek@tum.de"
-__status__ = "Alpha"
 
 
 
@@ -239,7 +234,6 @@ class ReactivePlanner(object):
         """
         return self._infeasible_count_kinematics
 
-
     def _create_trajectory_bundle(self, desired_speed: float, x_0_lon: np.array,
                                   x_0_lat: np.array, samp_level: int) -> TrajectoryBundle:
         """
@@ -281,7 +275,7 @@ class ReactivePlanner(object):
                 for d in self._d_sets[samp_level].union({x_0_lat[0]}):
                     end_state_lat = np.array([d, 0.0, 0.0])
                     # SWITCHING TO POSITION DOMAIN FOR LATERAL TRAJECTORY PLANNING
-                    s_lon_goal = trajectory_long.calc_position_at(t) - x_0_lon[0]
+                    s_lon_goal = trajectory_long.evaluate_state_at_tau(t)[0] - x_0_lon[0]
                     trajectory_lat = QuinticTrajectory(tau_0=0, delta_tau=s_lon_goal, x_0=np.array(x_0_lat), x_d=end_state_lat)
                     if trajectory_lat.coeffs is not None:
 
@@ -361,32 +355,36 @@ class ReactivePlanner(object):
         # constants
         _LOW_VEL_MODE = True
 
-        # create time array
+        # create time array and precompute time interval information
         t = np.arange(0, trajectory.trajectory_long.delta_tau + self.dT, self.dT)
-
-        # precompute time interval information
         t2 = np.square(t)
         t3 = t2 * t
         t4 = np.square(t2)
         t5 = t4 * t
-        # compute position, velocity, acceleration
+
+        # compute position, velocity, acceleration from trajectory sample
         s = trajectory.trajectory_long.calc_position(t, t2, t3, t4, t5)  # lon pos
         s_velocity = trajectory.trajectory_long.calc_velocity(t, t2, t3, t4)  # lon velocity
         s_acceleration = trajectory.trajectory_long.calc_acceleration(t, t2, t3)  # lon acceleration
 
-        s1 = s - s[0]
-        s2 = np.square(s1)
-        s3 = s2 * s1
-        s4 = np.square(s2)
-        s5 = s4 * s1
+        # At low speeds, we have to sample the lateral motion over the travelled distance rather than time.
+        if _LOW_VEL_MODE:
+            # compute normalized travelled distance for low velocity mode of lateral planning
+            s1 = s - s[0]
+            s2 = np.square(s1)
+            s3 = s2 * s1
+            s4 = np.square(s2)
+            s5 = s4 * s1
 
-        # d = trajectory.trajectory_lat.calc_position(t, t2, t3, t4, t5)  # lat pos
-        d = trajectory.trajectory_lat.calc_position(s1, s2, s3, s4, s5)  # lat pos
-        # d_velocity = trajectory.trajectory_lat.calc_velocity(t, t2, t3, t4)  # lat velocity
-        d_velocity = trajectory.trajectory_lat.calc_velocity(s1, s2, s3, s4)  # lat velocity
-        # d_acceleration = trajectory.trajectory_lat.calc_acceleration(t, t2, t3)  # lat acceleration
-        d_acceleration = trajectory.trajectory_lat.calc_acceleration(s1, s2, s3)  # lat acceleration
+            d = trajectory.trajectory_lat.calc_position(s1, s2, s3, s4, s5)  # lat pos
+            d_velocity = trajectory.trajectory_lat.calc_velocity(s1, s2, s3, s4)  # lat velocity
+            d_acceleration = trajectory.trajectory_lat.calc_acceleration(s1, s2, s3)  # lat acceleration
+        else:
+            d = trajectory.trajectory_lat.calc_position(t, t2, t3, t4, t5)  # lat pos
+            d_velocity = trajectory.trajectory_lat.calc_velocity(t, t2, t3, t4)  # lat velocity
+            d_acceleration = trajectory.trajectory_lat.calc_acceleration(t, t2, t3)  # lat acceleration
 
+        # Compute cartesian information of trajectory
         x = list()  # [x_0.position[0]]
         y = list()  # [x_0.position[1]]
         theta_gl = list()  # [x_0.orientation]
@@ -429,22 +427,25 @@ class ReactivePlanner(object):
                 dp = d_velocity[i]
                 dpp = d_acceleration[i]
 
-            # add cl orientation
+            # add cl and gl orientation
             if s_velocity[i] > 0.005:
                 if _LOW_VEL_MODE:
                     theta_cl.append(np.arctan2(dp, 1.0))
                 else:
                     theta_cl.append(np.arctan2(d_velocity[i], s_velocity[i]))
+                # add global orientation
+                theta_gl.append(theta_cl[-1] + np.interp(s[i], self._ref_pos, self._theta_ref))
             else:
                 theta_cl.append(np.interp(s[i],self._ref_pos,self._theta_ref))
+                theta_gl.append(theta_cl[-1])
 
-            # add global orientation
-            theta_gl.append(theta_cl[-1] + np.interp(s[i], self._ref_pos, self._theta_ref))
 
-            # Kappa
+
+            # Compute curvature of reference at current position
             k_r = np.interp(s[i], self._ref_pos, self._ref_curv)
             k_r_d = np.interp(s[i], self._ref_pos, self._ref_curv_d)
             # ref_curv_prime = np.gradient(self._ref_curv, self._ref_pos)
+            # compute global curvature based on appendix A of Moritz Werling's PhD thesis
             oneKrD = (1 - k_r * d[i])
             cosTheta = np.cos(theta_cl[-1])
             tanTheta = np.tan(theta_cl[-1])
@@ -454,11 +455,11 @@ class ReactivePlanner(object):
 
             # velocity
             v.append(s_velocity[i] * (oneKrD / (np.cos(theta_cl[-1]))))
+            # account for numerical issues #todo: nevertheless, the position might move
             if v[-1] <= 10 ** -1:
                 v[-1] = 0
 
-            # a.append((v[-1] - v[-2]) / self.dT)
-
+            # compute acceleration
             a.append(s_acceleration[i] * oneKrD / cosTheta + ((s_velocity[i] ** 2) / cosTheta) * (
                         oneKrD * tanTheta * (kappa_gl[-1] * oneKrD / cosTheta - k_r) - (
                             k_r_d * d[i] + k_r * d_velocity[i])))
@@ -474,7 +475,7 @@ class ReactivePlanner(object):
         v = np.array(v)
         a = np.array(a)
 
-        # check if trajectories planning horizon is shorter than expected
+        # check if trajectories planning horizon is shorter than expected and extend if necessary
         if self.horizon > trajectory.trajectory_long.delta_tau:
             # extend trajectory
             s_n, d_n, theta_n, v_n, a_n = extend_trajectory(s[-1], d[-1], s_velocity[-1], theta_cl[-1], v[-1],
@@ -802,47 +803,5 @@ class ReactivePlanner(object):
 
 
 
-if __name__ == '__main__':
-    print('Creating velocity reaching bundle....')
 
-    # Load example scenario ZAM Over
-    crfr = CommonRoadFileReader('../unit_tests/scenarios/ZAM_Over-1_1.xml')
-    scenario, _ = crfr.open()
-    plt.figure(figsize=(25, 10))
-    draw_object(scenario)
-    plt.axis('equal')
-    plt.show(block=False)
-    plt.pause(0.1)
-
-    # create coordinate system
-    reference_path = scenario.lanelet_network.find_lanelet_by_id(1000).center_vertices
-    curvilinear_cosy = create_coordinate_system_from_polyline(reference_path)
-
-    # create collision checker for scenario
-    collision_checker = create_collision_checker(scenario)
-
-    # convert coordinates and create initial state
-    x, y = curvilinear_cosy.convert_to_cartesian_coords(25, 0)
-    x_0 = State(**{'position':np.array([x,y]),'orientation':0.04, 'velocity':10, 'acceleration':0,'yaw_rate':0})
-
-    planner: ReactivePlanner = ReactivePlanner(0.2, 6, 30)
-    planner.set_reference_path(reference_path)
-
-    x_cl = None
-
-    for k in range(0, 18):
-        optimal = planner.plan(x_0, collision_checker, cl_states=x_cl)
-        # convert to CR obstacle
-        ego = planner.convert_cr_trajectory_to_object(optimal[0])
-        draw_object(ego)
-        draw_object(ego.prediction.occupancy_at_time_step(1))
-        plt.pause(0.1)
-
-        x_0 = optimal[0].state_list[1]
-        x_cl = (optimal[2][1], optimal[3][1])
-
-        print("Goal state is: {}".format(optimal[1].state_list[-1]))
-
-    print('Done')
-    plt.show(block=True)
 
