@@ -245,6 +245,15 @@ class PolynomialTrajectory(ABC):
                 5. * self.coeffs[5] * tau4)
 
     def calc_position(self, tau, tau2, tau3, tau4, tau5):
+        """
+        Calculates the positions of the trajectory
+        :param tau: The tau to
+        :param tau2: The squared tau
+        :param tau3: The cubic tau
+        :param tau4: The quartic tau
+        :param tau5: The quintic tau
+        :return: The positions of the trajectory at the specified tau
+        """
         if self.coeffs is None:
             raise ValueError('Coefficients are not determined')
         return (self.coeffs[0] + self.coeffs[1] * tau + self.coeffs[2] * tau2 + self.coeffs[3] * tau3 +

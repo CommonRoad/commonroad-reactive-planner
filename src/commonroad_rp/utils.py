@@ -8,6 +8,9 @@ __status__ = "Alpha"
 
 import numpy as np
 
+from pycrccosy import TrapezoidCoordinateSystem
+from commonroad_ccosy.geometry.trapezoid_coordinate_system import create_coordinate_system_from_polyline
+
 
 
 def compute_orientation_from_polyline(polyline: np.ndarray) -> np.ndarray:
@@ -86,3 +89,36 @@ def extend_trajectory(s, d, s_dot, theta, v, a, duration, dT) -> tuple:
     return (s_n, d_n, theta_n, v_n, a_n)
 
 
+class CoordinateSystem():
+
+    def __init__(self, reference: np.ndarray):
+        self._reference = reference
+        self._ccosy = create_coordinate_system_from_polyline(reference)
+        self._ref_pos = compute_pathlength_from_polyline(reference)
+        self._ref_curv = compute_curvature_from_polyline(reference)
+        self._ref_theta = compute_orientation_from_polyline(reference)
+        self._ref_curv_d = np.gradient(self._ref_curv, self._ref_pos)
+
+    def reference(self) -> np.ndarray:
+        return self._reference
+
+    def ccosy(self) -> TrapezoidCoordinateSystem:
+        return self._ccosy
+
+    def ref_pos(self) -> np.ndarray:
+        return self._ref_pos
+
+    def ref_curv(self) -> np.ndarray:
+        return self._ref_curv
+
+    def ref_curv_d(self) -> np.ndarray:
+        return self._ref_curv_d
+
+    def ref_theta(self) -> np.ndarray:
+        return self._ref_theta
+
+    def convert_to_cartesian_coords(self, s: float, d: float) -> np.ndarray:
+        return self._ccosy.convert_to_cartesian_coords(s, d)
+
+    def convert_to_curvilinear_coords(self, x: float, y: float) -> np.ndarray:
+        return self._ccosy.convert_to_curvilinear_coords(x, y)
