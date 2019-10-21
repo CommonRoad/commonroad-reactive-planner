@@ -89,23 +89,23 @@ class CartesianSample(Sample):
 
     def __init__(self, x: np.ndarray, y: np.ndarray, theta: np.ndarray, v: np.ndarray, a: np.ndarray, kappa: np.ndarray,
                  kappa_dot: np.ndarray):
-        assert val.is_real_number_vector(
-            x), '<CartesianSample/init>: Provided x positions are not valid! x = {}'.format(x)
-        assert val.is_real_number_vector(
-            y, length=len(x)), '<CartesianSample/init>: Provided y positions are not valid! y = {}'.format(y)
-        assert val.is_real_number_vector(
-            theta, length=len(x)), '<CartesianSample/init>: Provided orientations are not valid! theta = {}'.format(
-            theta)
-        assert val.is_real_number_vector(
-            v, length=len(x)), '<CartesianSample/init>: Provided velocities are not valid! v = {}'.format(v)
-        assert val.is_real_number_vector(
-            a, length=len(x)), '<CartesianSample/init>: Provided accelerations are not valid! a = {}'.format(a)
-        assert val.is_real_number_vector(
-            kappa, length=len(x)), '<CartesianSample/init>: Provided curvatures are not valid! kappa = {}'.format(kappa)
-        assert val.is_real_number_vector(
-            kappa_dot,
-            length=len(x)), '<CartesianSample/init>: Provided curvature changes are not valid! kappa_dot = {}'.format(
-            kappa_dot)
+        # assert val.is_real_number_vector(
+        #     x), '<CartesianSample/init>: Provided x positions are not valid! x = {}'.format(x)
+        # assert val.is_real_number_vector(
+        #     y, length=len(x)), '<CartesianSample/init>: Provided y positions are not valid! y = {}'.format(y)
+        # assert val.is_real_number_vector(
+        #     theta, length=len(x)), '<CartesianSample/init>: Provided orientations are not valid! theta = {}'.format(
+        #     theta)
+        # assert val.is_real_number_vector(
+        #     v, length=len(x)), '<CartesianSample/init>: Provided velocities are not valid! v = {}'.format(v)
+        # assert val.is_real_number_vector(
+        #     a, length=len(x)), '<CartesianSample/init>: Provided accelerations are not valid! a = {}'.format(a)
+        # assert val.is_real_number_vector(
+        #     kappa, length=len(x)), '<CartesianSample/init>: Provided curvatures are not valid! kappa = {}'.format(kappa)
+        # assert val.is_real_number_vector(
+        #     kappa_dot,
+        #     length=len(x)), '<CartesianSample/init>: Provided curvature changes are not valid! kappa_dot = {}'.format(
+        #     kappa_dot)
 
         self._x = x
         self._y = y
@@ -239,13 +239,13 @@ class CurviLinearSample(Sample):
     """
 
     def __init__(self, s: np.ndarray, d: np.ndarray, theta: np.ndarray, dd=None, ddd=None, ss=None, sss=None):
-        assert val.is_real_number_vector(
-            s), '<CurvilinearSample/init>: Provided s positions are not valid! s = {}'.format(s)
-        assert val.is_real_number_vector(
-            d, length=len(s)), '<CurvilinearSample/init>: Provided d positions are not valid! d = {}'.format(d)
-        assert val.is_real_number_vector(
-            theta, length=len(s)), '<CurvilinearSample/init>: Provided orientations are not valid! theta = {}'.format(
-            theta)
+        # assert val.is_real_number_vector(
+        #     s), '<CurvilinearSample/init>: Provided s positions are not valid! s = {}'.format(s)
+        # assert val.is_real_number_vector(
+        #     d, length=len(s)), '<CurvilinearSample/init>: Provided d positions are not valid! d = {}'.format(d)
+        # assert val.is_real_number_vector(
+        #     theta, length=len(s)), '<CurvilinearSample/init>: Provided orientations are not valid! theta = {}'.format(
+        #     theta)
 
         self._s = s
         self._d = d

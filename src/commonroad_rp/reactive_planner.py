@@ -31,6 +31,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time, warnings
 import os
+import cProfile
 
 
 class ReactivePlanner(object):
@@ -311,15 +312,11 @@ class ReactivePlanner(object):
 
             for i in range(0, len(trajectory_bundle), step):
                 # trajectory = _compute_cartesian_trajectory(trajectory_bundle[i], self.dT, self._ref_pos,self._ref_curv,self._re)
-                color = (trajectory_bundle[i].total_cost - self._min_cost) / (self._max_cost - self._min_cost)
-                color = (color, color, color)
+                #color = (trajectory_bundle[i].total_cost - self._min_cost) / (self._max_cost - self._min_cost)
+                #color = (color, color, color)
                 color = 'gray'
                 plt.plot(trajectory_bundle[i].cartesian.x, trajectory_bundle[i].cartesian.y,
                          color=color)
-                if trajectory_bundle[i].ext_cartesian is not None:
-                    plt.plot(trajectory_bundle[i].ext_cartesian.x,
-                             trajectory_bundle[i].ext_cartesian.y,
-                             color=color)
                 # plt.show()
 
     def _compute_initial_states(self, x_0: State) -> (np.ndarray, np.ndarray):
@@ -395,9 +392,14 @@ class ReactivePlanner(object):
 
             # get optimal trajectory
             t0 = time.time()
+            #profiler = cProfile.Profile()
+            #profiler.enable()
             optimal_trajectory = self._get_optimal_trajectory(bundle, cc)
             print('Checked trajectories in {} seconds'.format(time.time()-t0))
-
+            #profiler.disable()
+            #profiler.print_stats("time")
+            #self.draw_trajectory_set(bundle.trajectories)
+            #plt.pause(50)
             # print statistics
             print('<ReactivePlanner>: Rejected {} infeasible trajectories due to kinematics'.format(
                 self.no_of_infeasible_trajectories_kinematics()))
@@ -488,6 +490,18 @@ class ReactivePlanner(object):
         # constants
         _LOW_VEL_MODE = True
 
+
+
+        #time_array = list()
+        #time_array.append(np.arange(0, self.horizon+self.dT, self.dT))
+        #time_array.append(np.square(time_array[0]))
+        #time_array.append(time_array[1] * time_array[0])
+        #time_array.append(np.square(time_array[1]))
+        #time_array.append(time_array[3] * time_array[0])
+
+        # lookup
+        #idx = np.argmin(time_array[0] < trajectory.trajectory_long.delta_tau)
+
         # create time array and precompute time interval information
         t = np.arange(0, trajectory.trajectory_long.delta_tau + self.dT, self.dT)
         t2 = np.square(t)
@@ -518,14 +532,14 @@ class ReactivePlanner(object):
             d_acceleration = trajectory.trajectory_lat.calc_acceleration(t, t2, t3)  # lat acceleration
 
         # Compute cartesian information of trajectory
-        x = list()  # [x_0.position[0]]
-        y = list()  # [x_0.position[1]]
-        theta_gl = list()  # [x_0.orientation]
-        theta_cl = list()  # [x_0.orientation - np.interp(s[0], self._ref_pos, self._theta_ref)]
-        v = list()  # [x_0.v]
-        a = list()  # [x_0.a]
-        kappa_gl = list()  # [x_0.kappa]
-        kappa_cl = list()  # [x_0.kappa - np.interp(s[0], self._ref_pos, self._ref_curv)]
+        x = np.zeros(len(s))  # [x_0.position[0]]
+        y = np.zeros(len(s))  # [x_0.position[1]]
+        theta_gl = np.zeros(len(s))  # [x_0.orientation]
+        theta_cl = np.zeros(len(s))  # [x_0.orientation - np.interp(s[0], self._ref_pos, self._theta_ref)]
+        v = np.zeros(len(s))  # [x_0.v]
+        a = np.zeros(len(s))  # [x_0.a]
+        kappa_gl = np.zeros(len(s))  # [x_0.kappa]
+        kappa_cl = np.zeros(len(s))  # [x_0.kappa - np.interp(s[0], self._ref_pos, self._ref_curv)]
         for i in range(0, len(s)):
             # compute Global position
             try:
@@ -533,8 +547,8 @@ class ReactivePlanner(object):
             except ValueError:
                 # outside of projection domain
                 return False
-            x.append(pos[0])
-            y.append(pos[1])
+            x[i] = pos[0]
+            y[i] = pos[1]
 
             # compute orientations
             dp = None
@@ -560,59 +574,68 @@ class ReactivePlanner(object):
                 dp = d_velocity[i]
                 dpp = d_acceleration[i]
 
+
+            s_idx = np.argmin(np.abs(self._co.ref_pos() - s[i]))
+            if self._co.ref_pos()[s_idx] < s[i]:
+                s_idx += 1
+            s_lambda = (self._co.ref_pos()[s_idx]-s[i])/(self._co.ref_pos()[s_idx+1]-self._co.ref_pos()[s_idx])
+
+
+
             # add cl and gl orientation
             if s_velocity[i] > 0.005:
                 if _LOW_VEL_MODE:
-                    theta_cl.append(np.arctan2(dp, 1.0))
+                    theta_cl[i] = np.arctan2(dp, 1.0)
                 else:
-                    theta_cl.append(np.arctan2(d_velocity[i], s_velocity[i]))
+                    theta_cl[i] = np.arctan2(d_velocity[i], s_velocity[i])
                 # add global orientation
-                theta_gl.append(theta_cl[-1] + np.interp(s[i], self._co.ref_pos(), self._co.ref_theta()))
+                #theta_gl.append(theta_cl[-1] + np.interp(s[i], self._co.ref_pos(), self._co.ref_theta()))
+                theta_gl[i] = theta_cl[i] + (self._co.ref_theta()[s_idx+1]-self._co.ref_theta()[s_idx])*s_lambda+self._co.ref_theta()[s_idx]
+                #print("Orig: = {}".format(np.interp(s[i], self._co.ref_pos(), self._co.ref_theta())))
+                #print("New: = {}".format((self._co.ref_theta()[s_idx+1]-self._co.ref_theta()[s_idx])*s_lambda+self._co.ref_theta()[s_idx]))
+
             else:
-                theta_cl.append(np.interp(s[i], self._co.ref_pos(), self._co.ref_theta()))
-                theta_gl.append(theta_cl[-1])
+                #theta_cl.append(np.interp(s[i], self._co.ref_pos(), self._co.ref_theta()))
+                theta_cl[i] = (self._co.ref_theta()[s_idx+1]-self._co.ref_theta()[s_idx])*s_lambda+self._co.ref_theta()[s_idx]
+                theta_gl[i] = theta_cl[i]
 
             # Compute curvature of reference at current position
-            k_r = np.interp(s[i], self._co.ref_pos(), self._co.ref_curv())
-            k_r_d = np.interp(s[i], self._co.ref_pos(), self._co.ref_curv_d())
+            #k_r = np.interp(s[i], self._co.ref_pos(), self._co.ref_curv())
+            k_r = (self._co.ref_curv()[s_idx+1]-self._co.ref_curv()[s_idx])*s_lambda+self._co.ref_curv()[s_idx]
+            #k_r_d = np.interp(s[i], self._co.ref_pos(), self._co.ref_curv_d())
+            k_r_d = (self._co.ref_curv_d()[s_idx+1]-self._co.ref_curv_d()[s_idx])*s_lambda+self._co.ref_curv_d()[s_idx]
             # ref_curv_prime = np.gradient(self._ref_curv, self._ref_pos)
             # compute global curvature based on appendix A of Moritz Werling's PhD thesis
             oneKrD = (1 - k_r * d[i])
-            cosTheta = np.cos(theta_cl[-1])
-            tanTheta = np.tan(theta_cl[-1])
+            cosTheta = np.cos(theta_cl[i])
+            tanTheta = np.tan(theta_cl[i])
             kappa = (dpp + k_r * dp * tanTheta) * cosTheta * (cosTheta / oneKrD) ** 2 + (cosTheta / oneKrD) * k_r
-            kappa_gl.append(kappa)
-            kappa_cl.append(kappa_gl[-1] - k_r)
+            kappa_gl[i] = kappa
+            kappa_cl[i] = kappa_gl[i] - k_r
 
             # velocity
-            v.append(s_velocity[i] * (oneKrD / (np.cos(theta_cl[-1]))))
+            v[i] = s_velocity[i] * (oneKrD / (np.cos(theta_cl[i])))
             # account for numerical issues #todo: nevertheless, the position might move
-            if v[-1] <= 10 ** -1:
-                v[-1] = 0
+            #if v[i] <= 10 ** -1:
+            #    v[i] = 0
 
             # compute acceleration
-            a.append(s_acceleration[i] * oneKrD / cosTheta + ((s_velocity[i] ** 2) / cosTheta) * (
-                    oneKrD * tanTheta * (kappa_gl[-1] * oneKrD / cosTheta - k_r) - (
-                    k_r_d * d[i] + k_r * d_velocity[i])))
+            a[i] = s_acceleration[i] * oneKrD / cosTheta + ((s_velocity[i] ** 2) / cosTheta) * (
+                    oneKrD * tanTheta * (kappa_gl[i] * oneKrD / cosTheta - k_r) - (
+                    k_r_d * d[i] + k_r * d_velocity[i]))
 
             # check kinematics to already discard infeasible trajectories
-            if not self._check_vehicle_model(v[-1], a[-1],
-                                             (theta_gl[-1] - theta_gl[-2]) / self.dT if len(theta_gl) > 1 else 0.,
-                                             kappa_gl[-1],
-                                             (kappa_gl[-1] - kappa_gl[-2]) / self.dT if len(kappa_gl) > 1 else 0.):
+            if not self._check_vehicle_model(v[i], a[i], kappa_gl[i], (kappa_gl[i] - kappa_gl[i-1]) / self.dT if i > 0 else 0.):
                 return False
 
-        # convert to array
-        v = np.array(v)
-        a = np.array(a)
-
         # store Cartesian trajectory
-        trajectory.cartesian = CartesianSample(np.array(x), np.array(y), np.array(theta_gl), np.array(v), np.array(a), np.array(kappa_gl), np.append([0], np.diff(kappa_gl)))
+        trajectory.cartesian = CartesianSample(x, y, theta_gl, v, a, kappa_gl, np.append([0], np.diff(kappa_gl)))
 
         # store Curvilinear trajectory
         # theta_cl = trajectory.cartesian.theta - np.interp(trajectory.curvilinear.s, self._ref_pos, self._ref_curv)
-        trajectory.curvilinear = CurviLinearSample(np.array(s), np.array(d), np.array(theta_cl), ss=s_velocity, sss=s_acceleration, dd=d_velocity,
+        trajectory.curvilinear = CurviLinearSample(s, d, theta_cl, ss=s_velocity, sss=s_acceleration, dd=d_velocity,
                                              ddd=d_acceleration)
+
 
         # check if trajectories planning horizon is shorter than expected and extend if necessary # ToDo: int conversion may be wrong
         if self.horizon > trajectory.trajectory_long.delta_tau:
@@ -620,7 +643,7 @@ class ReactivePlanner(object):
 
         return True
 
-    def _check_vehicle_model(self, v, a, theta_dot, kappa, kappa_dot):
+    def _check_vehicle_model(self, v: float, a: float, kappa: float, kappa_dot: float):
         """
         Checks if a given state is feasible according to the kinematic single track model (simplified)
         :param v: Is provided velocity >= 0
@@ -634,35 +657,31 @@ class ReactivePlanner(object):
 
         feasible = True
 
-        # Check orientation
-        feasible &= np.abs(theta_dot) <= self.constraints.theta_dot_max / self.dT
-        if _DEBUG and not feasible:
-            print('Theta_dot = {}'.format(theta_dot))
-            return False
-
         # Check curvature
-        feasible &= np.abs(kappa) <= self.constraints.kappa_max
-        if _DEBUG and not feasible:
-            print('Kappa = {}'.format(kappa))
+        feasible &= abs(kappa) <= self.constraints.kappa_max
+        if not feasible:
+            if _DEBUG:
+                print('Kappa = {}'.format(kappa))
             return False
 
         # Check kappa_dot
-        feasible &= np.abs(kappa_dot) <= self.constraints.kappa_dot_max
-        if _DEBUG and not feasible:
-            print('KappaDOT = {}'.format(kappa_dot))
+        feasible &= abs(kappa_dot) <= self.constraints.kappa_dot_max
+        if not feasible:
+            if _DEBUG:
+                print('KappaDOT = {}'.format(kappa_dot))
             return False
 
         # Check velocity
-        feasible &= v >= -0.0
-        if _DEBUG and not feasible:
-            print('Velocity = {}'.format(v))
+        feasible &= v >= -0.1
+        if not feasible:
+            if _DEBUG:
+                print('Velocity = {}'.format(v))
             return False
 
         # check accelerations
-        feasible &= np.abs(a) <= self.constraints.a_max
-        if _DEBUG and not feasible:
+        feasible &= abs(a) <= self.constraints.a_max
+        if _DEBUG :
             print('Acceleration = {}'.format(a))
-            return False
 
         return feasible
 
@@ -674,6 +693,8 @@ class ReactivePlanner(object):
 
         # check kinematics of each trajectory
         trajectory_list = list()
+        #profiler = cProfile.Profile()
+        #profiler.enable()
         for trajectory in trajectory_bundle.trajectories:
             # check kinematics of trajectory
             if self.check_kinematics(trajectory):
@@ -681,6 +702,9 @@ class ReactivePlanner(object):
             else:
                 # write statistics
                 self._infeasible_count_kinematics += 1
+
+        #profiler.disable()
+        #profiler.print_stats("time")
 
         # set feasible trajectories in bundle
         trajectory_bundle.trajectories = trajectory_list
@@ -703,60 +727,17 @@ class ReactivePlanner(object):
         :param cc: The CR collision checker object
         :return: True if collision-free, False otherwise
         """
-        # create a collision object using the trajectory prediction of the ego vehicle
-        co = pycrcc.TimeVariantCollisionObject(0)
-
         pos1 = trajectory.curvilinear.s if self._collision_check_in_cl else trajectory.cartesian.x
         pos2 = trajectory.curvilinear.d if self._collision_check_in_cl else trajectory.cartesian.y
         theta = trajectory.curvilinear.theta if self._collision_check_in_cl else trajectory.cartesian.theta
 
+        # check each pose for collisions
         for i in range(len(pos1)):
-            co.append_obstacle(pycrcc.RectOBB(0.5 * self._length, 0.5 * self._width, theta[i], pos1[i], pos2[i]))
+            if cc.collide(pycrcc.RectOBB(0.5 * self._length, 0.5 * self._width, theta[i], pos1[i], pos2[i])):
+                return False
 
-        # check if trajectory has been extended and check that for collisions as well:
-        #if trajectory.ext_cartesian is not None:
-        #    pos1 = trajectory.ext_curvilinear.s if self._collision_check_in_cl else trajectory.ext_cartesian.x
-        #    pos2 = trajectory.ext_curvilinear.d if self._collision_check_in_cl else trajectory.ext_cartesian.y
-        #    theta = trajectory.ext_curvilinear.theta if self._collision_check_in_cl else trajectory.ext_cartesian.theta
+        return True
 
-        #    for i in range(len(pos1)):
-        #        co.append_obstacle(pycrcc.RectOBB(0.5 * self._length, 0.5 * self._width, theta[i], pos1[i], pos2[i]))
-
-        return not cc.collide(co)
-
-    def _get_feasible_trajectories(self, trajectory_bundle: TrajectoryBundle, cc: object,
-                                   x_0: State) -> TrajectoryBundle:
-        """
-        Checks the feasibility of the trajectories within a trajectory bundle
-        :param trajectory_bundle: The trajectory bundle to check
-        :return: The set of feasible trajectories
-        """
-
-        trajectories = trajectory_bundle.trajectory_bundle
-
-        # Create new trajectory bundle
-        feasible_trajectories = TrajectoryBundle(trajectory_bundle.params)
-
-        print('<ReactivePlanner>: Checking {} trajectories for feasibility!'.format(len(trajectories)))
-
-        # reset statistics
-        self._infeasible_count_collision = 0
-        self._infeasible_count_kinematics = 0
-
-        t0 = time.time()
-
-        # Check feasibility of trajectories
-        for traj in trajectories:
-            if self._feasible_trajectory(traj, cc):
-                feasible_trajectories.add_trajectory(traj)
-
-        t1 = time.time()
-        total = t1 - t0
-
-        print('<ReactivePlanner>: Found {} feasible trajectories in {} s!'.format(
-            len(feasible_trajectories.trajectory_bundle), total))
-
-        return feasible_trajectories
 
     def convert_cr_trajectory_to_object(self, trajectory: Trajectory):
         """
