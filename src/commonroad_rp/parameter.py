@@ -144,6 +144,24 @@ class VehModelParameters:
         self.veh_width = veh_width
 
 
+# planning parameter
+class PlanningParameter:
+    k_long = None
+    k_lat = None
+
+    k_jerk_lon = None
+    k_jerk_lat = None
+    k_time = None
+    k_distance = None
+
+    prediction_horizon = None
+    speed_limit = None
+
+    t_step_size = None
+    lat_step_size = None
+    long_step_size = None
+
+
 # vehicle parameter
 class VehicleParameter:
     jerk_long_max = None

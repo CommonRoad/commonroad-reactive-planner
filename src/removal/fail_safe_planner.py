@@ -5,17 +5,17 @@ import timeit
 import os
 import multiprocessing
 import signal
-from my_process import MyProcess
+from removal.my_process import MyProcess
 
-from combined_trajectory import CombinedPolynomialTrajectory
-from create_trajectory_bundle import position_reaching_bundle
-from sampling_area import SamplingArea
+from removal.combined_trajectory import CombinedPolynomialTrajectory
+from removal.create_trajectory_bundle import position_reaching_bundle
+from removal.sampling_area import SamplingArea
 from commonroad.scenario.trajectory import Trajectory
 from commonroad.prediction.prediction import TrajectoryPrediction
 from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_checker, create_collision_object
 from commonroad.prediction.spot_prediction import SpotPrediction
 from commonroad.geometry.shape import Rectangle
-from utils import create_coordinate_systems_for_lanelet_id, binary_search_indices
+from removal.utils import create_coordinate_systems_for_lanelet_id, binary_search_indices
 from parameter import VehicleParameter
 
 

@@ -6,9 +6,9 @@ from commonroad.common.file_reader import CommonRoadFileReader
 from commonroad.common.solution_writer import CommonRoadSolutionWriter
 from commonroad.scenario.trajectory import Trajectory
 
-from plot_trajectories import plot_sequence, create_video
-from trajectory_tree import TrajectoryTree
-from fail_safe_planner import FailSafePlanner
+from removal.plot_trajectories import plot_sequence, create_video
+from removal.trajectory_tree import TrajectoryTree
+from removal.fail_safe_planner import FailSafePlanner
 
 
 if __name__ == '__main__':

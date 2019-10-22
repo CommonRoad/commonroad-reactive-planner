@@ -1,6 +1,6 @@
 import unittest
 from commonroad.common.file_reader import CommonRoadFileReader
-from trajectory_tree import TrajectoryTree
+from removal.trajectory_tree import TrajectoryTree
 
 
 class TestEndLaneId(unittest.TestCase):

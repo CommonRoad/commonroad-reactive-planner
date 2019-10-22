@@ -4,11 +4,11 @@ from enum import Enum, unique
 from typing import List, Union
 from functools import total_ordering
 
-from create_trajectory_bundle import velocity_reaching_bundle
-from combined_trajectory import CombinedPolynomialTrajectory
-from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_checker, create_collision_object
+from removal.create_trajectory_bundle import velocity_reaching_bundle
+from removal.combined_trajectory import CombinedPolynomialTrajectory
+from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_checker
 from commonroad.common.util import Interval
-from utils import create_coordinate_systems_for_lanelet_id, end_lane_id, lanelet_passed
+from removal.utils import create_coordinate_systems_for_lanelet_id, end_lane_id
 
 
 @unique

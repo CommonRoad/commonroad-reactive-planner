@@ -1,7 +1,7 @@
 import unittest
 from commonroad.common.file_reader import CommonRoadFileReader
-from utils import lanelet_passed, end_lane_id
-from trajectory_tree import TrajectoryTree
+from removal.utils import lanelet_passed, end_lane_id
+from removal.trajectory_tree import TrajectoryTree
 
 
 class TestLaneletPassed(unittest.TestCase):

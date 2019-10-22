@@ -7,7 +7,7 @@ from commonroad.geometry.shape import Rectangle
 from commonroad_ccosy.geometry.util import compute_curvature_from_polyline, calculate_orientation_from_polyline
 from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_object
 from parameter import VehicleParameter
-from utils import LaneCoordinateSystem, interpolate_lane_vertices
+from removal.utils import LaneCoordinateSystem, interpolate_lane_vertices
 
 
 class CombinedPolynomialTrajectory(Trajectory):

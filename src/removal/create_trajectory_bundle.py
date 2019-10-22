@@ -1,7 +1,6 @@
 import numpy as np
 
 from trajectory_bundle import TrajectoryBundle, TrajectorySample
-from sampling_area import SamplingArea
 from parameter import parameter_velocity_reaching, parameter_position_reaching
 from polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
 

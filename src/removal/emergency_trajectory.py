@@ -4,7 +4,7 @@ from trajectory_params_bundle import TrajectoryParamsBundle
 from polynomial_trajectory import QuinticTrajectory
 from parameter import parameter_velocity_keeping
 import numpy as np
-from combined_trajectory import CombinedPolynomialTrajectory
+from removal.combined_trajectory import CombinedPolynomialTrajectory
 from shapely.geometry import Polygon
 from commonroad_ccosy.geometry.trapezoid_coordinate_system import create_coordinate_system_from_polyline
 import scipy.interpolate as si
