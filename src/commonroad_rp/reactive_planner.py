@@ -18,7 +18,6 @@ import numpy as np
 from commonroad.common.validity import *
 from commonroad.geometry.shape import Rectangle
 from commonroad.prediction.prediction import TrajectoryPrediction
-from commonroad.scenario.lanelet import LaneletNetwork, Lanelet
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 from commonroad.scenario.trajectory import Trajectory, State
 
@@ -26,8 +25,8 @@ from commonroad.scenario.trajectory import Trajectory, State
 from commonroad_rp.parameter import DefFailSafeSampling, VehModelParameters
 from commonroad_rp.parameter import parameter_velocity_reaching
 from commonroad_rp.polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
-from commonroad_rp.trajectories import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample, \
-    DefaultCostFunction
+from commonroad_rp.trajectories import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample
+from commonroad_rp.cost_function import DefaultCostFunctionFailSafe
 from commonroad_rp.utils import CoordinateSystem
 
 
@@ -62,9 +61,6 @@ class ReactivePlanner(object):
         # store collision checker coordinate system information
         self._collision_check_in_cl = collision_check_in_cl
 
-        # sampling levels
-        self._sampling_level = 4
-
         # store desired velocity
         self._desired_speed = v_desired
         self._desired_d = 0.
@@ -76,46 +72,12 @@ class ReactivePlanner(object):
         self._sampling_t = fs_sampling.t_samples
         self._sampling_v = fs_sampling.v_samples
 
-        # compute sampling sets
-        #self._setup_sampling_sets()
+        # sampling levels
+        self._sampling_level = fs_sampling.max_iteration
 
     def set_reference_path(self, reference_path: np.ndarray):
         self._co: CoordinateSystem = CoordinateSystem(reference_path)
 
-    def _setup_sampling_sets(self):
-        """
-        Sets up the sampling sets for planning (needs further refining)
-        """
-
-        v_sets = list()
-        d_sets = list()
-        t_sets = list()
-        for i in range(self._sampling_level):
-            v_interval = self._sampling_v.to_range(i + 1)
-            d_interval = self._sampling_d.to_range(i + 1)  # search with d=0 first
-            # if start is self.dT => often results in singularities in linalg
-            if i == 0:
-                t_interval = np.array([self._sampling_t.up])  # to_range(i+1)
-            else:
-                t_interval = self._sampling_t.to_range(i)
-
-            # make sets and compute difference
-            vs = set(v_interval.flatten())
-            ds = set(d_interval.flatten())
-            ts = set(t_interval.flatten())
-
-            # for j in range(i):
-            #     # vs = vs - v_sets[j]
-            #     ds = ds - d_sets[j]
-            #     # ts = ts - t_sets[j]
-
-            v_sets.append(vs)
-            d_sets.append(ds)
-            t_sets.append(ts)
-
-        self._v_sets = v_sets
-        self._d_sets = d_sets
-        self._t_sets = t_sets
 
     def no_of_samples(self, samp_level: int) -> int:
         """
@@ -170,7 +132,6 @@ class ReactivePlanner(object):
                 trajectory_long = QuarticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lon), x_d=np.array([v, 0]))
 
                 # Sample lateral end states (add x_0_lat to sampled states)
-                print(self._sampling_t.to_range(samp_level).union({x_0_lat[0]}))
                 if trajectory_long.coeffs is not None:
                     for d in self._sampling_t.to_range(samp_level).union({x_0_lat[0]}):
                         end_state_lat = np.array([d, 0.0, 0.0])
@@ -184,7 +145,7 @@ class ReactivePlanner(object):
 
         # perform pre check and order trajectories according their cost
         trajectory_bundle = TrajectoryBundle(trajectories, params,
-                                             cost_function=DefaultCostFunction(self._desired_speed))
+                                             cost_function=DefaultCostFunctionFailSafe())
 
         return trajectory_bundle
 
@@ -195,15 +156,10 @@ class ReactivePlanner(object):
         :return:
         """
         if trajectory_bundle is not None:
-
             for i in range(0, len(trajectory_bundle), step):
-                # trajectory = _compute_cartesian_trajectory(trajectory_bundle[i], self.dT, self._ref_pos,self._ref_curv,self._re)
-                # color = (trajectory_bundle[i].total_cost - self._min_cost) / (self._max_cost - self._min_cost)
-                # color = (color, color, color)
                 color = 'gray'
                 plt.plot(trajectory_bundle[i].cartesian.x, trajectory_bundle[i].cartesian.y,
                          color=color)
-                # plt.show()
 
     def _compute_initial_states(self, x_0: State) -> (np.ndarray, np.ndarray):
         """
@@ -272,6 +228,7 @@ class ReactivePlanner(object):
         while optimal_trajectory is None and i < self._sampling_level:
             print('<ReactivePlanner>: Starting at sampling density {} of {}'.format(i + 1, self._sampling_level))
             print('<ReactivePlanner>: Sampling {} trajectories'.format(self.no_of_samples(i)))
+
             # plan trajectory bundle
             bundle = self._create_trajectory_bundle(self._desired_speed, x_0_lon, x_0_lat, samp_level=i)
 
@@ -280,7 +237,7 @@ class ReactivePlanner(object):
             # profiler = cProfile.Profile()
             # profiler.enable()
             optimal_trajectory = self._get_optimal_trajectory(bundle, cc)
-            print('Checked trajectories in {} seconds'.format(time.time() - t0))
+            print('<ReactivePlanner>: Checked trajectories in {} seconds'.format(time.time() - t0))
             # profiler.disable()
             # profiler.print_stats("time")
             # self.draw_trajectory_set(bundle.trajectories)
@@ -302,7 +259,7 @@ class ReactivePlanner(object):
             print('<ReactivePlanner>: Cannot find trajectory with default sampling parameters. '
                   'Switching to emergency mode!')
         else:
-            print('Found optimal trajectory with costs = {}, which corresponds to {} percent of seen costs'.format(
+            print('<ReactivePlanner>: Found optimal trajectory with costs = {}, which corresponds to {} percent of seen costs'.format(
                 optimal_trajectory.cost,
                 ((optimal_trajectory.cost - bundle.min_costs().cost) / (
                             bundle.max_costs().cost - bundle.min_costs().cost))))
@@ -548,12 +505,12 @@ class ReactivePlanner(object):
                     collide = True
                     break
             if not collide:
+                profiler.disable()
+                profiler.print_stats("time")
                 return trajectory
-
 
         profiler.disable()
         profiler.print_stats("time")
-
         return None
 
 

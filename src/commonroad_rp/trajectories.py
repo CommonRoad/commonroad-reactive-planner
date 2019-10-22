@@ -500,32 +500,4 @@ class TrajectoryBundle:
         return len(self._trajectory_bundle) == 0
 
 
-class CostFunction(ABC):
 
-    def __init__(self):
-        pass
-
-    @abstractmethod
-    def evaluate(self, trajectory: TrajectorySample) -> float:
-        pass
-
-
-class DefaultCostFunction(CostFunction):
-
-    def __init__(self, desired_speed):
-        self.desired_speed = desired_speed
-
-    def evaluate(self, trajectory: TrajectorySample):
-        # desired_time = self.trajectory_long.desired_horizon
-
-        # acceleration costs
-        costs = np.sum((1 * trajectory.cartesian.a) ** 2)
-        # velocity costs
-        costs += np.sum((5 * (trajectory.cartesian.v - self.desired_speed)) ** 2)
-        # distance costs
-        costs += np.sum((0.15 * trajectory.curvilinear.d) ** 2) + (20 * trajectory.curvilinear.d[-1]) ** 2
-        # orientation costs
-        costs += np.sum((0.1 * np.abs(trajectory.curvilinear.theta)) ** 2) + (
-                    5 * (np.abs(trajectory.curvilinear.theta[-1]))) ** 2
-
-        return costs

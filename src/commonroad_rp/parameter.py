@@ -119,7 +119,7 @@ class SamplingSet(ABC):
 
     @property
     def max_iteration(self) -> int:
-        return self._s_samples.no_of_samples()
+        return self._t_samples.no_of_samples()
 
 
 
