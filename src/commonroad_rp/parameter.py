@@ -10,8 +10,9 @@ __status__ = "Alpha"
 from commonroad.common.validity import *
 
 import numpy as np
+from abc import ABC, abstractmethod
 
-class SamplingParameters(object):
+class Sampling(ABC):
     """
     Class that represents the sampling parameters for planning
     """
@@ -20,7 +21,7 @@ class SamplingParameters(object):
         # Check validity of input
         assert is_real_number(low), '<SamplingParameters>: Lower sampling bound not valid! low = {}'.format(low)
         assert is_real_number(up), '<SamplingParameters>: Upper sampling bound not valid! up = {}'.format(up)
-        assert np.greater(up,
+        assert np.greater_equal(up,
                           low), '<SamplingParameters>: Upper sampling bound is not greater than lower bound! up = {} , low = {}'.format(
             up, low)
         assert is_positive(n_samples), '<SamplingParameters>: Step size is not valid! step size = {}'.format(n_samples)
@@ -29,31 +30,106 @@ class SamplingParameters(object):
 
         self.low = low
         self.up = up
-        self.n_samples = n_samples
+        self._n_samples = n_samples
+        self._db: list = list()
+        self._setup()
 
-    def to_range(self, sampling_factor: int=1) -> np.ndarray:
+    @abstractmethod
+    def _setup(self):
+        pass
+
+
+    def to_range(self, sampling_factor: int=1) -> set:
         """
         Convert to numpy range object as [center-low,center+up] in "step" steps
         :param sampling_factor: Multiplicative factor for number of samples
         :return: The range [low,up] in "n_samples*sampling_factor" steps
         """
-        if divmod(self.n_samples*sampling_factor,2) == 0:
-            samples = self.n_samples*sampling_factor + 1
-        else:
-            samples = self.n_samples * sampling_factor + 1
-
-        if sampling_factor == 0:
-            return np.array([(self.up+self.low)/2])
-        else:
-            return np.linspace(self.low, self.up, samples)
+        assert 0<sampling_factor<=self.no_of_samples()
+        return self._db[sampling_factor]
 
     def no_of_samples(self) -> int:
         """
         Returns the number of elements in the range of this sampling parameters object
         :return: The number of elements in the range
         """
-        return len(self.to_range())
+        return self._n_samples
 
+
+
+class VelocitySampling(Sampling):
+
+    def __init__(self, low: float, up: float, n_samples: int):
+        super(VelocitySampling,self).__init__(low, up, n_samples)
+
+    def _setup(self):
+        removal = set()
+        for i in range(self.no_of_samples()):
+            samp = set(np.linspace(self.low,self.up,i+3))
+            self._db.append(set(np.linspace(self.low,self.up,i+3)))
+
+class PositionSampling(Sampling):
+
+    def __init__(self, low: float, up: float, n_samples: int):
+        super(PositionSampling, self).__init__(low, up, n_samples)
+
+    def _setup(self):
+        removal = set()
+        for i in range(self.no_of_samples()):
+            samp = set(np.linspace(self.low, self.up, i + 3))
+            self._db.append(samp - removal)
+            removal |= samp
+
+
+class TimeSampling(Sampling):
+
+    def __init__(self, low: float, up: float, n_samples: int):
+        super(TimeSampling, self).__init__(low, up, n_samples)
+
+    def _setup(self):
+        removal = set()
+        for i in range(self.no_of_samples()):
+            samp = set(np.linspace(self.low, self.up, i + 3))
+            self._db.append(samp - removal)
+            removal |= samp
+
+
+class SamplingSet(ABC):
+
+    def __init__(self, t_samples: TimeSampling, d_samples: PositionSampling, v_samples: VelocitySampling):
+        assert isinstance(t_samples, TimeSampling)
+        assert isinstance(d_samples, PositionSampling) and t_samples.no_of_samples()==d_samples.no_of_samples()
+        assert isinstance(v_samples, VelocitySampling) and t_samples.no_of_samples()==v_samples.no_of_samples()
+
+        self._t_samples = t_samples
+        self._d_samples = d_samples
+        self._v_samples = v_samples
+
+    @property
+    def t_samples(self) -> TimeSampling:
+        return self._t_samples
+
+    @property
+    def d_samples(self) -> PositionSampling:
+        return self._d_samples
+
+    @property
+    def v_samples(self) -> VelocitySampling:
+        return self._v_samples
+
+    @property
+    def max_iteration(self) -> int:
+        return self._s_samples.no_of_samples()
+
+
+
+class DefFailSafeSampling(SamplingSet):
+
+    def __init__(self):
+        s_samples = PositionSampling(-2.5,2.5,5)
+        d_samples = PositionSampling(-2.5,2.5,5)
+        v_samples = VelocitySampling(0,0,5)
+        super(DefFailSafeSampling, self).__init__(s_samples,d_samples,v_samples)
 
 class VehModelParameters:
     """

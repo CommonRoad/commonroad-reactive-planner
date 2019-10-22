@@ -6,11 +6,12 @@ __maintainer__ = "Christian Pek"
 __email__ = "Christian.Pek@tum.de"
 __status__ = "Alpha"
 
+
+# python packages
+from typing import List
 import cProfile
 import pycrcc
 import time
-# python packages
-from typing import List
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -22,17 +23,16 @@ from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 from commonroad.scenario.trajectory import Trajectory, State
 
 # commonroad imports
-from commonroad_rp.parameter import SamplingParameters, VehModelParameters
+from commonroad_rp.parameter import DefFailSafeSampling, VehModelParameters
 from commonroad_rp.parameter import parameter_velocity_reaching
 from commonroad_rp.polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
 from commonroad_rp.trajectories import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample, \
     DefaultCostFunction
-from commonroad_rp.utils import *
+from commonroad_rp.utils import CoordinateSystem
 
 
 class ReactivePlanner(object):
-    def __init__(self, dt: float, t_h: float, N: int, v_desired=14, collision_check_in_cl: bool = False,
-                 lanelet_network: LaneletNetwork = None):
+    def __init__(self, dt: float, t_h: float, N: int, v_desired=14, collision_check_in_cl: bool = False):
 
         assert is_positive(dt), '<ReactivePlanner>: provided dt is not correct! dt = {}'.format(dt)
         assert is_positive(N) and is_natural_number(N), '<ReactivePlanner>: provided N is not correct! dt = {}'.format(
@@ -55,23 +55,9 @@ class ReactivePlanner(object):
         # Current State
         self.x_0: State = None
 
-        # Set reference
-        self._cosy: TrapezoidCoordinateSystem = None
-        self._reference: np.ndarray = None
-        self._ref_pos: np.ndarray = None
-        self._ref_curv: np.ndarray = None
-        self._theta_ref: np.ndarray = None
-        self._ref_curv_d: np.ndarray = None
-
-        # lanelet_network
-        self.lanelet_network: LaneletNetwork = lanelet_network
-
         # store feasible trajectories of last run
-        self._feasible_trajectories = None
         self._infeasible_count_collision = 0
         self._infeasible_count_kinematics = 0
-        self._min_cost = None
-        self._max_cost = None
 
         # store collision checker coordinate system information
         self._collision_check_in_cl = collision_check_in_cl
@@ -85,93 +71,16 @@ class ReactivePlanner(object):
         self._desired_t = self.horizon
 
         # Default sampling -> [desired - min,desired + max,initial step]
-        self._sampling_d = SamplingParameters(-.5, .5, 5)
-        self._sampling_t = SamplingParameters(3 * self.dT, self.horizon, 3)
-        self._sampling_v = self.set_desired_speed(v_desired)
+        fs_sampling = DefFailSafeSampling()
+        self._sampling_d = fs_sampling.d_samples
+        self._sampling_t = fs_sampling.t_samples
+        self._sampling_v = fs_sampling.v_samples
 
         # compute sampling sets
-        self._setup_sampling_sets()
-
-    def set_desired_speed(self, v_desired):
-        self._desired_speed = v_desired
-        if self.x_0 is not None:
-            reference_speed = self.x_0.velocity
-        else:
-            reference_speed = self._desired_speed
-
-        min_v = max(0, reference_speed - (self.horizon) * self.constraints.a_max)
-        max_v = max(min_v + 1.0, self._desired_speed)
-        steps = 4
-        self._sampling_v = SamplingParameters(min_v, max_v, steps)
-        self._setup_sampling_sets()
-        return self._sampling_v
+        #self._setup_sampling_sets()
 
     def set_reference_path(self, reference_path: np.ndarray):
         self._co: CoordinateSystem = CoordinateSystem(reference_path)
-        # cosy: TrapezoidCoordinateSystem = create_coordinate_system_from_polyline(reference_path)
-        # Set reference
-        # self._cosy = cosy
-        # self._reference = reference_path
-        # self._ref_pos = compute_pathlength_from_polyline(reference_path)
-        # self._ref_curv = compute_curvature_from_polyline(reference_path)
-        # theta_ref = compute_orientation_from_polyline(self._reference)
-        # self._theta_ref = theta_ref
-        # self._ref_curv_d = np.gradient(self._ref_curv, self._ref_pos)
-
-    def set_reference_lane(self, lane_direction: int) -> None:
-        """
-        compute new reference path based on relative lane position.
-        :param lane_direction: 0=curernt lane >0=right lanes, <0=left lanes
-        :return:
-        """
-        assert self.lanelet_network is not None, \
-            'lanelet network must be provided during initialization for using get_reference_of_lane().'
-
-        current_ids = self.lanelet_network.find_lanelet_by_position([self.x_0.position])[0]
-        if len(current_ids) > 0:
-            current_lanelet = self.lanelet_network.find_lanelet_by_id(current_ids[0])
-        else:
-            if self._cosy is not None:
-                warnings.warn('set_reference_lane: x0 is not located on any lane, use previous reference.',
-                              stacklevel=2)
-            else:
-                raise ValueError(
-                    'set_reference_lane: x0 is not located on any lane and no previous reference available.')
-            return
-
-        # determine target lane
-        target_lanelet = None
-        if lane_direction == -1:
-            if current_lanelet.adj_left_same_direction not in (False, None):
-                target_lanelet = self.lanelet_network.find_lanelet_by_id(current_lanelet.adj_left)
-        elif lane_direction == 1:
-            if current_lanelet.adj_right_same_direction not in (False, None):
-                try:
-                    target_lanelet = self.lanelet_network.find_lanelet_by_id(current_lanelet.adj_right)
-                except:
-                    i = 0
-        elif lane_direction == 0:
-            target_lanelet = current_lanelet
-
-        if target_lanelet is None:
-            warnings.warn(
-                'set_reference_lane: No adjacent lane in direction {}, stay in current lane.'.format(lane_direction),
-                stacklevel=2)
-            target_lanelet = current_lanelet
-        else:
-            print('<reactive_planner> Changed reference lanelet from {} to {}.'.format(current_lanelet.lanelet_id,
-                                                                                       target_lanelet.lanelet_id))
-
-        # TODO: currently only using first lane, integrate high level planner
-        lanes = Lanelet.all_lanelets_by_merging_successors_from_lanelet(target_lanelet, self.lanelet_network)
-        if len(lanes) > 1:
-            reference = lanes[0].center_vertices
-        elif len(lanes) > 0:
-            reference = lanes[0].center_vertices
-        else:
-            reference = target_lanelet.center_vertices
-
-        self.set_reference_path(reference)
 
     def _setup_sampling_sets(self):
         """
@@ -214,7 +123,8 @@ class ReactivePlanner(object):
         :param samp_level: The sampling level
         :return: Number of trajectory samples for given sampling level
         """
-        return len(self._v_sets[samp_level]) * len(self._d_sets[samp_level]) * len(self._t_sets[samp_level])
+        #return len(self._v_sets[samp_level]) * len(self._d_sets[samp_level]) * len(self._t_sets[samp_level])
+        return len(self._sampling_v.to_range(samp_level)) * len(self._sampling_d.to_range(samp_level)) * len(self._sampling_t.to_range(samp_level))
 
     def no_of_infeasible_trajectories_collision(self) -> int:
         """
@@ -253,43 +163,24 @@ class ReactivePlanner(object):
         self._max_cost = 0
 
         trajectories = list()
-        for t in self._t_sets[samp_level]:
+        for t in self._sampling_t.to_range(samp_level):
 
             # Longitudinal sampling for all possible velocities
-            for v in self._v_sets[samp_level]:
+            for v in self._sampling_v.to_range(samp_level):
                 trajectory_long = QuarticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lon), x_d=np.array([v, 0]))
-                jerk_cost = trajectory_long.squared_jerk_integral(t) / t
-                time_cost = 1.0 / t
-                distance_cost = (desired_speed - v) ** 2
-                trajectory_long.set_cost(jerk_cost, time_cost, distance_cost,
-                                         params.k_jerk_lon, params.k_time, params.k_distance)
 
                 # Sample lateral end states (add x_0_lat to sampled states)
-                for d in self._d_sets[samp_level].union({x_0_lat[0]}):
-                    end_state_lat = np.array([d, 0.0, 0.0])
-                    # SWITCHING TO POSITION DOMAIN FOR LATERAL TRAJECTORY PLANNING
-                    s_lon_goal = trajectory_long.evaluate_state_at_tau(t)[0] - x_0_lon[0]
-                    trajectory_lat = QuinticTrajectory(tau_0=0, delta_tau=s_lon_goal, x_0=np.array(x_0_lat),
-                                                       x_d=end_state_lat)
-                    if trajectory_lat.coeffs is not None:
-
-                        jerk_cost = trajectory_lat.squared_jerk_integral(t) / t
-                        time_cost = 0  # 1.0/t
-                        distance_cost = d ** 2
-                        trajectory_lat.set_cost(jerk_cost, time_cost, distance_cost,
-                                                params.k_jerk_lat, params.k_time, 50 * params.k_distance)
-
-                        # Create trajectory sample and add it to trajectory bundle
-                        trajectory_cost = params.k_long * trajectory_long.cost + params.k_lat * trajectory_lat.cost
-
-                        # store costs
-                        if trajectory_cost < self._min_cost:
-                            self._min_cost = trajectory_cost
-
-                        if trajectory_cost > self._max_cost:
-                            self._max_cost = trajectory_cost
-                        trajectory_sample = TrajectorySample(self.horizon, self.dT, trajectory_long, trajectory_lat)
-                        trajectories.append(trajectory_sample)
+                print(self._sampling_t.to_range(samp_level).union({x_0_lat[0]}))
+                if trajectory_long.coeffs is not None:
+                    for d in self._sampling_t.to_range(samp_level).union({x_0_lat[0]}):
+                        end_state_lat = np.array([d, 0.0, 0.0])
+                        # SWITCHING TO POSITION DOMAIN FOR LATERAL TRAJECTORY PLANNING
+                        s_lon_goal = trajectory_long.evaluate_state_at_tau(t)[0] - x_0_lon[0]
+                        trajectory_lat = QuinticTrajectory(tau_0=0, delta_tau=s_lon_goal, x_0=np.array(x_0_lat),
+                                                           x_d=end_state_lat)
+                        if trajectory_lat.coeffs is not None:
+                            trajectory_sample = TrajectorySample(self.horizon, self.dT, trajectory_long, trajectory_lat)
+                            trajectories.append(trajectory_sample)
 
         # perform pre check and order trajectories according their cost
         trajectory_bundle = TrajectoryBundle(trajectories, params,
