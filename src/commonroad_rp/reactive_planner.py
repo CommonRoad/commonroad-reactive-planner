@@ -477,7 +477,7 @@ class ReactivePlanner(object):
 
         return (cartTraj, freTraj, lon_list, lat_list)
 
-    def check_kinematics(self, trajectory: TrajectorySample) -> bool:
+    def check_kinematics(self, trajectory_bundle: TrajectoryBundle) -> List[TrajectorySample]:
         """
         Checks the kinematics of given trajectory and computes the cartesian trajectory information
         :param trajectory: The trajectory to check
@@ -487,183 +487,143 @@ class ReactivePlanner(object):
         # constants
         _LOW_VEL_MODE = True
 
-        # create time array and precompute time interval information
-        t = np.arange(0, trajectory.trajectory_long.delta_tau + self.dT, self.dT)
-        t2 = np.square(t)
-        t3 = t2 * t
-        t4 = np.square(t2)
-        t5 = t4 * t
+        feasible_trajectories = list()
+        for trajectory in trajectory_bundle.trajectories:
+            # create time array and precompute time interval information
+            t = np.arange(0, trajectory.trajectory_long.delta_tau + self.dT, self.dT)
+            t2 = np.square(t)
+            t3 = t2 * t
+            t4 = np.square(t2)
+            t5 = t4 * t
 
-        # compute position, velocity, acceleration from trajectory sample
-        s = trajectory.trajectory_long.calc_position(t, t2, t3, t4, t5)  # lon pos
-        s_velocity = trajectory.trajectory_long.calc_velocity(t, t2, t3, t4)  # lon velocity
-        s_acceleration = trajectory.trajectory_long.calc_acceleration(t, t2, t3)  # lon acceleration
+            # compute position, velocity, acceleration from trajectory sample
+            s = trajectory.trajectory_long.calc_position(t, t2, t3, t4, t5)  # lon pos
+            s_velocity = trajectory.trajectory_long.calc_velocity(t, t2, t3, t4)  # lon velocity
+            s_acceleration = trajectory.trajectory_long.calc_acceleration(t, t2, t3)  # lon acceleration
 
-        # At low speeds, we have to sample the lateral motion over the travelled distance rather than time.
-        if _LOW_VEL_MODE:
-            # compute normalized travelled distance for low velocity mode of lateral planning
-            s1 = s - s[0]
-            s2 = np.square(s1)
-            s3 = s2 * s1
-            s4 = np.square(s2)
-            s5 = s4 * s1
+            # At low speeds, we have to sample the lateral motion over the travelled distance rather than time.
+            if _LOW_VEL_MODE:
+                # compute normalized travelled distance for low velocity mode of lateral planning
+                s1 = s - s[0]
+                s2 = np.square(s1)
+                s3 = s2 * s1
+                s4 = np.square(s2)
+                s5 = s4 * s1
 
-            d = trajectory.trajectory_lat.calc_position(s1, s2, s3, s4, s5)  # lat pos
-            d_velocity = trajectory.trajectory_lat.calc_velocity(s1, s2, s3, s4)  # lat velocity
-            d_acceleration = trajectory.trajectory_lat.calc_acceleration(s1, s2, s3)  # lat acceleration
-        else:
-            d = trajectory.trajectory_lat.calc_position(t, t2, t3, t4, t5)  # lat pos
-            d_velocity = trajectory.trajectory_lat.calc_velocity(t, t2, t3, t4)  # lat velocity
-            d_acceleration = trajectory.trajectory_lat.calc_acceleration(t, t2, t3)  # lat acceleration
-
-        # Compute cartesian information of trajectory
-        s_length = len(s)
-        x = np.zeros(s_length)
-        y = np.zeros(s_length)
-        theta_gl = np.zeros(s_length)
-        theta_cl = np.zeros(s_length)
-        v = np.zeros(s_length)
-        a = np.zeros(s_length)
-        kappa_gl = np.zeros(s_length)
-        kappa_cl = np.zeros(s_length)
-        for i in range(0, s_length):
-            # compute Global position
-            try:
-                pos = self._co.convert_to_cartesian_coords(s[i], d[i])
-            except ValueError:
-                # outside of projection domain
-                return False
-            x[i] = pos[0]
-            y[i] = pos[1]
-
-            # compute orientations
-            if not _LOW_VEL_MODE:
-                if s_velocity[i] > 0.001:
-                    dp = d_velocity[i] / s_velocity[i]
-                else:
-                    if d_velocity[i] > 0.001:
-                        dp = None
-                    else:
-                        dp = 0.
-                ddot = d_acceleration[i] - dp * s_acceleration[i]
-
-                if s_velocity[i] > 0.001:
-                    dpp = ddot / (s_velocity[i] ** 2)
-                else:
-                    if np.abs(ddot) > 0.00003:
-                        dpp = None
-                    else:
-                        dpp = 0.
+                d = trajectory.trajectory_lat.calc_position(s1, s2, s3, s4, s5)  # lat pos
+                d_velocity = trajectory.trajectory_lat.calc_velocity(s1, s2, s3, s4)  # lat velocity
+                d_acceleration = trajectory.trajectory_lat.calc_acceleration(s1, s2, s3)  # lat acceleration
             else:
-                dp = d_velocity[i]
-                dpp = d_acceleration[i]
+                d = trajectory.trajectory_lat.calc_position(t, t2, t3, t4, t5)  # lat pos
+                d_velocity = trajectory.trajectory_lat.calc_velocity(t, t2, t3, t4)  # lat velocity
+                d_acceleration = trajectory.trajectory_lat.calc_acceleration(t, t2, t3)  # lat acceleration
 
-            s_idx = np.argmin(np.abs(self._co.ref_pos() - s[i]))
-            if self._co.ref_pos()[s_idx] < s[i]:
-                s_idx += 1
-            s_lambda = (self._co.ref_pos()[s_idx] - s[i]) / (self._co.ref_pos()[s_idx + 1] - self._co.ref_pos()[s_idx])
+            # Compute cartesian information of trajectory
+            s_length = len(s)
+            x = np.zeros(s_length)
+            y = np.zeros(s_length)
+            theta_gl = np.zeros(s_length)
+            theta_cl = np.zeros(s_length)
+            v = np.zeros(s_length)
+            a = np.zeros(s_length)
+            kappa_gl = np.zeros(s_length)
+            kappa_cl = np.zeros(s_length)
+            for i in range(0, s_length):
+                # compute Global position
+                try:
+                    pos = self._co.convert_to_cartesian_coords(s[i], d[i])
+                except ValueError:
+                    # outside of projection domain
+                    return False
+                x[i] = pos[0]
+                y[i] = pos[1]
 
-            # add cl and gl orientation
-            if s_velocity[i] > 0.005:
-                if _LOW_VEL_MODE:
-                    theta_cl[i] = np.arctan2(dp, 1.0)
+                # compute orientations
+                if not _LOW_VEL_MODE:
+                    if s_velocity[i] > 0.001:
+                        dp = d_velocity[i] / s_velocity[i]
+                    else:
+                        if d_velocity[i] > 0.001:
+                            dp = None
+                        else:
+                            dp = 0.
+                    ddot = d_acceleration[i] - dp * s_acceleration[i]
+
+                    if s_velocity[i] > 0.001:
+                        dpp = ddot / (s_velocity[i] ** 2)
+                    else:
+                        if np.abs(ddot) > 0.00003:
+                            dpp = None
+                        else:
+                            dpp = 0.
                 else:
-                    theta_cl[i] = np.arctan2(d_velocity[i], s_velocity[i])
-                # add global orientation
-                # theta_gl.append(theta_cl[-1] + np.interp(s[i], self._co.ref_pos(), self._co.ref_theta()))
-                theta_gl[i] = theta_cl[i] + (self._co.ref_theta()[s_idx + 1] - self._co.ref_theta()[s_idx]) * s_lambda + \
-                              self._co.ref_theta()[s_idx]
-                # print("Orig: = {}".format(np.interp(s[i], self._co.ref_pos(), self._co.ref_theta())))
-                # print("New: = {}".format((self._co.ref_theta()[s_idx+1]-self._co.ref_theta()[s_idx])*s_lambda+self._co.ref_theta()[s_idx]))
+                    dp = d_velocity[i]
+                    dpp = d_acceleration[i]
 
-            else:
-                # theta_cl.append(np.interp(s[i], self._co.ref_pos(), self._co.ref_theta()))
-                theta_cl[i] = (self._co.ref_theta()[s_idx + 1] - self._co.ref_theta()[s_idx]) * s_lambda + \
-                              self._co.ref_theta()[s_idx]
-                theta_gl[i] = theta_cl[i]
+                s_idx = np.argmin(np.abs(self._co.ref_pos() - s[i]))
+                if self._co.ref_pos()[s_idx] < s[i]:
+                    s_idx += 1
+                s_lambda = (self._co.ref_pos()[s_idx] - s[i]) / (self._co.ref_pos()[s_idx + 1] - self._co.ref_pos()[s_idx])
 
-            # Compute curvature of reference at current position
-            # k_r = np.interp(s[i], self._co.ref_pos(), self._co.ref_curv())
-            k_r = (self._co.ref_curv()[s_idx + 1] - self._co.ref_curv()[s_idx]) * s_lambda + self._co.ref_curv()[s_idx]
-            # k_r_d = np.interp(s[i], self._co.ref_pos(), self._co.ref_curv_d())
-            k_r_d = (self._co.ref_curv_d()[s_idx + 1] - self._co.ref_curv_d()[s_idx]) * s_lambda + \
-                    self._co.ref_curv_d()[s_idx]
-            # ref_curv_prime = np.gradient(self._ref_curv, self._ref_pos)
-            # compute global curvature based on appendix A of Moritz Werling's PhD thesis
-            oneKrD = (1 - k_r * d[i])
-            cosTheta = np.cos(theta_cl[i])
-            tanTheta = np.tan(theta_cl[i])
-            kappa = (dpp + k_r * dp * tanTheta) * cosTheta * (cosTheta / oneKrD) ** 2 + (cosTheta / oneKrD) * k_r
-            kappa_gl[i] = kappa
-            kappa_cl[i] = kappa_gl[i] - k_r
+                # add cl and gl orientation
+                if s_velocity[i] > 0.005:
+                    if _LOW_VEL_MODE:
+                        theta_cl[i] = np.arctan2(dp, 1.0)
+                    else:
+                        theta_cl[i] = np.arctan2(d_velocity[i], s_velocity[i])
+                    theta_gl[i] = theta_cl[i] + (self._co.ref_theta()[s_idx + 1] - self._co.ref_theta()[s_idx]) * s_lambda + \
+                                  self._co.ref_theta()[s_idx]
 
-            # velocity
-            v[i] = s_velocity[i] * (oneKrD / (np.cos(theta_cl[i])))
+                else:
+                    # theta_cl.append(np.interp(s[i], self._co.ref_pos(), self._co.ref_theta()))
+                    theta_cl[i] = (self._co.ref_theta()[s_idx + 1] - self._co.ref_theta()[s_idx]) * s_lambda + \
+                                  self._co.ref_theta()[s_idx]
+                    theta_gl[i] = theta_cl[i]
 
-            # compute acceleration
-            a[i] = s_acceleration[i] * oneKrD / cosTheta + ((s_velocity[i] ** 2) / cosTheta) * (
-                    oneKrD * tanTheta * (kappa_gl[i] * oneKrD / cosTheta - k_r) - (
-                    k_r_d * d[i] + k_r * d_velocity[i]))
+                # Compute curvature of reference at current position
+                k_r = (self._co.ref_curv()[s_idx + 1] - self._co.ref_curv()[s_idx]) * s_lambda + self._co.ref_curv()[s_idx]
+                k_r_d = (self._co.ref_curv_d()[s_idx + 1] - self._co.ref_curv_d()[s_idx]) * s_lambda + \
+                        self._co.ref_curv_d()[s_idx]
+                # compute global curvature based on appendix A of Moritz Werling's PhD thesis
+                oneKrD = (1 - k_r * d[i])
+                cosTheta = np.cos(theta_cl[i])
+                tanTheta = np.tan(theta_cl[i])
+                kappa_gl[i] = (dpp + k_r * dp * tanTheta) * cosTheta * (cosTheta / oneKrD) ** 2 + (cosTheta / oneKrD) * k_r
+                kappa_cl[i] = kappa_gl[i] - k_r
 
-            # check kinematics to already discard infeasible trajectories
-            if not self._check_vehicle_model(v[i], a[i], kappa_gl[i],
-                                             (kappa_gl[i] - kappa_gl[i - 1]) / self.dT if i > 0 else 0.):
-                return False
+                # velocity
+                v[i] = s_velocity[i] * (oneKrD / (np.cos(theta_cl[i])))
 
-        # store Cartesian trajectory
-        trajectory.cartesian = CartesianSample(x, y, theta_gl, v, a, kappa_gl, np.append([0], np.diff(kappa_gl)))
+                # compute acceleration
+                a[i] = s_acceleration[i] * oneKrD / cosTheta + ((s_velocity[i] ** 2) / cosTheta) * (
+                        oneKrD * tanTheta * (kappa_gl[i] * oneKrD / cosTheta - k_r) - (
+                        k_r_d * d[i] + k_r * d_velocity[i]))
 
-        # store Curvilinear trajectory
-        # theta_cl = trajectory.cartesian.theta - np.interp(trajectory.curvilinear.s, self._ref_pos, self._ref_curv)
-        trajectory.curvilinear = CurviLinearSample(s, d, theta_cl, ss=s_velocity, sss=s_acceleration, dd=d_velocity,
-                                                   ddd=d_acceleration)
+                # check kinematics to already discard infeasible trajectories
+                if abs(kappa_gl[i] > self.constraints.kappa_max):
+                    break
+                if abs((kappa_gl[i] - kappa_gl[i - 1]) / self.dT if i > 0 else 0.) > self.constraints.kappa_dot_max:
+                    break
+                if abs(a[i]) > self.constraints.a_max:
+                    break
+                if abs(v[i]) < -0.1:
+                    break
 
-        # check if trajectories planning horizon is shorter than expected and extend if necessary # ToDo: int conversion may be wrong
-        if self.horizon > trajectory.trajectory_long.delta_tau:
-            trajectory.enlarge(int((self.horizon - trajectory.trajectory_long.delta_tau) / self.dT), self.dT)
+            # store Cartesian trajectory
+            trajectory.cartesian = CartesianSample(x, y, theta_gl, v, a, kappa_gl, np.append([0], np.diff(kappa_gl)))
 
-        return True
+            # store Curvilinear trajectory
+            trajectory.curvilinear = CurviLinearSample(s, d, theta_cl, ss=s_velocity, sss=s_acceleration, dd=d_velocity,
+                                                       ddd=d_acceleration)
 
-    def _check_vehicle_model(self, v: float, a: float, kappa: float, kappa_dot: float):
-        """
-        Checks if a given state is feasible according to the kinematic single track model (simplified)
-        :param v: Is provided velocity >= 0
-        :param a: Is provided abs(acceleration) <= 8
-        :param kappa: Is provided curvature in range
-        :param kappa_dot: Is provided curvature change in range
-        :return: True if feasible, false otherwise
-        """
-        _DEBUG = False
+            # check if trajectories planning horizon is shorter than expected and extend if necessary # ToDo: int conversion may be wrong
+            if self.horizon > trajectory.trajectory_long.delta_tau:
+                trajectory.enlarge(int((self.horizon - trajectory.trajectory_long.delta_tau) / self.dT), self.dT)
 
-        feasible = True
+            feasible_trajectories.append(trajectory)
+        return feasible_trajectories
 
-        # Check curvature
-        feasible &= abs(kappa) <= self.constraints.kappa_max
-        if not feasible:
-            if _DEBUG:
-                print('Kappa = {}'.format(kappa))
-            return False
 
-        # Check kappa_dot
-        feasible &= abs(kappa_dot) <= self.constraints.kappa_dot_max
-        if not feasible:
-            if _DEBUG:
-                print('KappaDOT = {}'.format(kappa_dot))
-            return False
-
-        # Check velocity
-        feasible &= v >= -0.1
-        if not feasible:
-            if _DEBUG:
-                print('Velocity = {}'.format(v))
-            return False
-
-        # check accelerations
-        feasible &= abs(a) <= self.constraints.a_max
-        if _DEBUG:
-            print('Acceleration = {}'.format(a))
-
-        return feasible
 
     def _get_optimal_trajectory(self, trajectory_bundle: TrajectoryBundle, cc: object) -> TrajectorySample:
 
@@ -672,51 +632,39 @@ class ReactivePlanner(object):
         self._infeasible_count_kinematics = 0
 
         # check kinematics of each trajectory
-        trajectory_list = list()
         profiler = cProfile.Profile()
         profiler.enable()
-        for trajectory in trajectory_bundle.trajectories:
-            # check kinematics of trajectory
-            if self.check_kinematics(trajectory):
-                trajectory_list.append(trajectory)
-            else:
-                # write statistics
-                self._infeasible_count_kinematics += 1
+        feasible_trajectories = self.check_kinematics(trajectory_bundle)
+        self._infeasible_count_kinematics = len(trajectory_bundle.trajectories) - len(feasible_trajectories)
+
+        # set feasible trajectories in bundle
+        trajectory_bundle.trajectories = feasible_trajectories
+        # sort trajectories according to their costs
+        trajectory_bundle.sort()
+
+        # go through sorted list of trajectories and check for collisions
+        for trajectory in trajectory_bundle.get_sorted_list():
+
+            pos1 = trajectory.curvilinear.s if self._collision_check_in_cl else trajectory.cartesian.x
+            pos2 = trajectory.curvilinear.d if self._collision_check_in_cl else trajectory.cartesian.y
+            theta = trajectory.curvilinear.theta if self._collision_check_in_cl else trajectory.cartesian.theta
+
+            # check each pose for collisions
+            collide = False
+            for i in range(len(pos1)):
+                if cc.collide(pycrcc.RectOBB(0.5 * self._length, 0.5 * self._width, theta[i], pos1[i], pos2[i])):
+                    self._infeasible_count_collision += 1
+                    collide = True
+                    break
+            if not collide:
+                return trajectory
+
 
         profiler.disable()
         profiler.print_stats("time")
 
-        # set feasible trajectories in bundle
-        trajectory_bundle.trajectories = trajectory_list
-        # sort trajectories according to their costs
-        trajectory_bundle.sort()
-
-        # go through sorted list of trajectories
-        for trajectory in trajectory_bundle.get_sorted_list():
-            if self._is_collision_free_trajectory(trajectory, cc):
-                return trajectory
-            else:
-                self._infeasible_count_collision += 1
-
         return None
 
-    def _is_collision_free_trajectory(self, trajectory: TrajectorySample, cc: object) -> bool:
-        """
-        Checks a given trajectory for collisions
-        :param trajectory: The trajectory to check
-        :param cc: The CR collision checker object
-        :return: True if collision-free, False otherwise
-        """
-        pos1 = trajectory.curvilinear.s if self._collision_check_in_cl else trajectory.cartesian.x
-        pos2 = trajectory.curvilinear.d if self._collision_check_in_cl else trajectory.cartesian.y
-        theta = trajectory.curvilinear.theta if self._collision_check_in_cl else trajectory.cartesian.theta
-
-        # check each pose for collisions
-        for i in range(len(pos1)):
-            if cc.collide(pycrcc.RectOBB(0.5 * self._length, 0.5 * self._width, theta[i], pos1[i], pos2[i])):
-                return False
-
-        return True
 
     def convert_cr_trajectory_to_object(self, trajectory: Trajectory):
         """
