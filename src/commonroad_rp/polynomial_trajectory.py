@@ -157,11 +157,7 @@ class PolynomialTrajectory(ABC):
             cost)
         self._cost = cost
 
-    # todo: remove?
-    def set_cost(self, jerk_cost, time_cost, distance_cost, k_jerk, k_time, k_distance):
-        self.cost = k_jerk * jerk_cost + k_time * time_cost + k_distance * distance_cost
 
-    # todo remove?
     def squared_jerk_integral(self, t):
         """
         returns the integral of the squared jerk of a fifth order polynomial in the interval [0, t]
@@ -183,13 +179,7 @@ class PolynomialTrajectory(ABC):
 
         return integral_squared_jerk
 
-    # todo remove?
-    def get_velocity_cost(self, desired_velocity):
-        return (self.calc_velocity_at(self.duration_s) - desired_velocity) ** 2
 
-    # todo remove?
-    def get_distance_cost(self, desired_distance):
-        return (self.calc_position_at(self.duration_s) - desired_distance) ** 2
 
     def evaluate_state_at_tau(self, tau: float):
         """
