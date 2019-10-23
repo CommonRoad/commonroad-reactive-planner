@@ -64,11 +64,9 @@ if __name__ == '__main__':
     # create coordinate system
     ego_lanelet_id = scenario.lanelet_network.find_lanelet_by_position([ego_initial_state.position])[0][0]
     print('Ego vehice is located in lanelet id={}'.format(ego_lanelet_id))
-    #reference_path = scenario.lanelet_network.find_lanelet_by_id(ego_lanelet_id).center_vertices
     reference_path = obtain_reference_path(ego_initial_state, scenario)
     curvilinear_cosy = create_coordinate_system_from_polyline(reference_path)
-    #plt.plot(reference_path[:,0],reference_path[:,1],'-xk')
-    #plt.show(block=True)
+
 
 
     # create initial state

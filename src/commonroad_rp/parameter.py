@@ -88,11 +88,11 @@ class TimeSampling(Sampling):
         super(TimeSampling, self).__init__(low, up, n_samples)
 
     def _setup(self):
-        removal = set()
-        for i in range(self.no_of_samples()):
+        self._db.append(np.arange(1, self.up+1, 1))
+        for i in range(1,self.no_of_samples()):
             samp = set(np.arange(self.low, self.up+self.dT, self.dT))
-            self._db.append(samp - removal)
-            removal |= samp
+            self._db.append(samp)
+
 
 
 class SamplingSet(ABC):

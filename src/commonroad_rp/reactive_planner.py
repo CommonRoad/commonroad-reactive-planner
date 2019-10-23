@@ -133,7 +133,7 @@ class ReactivePlanner(object):
 
                 # Sample lateral end states (add x_0_lat to sampled states)
                 if trajectory_long.coeffs is not None:
-                    for d in self._sampling_t.to_range(samp_level).union({x_0_lat[0]}):
+                    for d in self._sampling_d.to_range(samp_level).union({x_0_lat[0]}):
                         end_state_lat = np.array([d, 0.0, 0.0])
                         # SWITCHING TO POSITION DOMAIN FOR LATERAL TRAJECTORY PLANNING
                         s_lon_goal = trajectory_long.evaluate_state_at_tau(t)[0] - x_0_lon[0]
