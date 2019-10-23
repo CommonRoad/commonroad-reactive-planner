@@ -111,7 +111,7 @@ if __name__ == '__main__':
 
     # convert coordinates and create initial state
     x, y = curvilinear_cosy.convert_to_cartesian_coords(25, 0)
-    x_0 = State(**{'position':np.array([x,y]),'orientation':-0.2, 'velocity':10, 'acceleration':0,'yaw_rate':0})
+    x_0 = State(**{'position':np.array([x,y]),'orientation':-0.1, 'velocity':10, 'acceleration':0,'yaw_rate':0})
 
     planner: ReactivePlanner = ReactivePlanner(0.2, 6, 30)
     planner.set_reference_path(reference_path)

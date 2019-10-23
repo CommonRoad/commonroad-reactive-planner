@@ -338,7 +338,7 @@ class ReactivePlanner(object):
         feasible_trajectories = list()
         for trajectory in trajectory_bundle.trajectories:
             # create time array and precompute time interval information
-            t = np.arange(0, trajectory.trajectory_long.delta_tau + self.dT, self.dT)
+            t = np.arange(0, np.round(trajectory.trajectory_long.delta_tau + self.dT,5), self.dT)
             t2 = np.square(t)
             t3 = t2 * t
             t4 = np.square(t2)
@@ -464,10 +464,13 @@ class ReactivePlanner(object):
             trajectory.curvilinear = CurviLinearSample(s, d, theta_cl, ss=s_velocity, sss=s_acceleration, dd=d_velocity,
                                                        ddd=d_acceleration)
 
-            # check if trajectories planning horizon is shorter than expected and extend if necessary # ToDo: int conversion may be wrong
-            if self.horizon > trajectory.trajectory_long.delta_tau:
-                trajectory.enlarge(int((self.horizon - trajectory.trajectory_long.delta_tau) / self.dT), self.dT)
+            # check if trajectories planning horizon is shorter than expected and extend if necessary
+            #if self.horizon > trajectory.trajectory_long.delta_tau:
+            if self.N+1 > len(trajectory.cartesian.x):
+                trajectory.enlarge(self.N+1-len(trajectory.cartesian.x), self.dT)
 
+            assert self.N+1 == len(trajectory.cartesian.x) == len(trajectory.cartesian.y) == len(
+                trajectory.cartesian.theta), '<ReactivePlanner/kinematics>: Trajectory computation is incorrect! Lenghts of state variables is not equal.'
             feasible_trajectories.append(trajectory)
         return feasible_trajectories
 
@@ -500,6 +503,7 @@ class ReactivePlanner(object):
             # check each pose for collisions
             collide = False
             for i in range(len(pos1)):
+                print("Lengths are {}={}={}".format(len(theta),len(pos1),len(pos2)))
                 if cc.collide(pycrcc.RectOBB(0.5 * self._length, 0.5 * self._width, theta[i], pos1[i], pos2[i])):
                     self._infeasible_count_collision += 1
                     collide = True

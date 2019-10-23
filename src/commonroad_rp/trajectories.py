@@ -211,7 +211,7 @@ class CartesianSample(Sample):
         assert val.is_real_number(dt), '<CartesianSample>: Provided time step is not valid! dt = {}'.format(dt)
 
         # create time index
-        t = np.arange(dt, (steps + 1) * dt, dt)
+        t = np.arange(1,steps+1,1)*dt
         # enlarge acceleration values
         self._a = np.append(self.a, np.repeat(self.a[-1], steps))
 
@@ -231,6 +231,7 @@ class CartesianSample(Sample):
         # enlarge positions
         self._x = np.append(self.x, self.x[-1] + np.cumsum(dt * v_temp * np.cos(self.theta[-1])))
         self._y = np.append(self.y, self.y[-1] + np.cumsum(dt * v_temp * np.sin(self.theta[-1])))
+
 
 
 class CurviLinearSample(Sample):
@@ -320,8 +321,7 @@ class CurviLinearSample(Sample):
         assert val.is_real_number(dt), '<CartesianSample>: Provided time step is not valid! dt = {}'.format(dt)
 
         # create time array
-        t = np.arange(dt, (steps + 1) * dt, dt)
-
+        t = np.arange(1, (steps + 1), 1)*dt
         # enlarge velocities by considering acceleration
         s_dot_temp = self.s_dot[-1] + t * self.s_ddot[-1]
         # remove negative velocities

@@ -39,14 +39,14 @@ class Sampling(ABC):
         pass
 
 
-    def to_range(self, sampling_factor: int=1) -> set:
+    def to_range(self, sampling_stage: int=0) -> set:
         """
         Convert to numpy range object as [center-low,center+up] in "step" steps
         :param sampling_factor: Multiplicative factor for number of samples
         :return: The range [low,up] in "n_samples*sampling_factor" steps
         """
-        assert 0<sampling_factor<=self.no_of_samples()
-        return self._db[sampling_factor]
+        assert 0<=sampling_stage<self.no_of_samples(), '<Sampling/to_range>: Provided sampling stage is incorrect! stage = {}'.format(sampling_stage)
+        return self._db[sampling_stage]
 
     def no_of_samples(self) -> int:
         """
@@ -83,13 +83,14 @@ class PositionSampling(Sampling):
 
 class TimeSampling(Sampling):
 
-    def __init__(self, low: float, up: float, n_samples: int):
+    def __init__(self, low: float, up: float, n_samples: int, dT: float):
+        self.dT = dT
         super(TimeSampling, self).__init__(low, up, n_samples)
 
     def _setup(self):
         removal = set()
         for i in range(self.no_of_samples()):
-            samp = set(np.linspace(self.low, self.up, i + 3))
+            samp = set(np.arange(self.low, self.up+self.dT, self.dT))
             self._db.append(samp - removal)
             removal |= samp
 
@@ -126,10 +127,10 @@ class SamplingSet(ABC):
 class DefFailSafeSampling(SamplingSet):
 
     def __init__(self):
-        s_samples = PositionSampling(-2.5,2.5,5)
+        t_samples = TimeSampling(0.4,6,5, 0.2)
         d_samples = PositionSampling(-2.5,2.5,5)
         v_samples = VelocitySampling(0,0,5)
-        super(DefFailSafeSampling, self).__init__(s_samples,d_samples,v_samples)
+        super(DefFailSafeSampling, self).__init__(t_samples,d_samples,v_samples)
 
 class VehModelParameters:
     """
