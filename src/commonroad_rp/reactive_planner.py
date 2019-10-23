@@ -376,6 +376,7 @@ class ReactivePlanner(object):
             a = np.zeros(s_length)
             kappa_gl = np.zeros(s_length)
             kappa_cl = np.zeros(s_length)
+            feasible = True
             for i in range(0, s_length):
                 # compute Global position
                 try:
@@ -449,29 +450,37 @@ class ReactivePlanner(object):
 
                 # check kinematics to already discard infeasible trajectories
                 if abs(kappa_gl[i] > self.constraints.kappa_max):
+                    feasible = False
                     break
                 if abs((kappa_gl[i] - kappa_gl[i - 1]) / self.dT if i > 0 else 0.) > self.constraints.kappa_dot_max:
+                    feasible = False
                     break
                 if abs(a[i]) > self.constraints.a_max:
+                    feasible = False
                     break
                 if abs(v[i]) < -0.1:
+                    feasible = False
+                    break
+                if abs((theta_gl[i-1]-theta_gl[i])/self.dT if i > 0 else 0.) > 0.2:
+                    feasible = False
                     break
 
-            # store Cartesian trajectory
-            trajectory.cartesian = CartesianSample(x, y, theta_gl, v, a, kappa_gl, np.append([0], np.diff(kappa_gl)))
+            if feasible:
+                # store Cartesian trajectory
+                trajectory.cartesian = CartesianSample(x, y, theta_gl, v, a, kappa_gl, np.append([0], np.diff(kappa_gl)))
 
-            # store Curvilinear trajectory
-            trajectory.curvilinear = CurviLinearSample(s, d, theta_cl, ss=s_velocity, sss=s_acceleration, dd=d_velocity,
-                                                       ddd=d_acceleration)
+                # store Curvilinear trajectory
+                trajectory.curvilinear = CurviLinearSample(s, d, theta_cl, ss=s_velocity, sss=s_acceleration, dd=d_velocity,
+                                                           ddd=d_acceleration)
 
-            # check if trajectories planning horizon is shorter than expected and extend if necessary
-            #if self.horizon > trajectory.trajectory_long.delta_tau:
-            if self.N+1 > len(trajectory.cartesian.x):
-                trajectory.enlarge(self.N+1-len(trajectory.cartesian.x), self.dT)
+                # check if trajectories planning horizon is shorter than expected and extend if necessary
+                #if self.horizon > trajectory.trajectory_long.delta_tau:
+                if self.N+1 > len(trajectory.cartesian.x):
+                    trajectory.enlarge(self.N+1-len(trajectory.cartesian.x), self.dT)
 
-            assert self.N+1 == len(trajectory.cartesian.x) == len(trajectory.cartesian.y) == len(
-                trajectory.cartesian.theta), '<ReactivePlanner/kinematics>: Trajectory computation is incorrect! Lenghts of state variables is not equal.'
-            feasible_trajectories.append(trajectory)
+                assert self.N+1 == len(trajectory.cartesian.x) == len(trajectory.cartesian.y) == len(
+                    trajectory.cartesian.theta), '<ReactivePlanner/kinematics>: Trajectory computation is incorrect! Lenghts of state variables is not equal.'
+                feasible_trajectories.append(trajectory)
         return feasible_trajectories
 
 
