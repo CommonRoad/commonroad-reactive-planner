@@ -503,7 +503,6 @@ class ReactivePlanner(object):
             # check each pose for collisions
             collide = False
             for i in range(len(pos1)):
-                print("Lengths are {}={}={}".format(len(theta),len(pos1),len(pos2)))
                 if cc.collide(pycrcc.RectOBB(0.5 * self._length, 0.5 * self._width, theta[i], pos1[i], pos2[i])):
                     self._infeasible_count_collision += 1
                     collide = True
