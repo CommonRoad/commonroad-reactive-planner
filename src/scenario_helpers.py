@@ -52,15 +52,16 @@ def obtain_reference_path(state: State, scenario: Scenario) -> np.ndarray:
     ego_lanelet_id = scenario.lanelet_network.find_lanelet_by_position([state.position])[0][0]
     print('Ego vehice is located in lanelet id={}'.format(ego_lanelet_id))
     ego_lanelet = scenario.lanelet_network.find_lanelet_by_id(ego_lanelet_id)
-    reference_path = ego_lanelet.center_vertices
+
     # check if reference path is long enough
-    length = compute_pathlength_from_polyline(reference_path)[-1]
     new_lanelet = ego_lanelet
     temp = ego_lanelet
-    while length < 30 and len(temp.successor):
+    visited = set()
+    visited.add(temp.lanelet_id)
+    while len(temp.successor) and temp.successor[0] not in visited: #( if len(temp.successor) else False):
         temp = scenario.lanelet_network.find_lanelet_by_id(temp.successor[0])
+        visited.add(temp.lanelet_id)
         new_lanelet = Lanelet.merge_lanelets(new_lanelet,temp)
-        length = compute_pathlength_from_polyline(new_lanelet.center_vertices)[-1]
 
     return new_lanelet.center_vertices
 

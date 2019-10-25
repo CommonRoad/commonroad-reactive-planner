@@ -183,6 +183,10 @@ class ReactivePlanner(object):
 
         # compute s dot and s dot dot -> derivation after time
         s_d = x_0.velocity * np.cos(theta_cl) / (1 - np.interp(s, self._co.ref_pos(), self._co.ref_curv()) * d)
+        if s_d < 0:
+            raise Exception(
+                "Initial state or reference incorrect! Curvilinear velocity is negative which indicates that the ego vehicle is not driving in the same direction as specified by the reference")
+
         s_dd = x_0.acceleration
         s_dd -= (s_d ** 2 / np.cos(theta_cl)) * (
                 (1 - kr * d) * np.tan(theta_cl) * (x_0.yaw_rate * ((1 - kr * d) / (np.cos(theta_cl)) - kr)) - (

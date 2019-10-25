@@ -8,17 +8,14 @@ __status__ = "Alpha"
 
 from commonroad.common.file_reader import CommonRoadFileReader
 from commonroad.visualization.draw_dispatch_cr import draw_object
-from commonroad.planning.planning_problem import PlanningProblem
 from commonroad_rp.reactive_planner import ReactivePlanner
 from commonroad_ccosy.geometry.trapezoid_coordinate_system import create_coordinate_system_from_polyline
 from scenario_helpers import *
 import commonroad_cc.visualization.draw_dispatch as crd
-from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_checker,\
-    create_collision_object
+from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_checker
 
 
 import matplotlib.pyplot as plt
-import numpy as np
 
 #import spot
 
