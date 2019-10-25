@@ -1,5 +1,7 @@
 import construction
 import triangle_builder
+from typing import List
+
 import pycrcc
 from pycrcc import *
 from commonroad.scenario.scenario import Scenario
@@ -8,9 +10,12 @@ import numpy as np
 import commonroad.geometry.shape as shp
 from commonroad.scenario.trajectory import State
 from commonroad.prediction.prediction import Occupancy, SetBasedPrediction
-from commonroad_rp.utils import compute_pathlength_from_polyline
+
 from commonroad.planning.planning_problem import PlanningProblem
-from commonroad.scenario.lanelet import Lanelet
+from commonroad.scenario.lanelet import Lanelet, LaneletNetwork
+from commonroad_ccosy.geometry.trapezoid_coordinate_system import create_coordinate_system_from_polyline
+from commonroad_rp.utils import compute_pathlength_from_polyline, compute_orientation_from_polyline
+
 
 #import spot
 from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_object
@@ -47,11 +52,35 @@ def lanelet_rep_setup(lanelets):
         lanelet_rep.append((polygon, triangles))
     return lanelet_rep
 
+def _obtain_correct_lanelet_for_pose(state: State, lanelet_network: LaneletNetwork, lanes: List[int]):
+
+    best = 1000
+    best_lane = None
+    for lane_id in lanes:
+        lane = lanelet_network.find_lanelet_by_id(lane_id)
+        pos = compute_pathlength_from_polyline(lane.center_vertices)
+        orientation = compute_orientation_from_polyline(lane.center_vertices)
+        cosys = create_coordinate_system_from_polyline(lane.center_vertices)
+        s,d = cosys.convert_to_curvilinear_coords(state.position[0],state.position[1])
+        theta = np.interp(s,pos,orientation)
+        diff = abs(state.orientation - theta)
+        if diff < best:
+            best = diff
+            best_lane = lane
+
+    return best_lane
+
 def obtain_reference_path(state: State, scenario: Scenario) -> np.ndarray:
     # create coordinate system
-    ego_lanelet_id = scenario.lanelet_network.find_lanelet_by_position([state.position])[0][0]
+    ego_lanelet_id = scenario.lanelet_network.find_lanelet_by_position([state.position])[0]
+    if len(ego_lanelet_id) > 1:
+        ego_lanelet = _obtain_correct_lanelet_for_pose(state, scenario.lanelet_network, ego_lanelet_id)
+        ego_lanelet_id = ego_lanelet.lanelet_id
+    else:
+        ego_lanelet_id = ego_lanelet_id[0]
+        ego_lanelet = scenario.lanelet_network.find_lanelet_by_id(ego_lanelet_id)
     print('Ego vehice is located in lanelet id={}'.format(ego_lanelet_id))
-    ego_lanelet = scenario.lanelet_network.find_lanelet_by_id(ego_lanelet_id)
+
 
     # check if reference path is long enough
     new_lanelet = ego_lanelet

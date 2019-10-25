@@ -454,18 +454,23 @@ class ReactivePlanner(object):
 
                 # check kinematics to already discard infeasible trajectories
                 if abs(kappa_gl[i] > self.constraints.kappa_max):
+                    #print("Kappa")
                     feasible = False
                     break
                 if abs((kappa_gl[i] - kappa_gl[i - 1]) / self.dT if i > 0 else 0.) > self.constraints.kappa_dot_max:
+                    #print("KappaDOT")
                     feasible = False
                     break
                 if abs(a[i]) > self.constraints.a_max:
+                    #print("Acceleration")
                     feasible = False
                     break
                 if abs(v[i]) < -0.1:
+                    #print("Velocity")
                     feasible = False
                     break
-                if abs((theta_gl[i-1]-theta_gl[i])/self.dT if i > 0 else 0.) > 0.2:
+                if abs((theta_gl[i-1]-theta_gl[i])/self.dT if i > 0 else 0.) > 0.4:
+                    #print("Theta")
                     feasible = False
                     break
 
@@ -505,6 +510,9 @@ class ReactivePlanner(object):
         trajectory_bundle.trajectories = feasible_trajectories
         # sort trajectories according to their costs
         trajectory_bundle.sort()
+
+        self.draw_trajectory_set(feasible_trajectories)
+        #plt.show(block=True)
 
         # go through sorted list of trajectories and check for collisions
         for trajectory in trajectory_bundle.get_sorted_list():

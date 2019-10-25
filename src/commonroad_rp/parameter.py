@@ -76,8 +76,9 @@ class PositionSampling(Sampling):
     def _setup(self):
         removal = set()
         for i in range(self.no_of_samples()):
-            samp = set(np.linspace(self.low, self.up, i + 3))
-            self._db.append(samp - removal)
+            #samp = set(np.linspace(self.low, self.up, i + 4))
+            samp = set(np.arange(self.low, self.up+1/(i+1), 1/(i+1)))
+            self._db.append((samp - removal) | {0})
             removal |= samp
 
 
@@ -128,7 +129,7 @@ class DefFailSafeSampling(SamplingSet):
 
     def __init__(self):
         t_samples = TimeSampling(0.4,6,5, 0.2)
-        d_samples = PositionSampling(-2.5,2.5,5)
+        d_samples = PositionSampling(-3,3,5)
         v_samples = VelocitySampling(0,0,5)
         super(DefFailSafeSampling, self).__init__(t_samples,d_samples,v_samples)
 
@@ -136,7 +137,7 @@ class VehModelParameters:
     """
     Class that represents the vehicle's constraints and parameters a_max=8, 0.2, 0.2, 10)
     """
-    def __init__(self, a_max=8, theta_dot_max=0.2, kappa_max=0.2, kappa_dot_max=0.2, veh_length=5.1, veh_width=1.9):
+    def __init__(self, a_max=8, theta_dot_max=0.2, kappa_max=0.2, kappa_dot_max=0.4, veh_length=5.1, veh_width=1.9):
         self.a_max = a_max
         self.theta_dot_max = theta_dot_max
         self.kappa_max = kappa_max

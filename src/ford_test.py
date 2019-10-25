@@ -10,9 +10,11 @@ from commonroad.common.file_reader import CommonRoadFileReader
 from commonroad.visualization.draw_dispatch_cr import draw_object
 from commonroad_rp.reactive_planner import ReactivePlanner
 from commonroad_ccosy.geometry.trapezoid_coordinate_system import create_coordinate_system_from_polyline
+from commonroad_ccosy.geometry.util import chaikins_corner_cutting, resample_polyline
 from scenario_helpers import *
 import commonroad_cc.visualization.draw_dispatch as crd
 from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_checker
+from commonroad.geometry.shape import Rectangle
 
 
 import matplotlib.pyplot as plt
@@ -25,6 +27,7 @@ if __name__ == '__main__':
 
     scenario = 'scenarios_lg_single_lane_23.xml'
     scenario = 'scenarios_lg_borregas_ave_59.xml'
+    scenario = 'scenarios_borregas_ave_traffic_routing_3_v2_scenario_borregas_ave_844.xml'
 
     print('Loading scenario {}'.format(scenario))
 
@@ -59,12 +62,15 @@ if __name__ == '__main__':
     print('Initial state of ego vehicle is {}'.format(ego_initial_state))
 
     # create coordinate system
-    ego_lanelet_id = scenario.lanelet_network.find_lanelet_by_position([ego_initial_state.position])[0][0]
-    print('Ego vehice is located in lanelet id={}'.format(ego_lanelet_id))
     reference_path = obtain_reference_path(ego_initial_state, scenario)
-    curvilinear_cosy = create_coordinate_system_from_polyline(reference_path)
+    reference_path = resample_polyline(reference_path, step = 2)
+    reference_path = chaikins_corner_cutting(reference_path)
+    reference_path = chaikins_corner_cutting(reference_path)
+    reference_path = chaikins_corner_cutting(reference_path)
 
-
+    plt.plot(reference_path[:,0],reference_path[:,1],'-xk')
+    draw_object(Rectangle(4.5,2.1,center=ego_initial_state.position,orientation=ego_initial_state.orientation))
+    #plt.show(block=True)
 
     # create initial state
     x_0 = ego_initial_state
