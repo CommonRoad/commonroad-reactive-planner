@@ -84,6 +84,7 @@ if __name__ == '__main__':
     # create initial state
     #x_0 = ego_initial_state
     x_0 = ego_original.prediction.trajectory.state_list[ttr]
+    draw_object(x_0)
 
     x_cl = None
     optimal = planner.plan(x_0, collision_checker, cl_states=x_cl)
