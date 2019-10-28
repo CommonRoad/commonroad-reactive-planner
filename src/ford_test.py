@@ -31,13 +31,18 @@ if __name__ == '__main__':
 
     print('Loading scenario {}'.format(scenario))
 
+    # fail-safe parameter for planner
+    N_fs = 30
+    t_fs = 6.
+
+
     # Load example scenario ZAM Over
     crfr = CommonRoadFileReader(scenario)
     scenario, problem = crfr.open()
     ego_original = scenario.obstacle_by_id(999999)
     scenario.remove_obstacle(ego_original)  # remove ego vehicle
     # spot_setup(scenario,next(iter(problem.planning_problem_dict.values())))
-    # set_obstacle_occupancy_prediction(scenario)
+    # set_obstacle_occupancy_prediction(scenario,end_time=len(ego_original.prediction.state_list)*scenario.dt+t_fs)
     road_boundary_sg, road_boundary_obstacle = create_road_boundary(scenario, draw=False)
     lanelet_network = scenario.lanelet_network
     lanelets = lanelet_network.lanelets
@@ -49,7 +54,7 @@ if __name__ == '__main__':
     crd.draw_object(road_boundary_sg)
     plt.axis('equal')
     plt.show(block=False)
-    plt.pause(0.1*10)
+    plt.pause(1)
 
     # create collision checker for scenario
     collision_checker = create_collision_checker(scenario)
@@ -73,8 +78,7 @@ if __name__ == '__main__':
     # draw_object(Rectangle(4.5,2.1,center=ego_initial_state.position,orientation=ego_initial_state.orientation),draw_params=draw_parameters_itended)
 
     # plt.show(block=True)
-
-    planner: ReactivePlanner = ReactivePlanner(0.2, 6, 30)
+    planner: ReactivePlanner = ReactivePlanner(0.2, t_fs, N_fs, factor=10)
     planner.set_reference_path(reference_path)
 
     # compute TTR

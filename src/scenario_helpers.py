@@ -226,6 +226,7 @@ def _compute_braking_maneuver(x0: State, cosys: CoordinateSystem, dT: float, par
 
     # compute list of rectangles
     shapes = list()
+    print("Starting at {}".format(x0.time_step))
     for i in range(len(x_brake)):
         ego = pycrcc.TimeVariantCollisionObject(x0.time_step + i)
         ego.append_obstacle(pycrcc.RectOBB(0.5 * params.veh_length, 0.5 * params.veh_width, theta_brake[i], x_brake[i], y_brake[i]))

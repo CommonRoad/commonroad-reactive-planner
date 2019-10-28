@@ -31,7 +31,7 @@ from commonroad_rp.utils import CoordinateSystem
 
 
 class ReactivePlanner(object):
-    def __init__(self, dt: float, t_h: float, N: int, v_desired=14, collision_check_in_cl: bool = False):
+    def __init__(self, dt: float, t_h: float, N: int, v_desired=14, collision_check_in_cl: bool = False, factor:int = 1):
 
         assert is_positive(dt), '<ReactivePlanner>: provided dt is not correct! dt = {}'.format(dt)
         assert is_positive(N) and is_natural_number(N), '<ReactivePlanner>: provided N is not correct! dt = {}'.format(
@@ -44,6 +44,7 @@ class ReactivePlanner(object):
         self.horizon = t_h
         self.N = N
         self.dT = dt
+        self._factor = factor
 
         # Create default VehModelParameters
         self.constraints = VehModelParameters()
@@ -532,7 +533,7 @@ class ReactivePlanner(object):
             # check each pose for collisions
             collide = False
             for i in range(len(pos1)):
-                ego = pycrcc.TimeVariantCollisionObject(self.x_0.time_step+i)
+                ego = pycrcc.TimeVariantCollisionObject(self.x_0.time_step+i*self._factor)
                 ego.append_obstacle(pycrcc.RectOBB(0.5 * self._length, 0.5 * self._width, theta[i], pos1[i], pos2[i]))
                 if cc.collide(ego):
                     self._infeasible_count_collision += 1
