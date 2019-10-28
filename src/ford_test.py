@@ -27,14 +27,15 @@ if __name__ == '__main__':
 
     scenario = 'scenarios_lg_single_lane_23.xml'
     scenario = 'scenarios_lg_borregas_ave_59.xml'
-    scenario = 'scenarios_borregas_ave_traffic_routing_3_v2_scenario_borregas_ave_844.xml'
+    #scenario = 'scenarios_borregas_ave_traffic_routing_3_v2_scenario_borregas_ave_844.xml'
 
     print('Loading scenario {}'.format(scenario))
 
     # Load example scenario ZAM Over
     crfr = CommonRoadFileReader(scenario)
     scenario, problem = crfr.open()
-    scenario.remove_obstacle(scenario.obstacle_by_id(999999))  # remove ego vehicle
+    ego_original = scenario.obstacle_by_id(999999)
+    scenario.remove_obstacle(ego_original)  # remove ego vehicle
     #spot_setup(scenario,next(iter(problem.planning_problem_dict.values())))
     #set_obstacle_occupancy_prediction(scenario)
     road_boundary_sg, road_boundary_obstacle = create_road_boundary(scenario, draw=False)
@@ -68,8 +69,10 @@ if __name__ == '__main__':
     reference_path = chaikins_corner_cutting(reference_path)
     reference_path = chaikins_corner_cutting(reference_path)
 
-    plt.plot(reference_path[:,0],reference_path[:,1],'-xk')
-    draw_object(Rectangle(4.5,2.1,center=ego_initial_state.position,orientation=ego_initial_state.orientation))
+    #plt.plot(reference_path[:,0],reference_path[:,1],'-xk')
+    #draw_object(Rectangle(4.5,2.1,center=ego_initial_state.position,orientation=ego_initial_state.orientation),draw_params=draw_parameters_itended)
+    #plt.show(block=True)
+
     #plt.show(block=True)
 
     # create initial state
@@ -83,9 +86,14 @@ if __name__ == '__main__':
     optimal = planner.plan(x_0, collision_checker, cl_states=x_cl)
     # convert to CR obstacle
     ego = planner.convert_cr_trajectory_to_object(optimal[0])
-    draw_object(ego)
+    #draw_object(ego.prediction.occupancy_set[0])
+    #plt.show(block=True)
+    # draw intended trajectory
+    for occ in ego_original.prediction.occupancy_set:
+        draw_object(occ, draw_params=draw_parameters_itended)
+    # draw fail-safe trajectory
     for occ in ego.prediction.occupancy_set:
-        draw_object(occ)
+        draw_object(occ, draw_params=draw_parameters_fail_safe)
     plt.pause(0.1)
 
     #for state in optimal[0].state_list:

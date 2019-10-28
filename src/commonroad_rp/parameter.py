@@ -137,7 +137,7 @@ class VehModelParameters:
     """
     Class that represents the vehicle's constraints and parameters a_max=8, 0.2, 0.2, 10)
     """
-    def __init__(self, a_max=8, theta_dot_max=0.2, kappa_max=0.2, kappa_dot_max=0.4, veh_length=5.1, veh_width=1.9):
+    def __init__(self, a_max=8, theta_dot_max=0.2, kappa_max=0.2, kappa_dot_max=0.4, veh_length=4.933, veh_width=2.11):
         self.a_max = a_max
         self.theta_dot_max = theta_dot_max
         self.kappa_max = kappa_max

@@ -1,6 +1,7 @@
 import construction
 import triangle_builder
 from typing import List
+import copy
 
 import pycrcc
 from pycrcc import *
@@ -10,6 +11,7 @@ import numpy as np
 import commonroad.geometry.shape as shp
 from commonroad.scenario.trajectory import State
 from commonroad.prediction.prediction import Occupancy, SetBasedPrediction
+from commonroad.visualization.draw_dispatch_cr import default_draw_params
 
 from commonroad.planning.planning_problem import PlanningProblem
 from commonroad.scenario.lanelet import Lanelet, LaneletNetwork
@@ -19,6 +21,31 @@ from commonroad_rp.utils import compute_pathlength_from_polyline, compute_orient
 
 #import spot
 from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_object
+
+draw_parameters_itended = copy.deepcopy(default_draw_params)
+draw_parameters_fail_safe = copy.deepcopy(default_draw_params)
+draw_parameters_ego = copy.deepcopy(default_draw_params)
+
+def update_draw_params():
+    # intended
+    draw_parameters_itended['scenario']['dynamic_obstacle']['occupancy']['shape']['rectangle']['facecolor'] = '#000000'
+    draw_parameters_itended['scenario']['dynamic_obstacle']['occupancy']['shape']['rectangle']['edgecolor'] = '#000000'
+
+    # fail-safe
+    draw_parameters_fail_safe['scenario']['dynamic_obstacle']['occupancy']['shape']['rectangle'][
+        'edgecolor'] = '#FF0000'
+    draw_parameters_fail_safe['scenario']['dynamic_obstacle']['occupancy']['shape']['rectangle'][
+        'facecolor'] = '#FF0000'
+
+    # static obstacles
+    draw_parameters_itended['scenario']['static_obstacle']['shape']['rectangle']['facecolor'] = '#1d7eea'
+    draw_parameters_itended['scenario']['static_obstacle']['shape']['rectangle']['edgecolor'] = '#0066cc'
+
+    # ego initial shape
+    draw_parameters_ego['shape']['rectangle']['facecolor'] = '#000000'
+    draw_parameters_ego['shape']['rectangle']['edgecolor'] = '#000000'
+
+update_draw_params()
 
 def create_road_boundary(scenario: Scenario, draw=False) -> StaticObstacle:
     #method =('triangulation', {'call_options': 'a100q'}) # 'shell' # 'triangulation'

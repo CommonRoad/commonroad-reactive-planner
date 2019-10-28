@@ -51,9 +51,9 @@ class DefaultCostFunctionFailSafe(CostFunction):
         # acceleration costs
         costs = np.sum((1 * trajectory.cartesian.a) ** 2)
         # distance costs
-        costs += np.sum((0.15 * trajectory.curvilinear.d) ** 2) + (20 * trajectory.curvilinear.d[-1]) ** 2
+        costs += np.sum((0.25 * trajectory.curvilinear.d) ** 2) + (20 * trajectory.curvilinear.d[-1]) ** 2
         # orientation costs
-        costs += np.sum((0.1 * np.abs(trajectory.curvilinear.theta)) ** 2) + (
+        costs += np.sum((0.25 * np.abs(trajectory.curvilinear.theta)) ** 2) + (
                     5 * (np.abs(trajectory.curvilinear.theta[-1]))) ** 2
 
         return costs
