@@ -169,7 +169,7 @@ def set_obstacle_occupancy_prediction(scenario: Scenario, update_dict=None, end_
         cr_occupancy_list = []
 
         for i in range(int(end_time / scenario.dt) + 1):
-            occ = Occupancy(i + 1, ShapeGroup([]))
+            occ = Occupancy(i + 1, shp.ShapeGroup([]))
             cr_occupancy_list.append(occ)
 
             # print(len(occupancy_list))
@@ -187,7 +187,7 @@ def set_obstacle_occupancy_prediction(scenario: Scenario, update_dict=None, end_
                             'Warning: one duplicated vertex skipped when copying predicted occupancies to CommonRoad')
                         b += 1  # try next vertex as first vertex (in case of equal vertices directly after each other)
                     else:
-                        shape_obj = Polygon(np.array(vertices_at_time_step[1][b:j + 1]))
+                        shape_obj = shp.Polygon(np.array(vertices_at_time_step[1][b:j + 1]))
                         cr_occupancy_list[i].shape.shapes.append(shape_obj)
                         j += 1
                         b = j
@@ -227,7 +227,9 @@ def _compute_braking_maneuver(x0: State, cosys: CoordinateSystem, dT: float, par
     # compute list of rectangles
     shapes = list()
     for i in range(len(x_brake)):
-        shapes.append(pycrcc.RectOBB(0.5 * params.veh_length, 0.5 * params.veh_width, theta_brake[i], x_brake[i], y_brake[i]))
+        ego = pycrcc.TimeVariantCollisionObject(x0.time_step + i)
+        ego.append_obstacle(pycrcc.RectOBB(0.5 * params.veh_length, 0.5 * params.veh_width, theta_brake[i], x_brake[i], y_brake[i]))
+        shapes.append(ego)
 
     return shapes
 
@@ -253,4 +255,4 @@ def compute_simplified_ttr(intended: Trajectory, cc, cosys: CoordinateSystem, dT
             else:
                 break
 
-    return ttr
+    return ttr if ttr >= 0 else 0

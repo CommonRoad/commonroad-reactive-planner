@@ -27,7 +27,7 @@ if __name__ == '__main__':
 
     scenario = 'scenarios_lg_single_lane_23.xml'
     scenario = 'scenarios_lg_borregas_ave_59.xml'
-    scenario = 'scenarios_borregas_ave_traffic_routing_3_v2_scenario_borregas_ave_844.xml'
+    #scenario = 'scenarios_borregas_ave_traffic_routing_3_v2_scenario_borregas_ave_844.xml'
 
     print('Loading scenario {}'.format(scenario))
 

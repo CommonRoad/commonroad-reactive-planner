@@ -204,9 +204,11 @@ class ReactivePlanner(object):
         x_0_lon = [s, s_d, s_dd]
         x_0_lat = [d, d_p, d_pp]
 
-        print('Initial state is {}'.format(x_0))
+        print("<ReactivePlanner>: Starting planning with: \n#################")
+        print('Initial state for planning is {}'.format(x_0))
         print('Initial x_0 lon = {}'.format(x_0_lon))
         print('Initial x_0 lat = {}'.format(x_0_lat))
+        print("#################")
 
         return (x_0_lon, x_0_lat)
 
@@ -517,7 +519,7 @@ class ReactivePlanner(object):
         # sort trajectories according to their costs
         trajectory_bundle.sort()
 
-        self.draw_trajectory_set(feasible_trajectories)
+        #self.draw_trajectory_set(feasible_trajectories)
         #plt.show(block=True)
 
         # go through sorted list of trajectories and check for collisions
@@ -530,7 +532,9 @@ class ReactivePlanner(object):
             # check each pose for collisions
             collide = False
             for i in range(len(pos1)):
-                if cc.collide(pycrcc.RectOBB(0.5 * self._length, 0.5 * self._width, theta[i], pos1[i], pos2[i])):
+                ego = pycrcc.TimeVariantCollisionObject(self.x_0.time_step+i)
+                ego.append_obstacle(pycrcc.RectOBB(0.5 * self._length, 0.5 * self._width, theta[i], pos1[i], pos2[i]))
+                if cc.collide(ego):
                     self._infeasible_count_collision += 1
                     collide = True
                     break
