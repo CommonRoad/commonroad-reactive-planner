@@ -9,7 +9,7 @@ from commonroad.scenario.scenario import Scenario
 from commonroad.scenario.obstacle import StaticObstacle, ObstacleType
 import numpy as np
 import commonroad.geometry.shape as shp
-from commonroad.scenario.trajectory import State
+from commonroad.scenario.trajectory import State, Trajectory
 from commonroad.prediction.prediction import Occupancy, SetBasedPrediction
 from commonroad.visualization.draw_dispatch_cr import default_draw_params
 
@@ -17,6 +17,8 @@ from commonroad.planning.planning_problem import PlanningProblem
 from commonroad.scenario.lanelet import Lanelet, LaneletNetwork
 from commonroad_ccosy.geometry.trapezoid_coordinate_system import create_coordinate_system_from_polyline
 from commonroad_rp.utils import compute_pathlength_from_polyline, compute_orientation_from_polyline
+from commonroad_rp.parameter import VehModelParameters
+from commonroad_rp.utils import CoordinateSystem
 
 
 #import spot
@@ -197,3 +199,58 @@ def set_obstacle_occupancy_prediction(scenario: Scenario, update_dict=None, end_
         scenario.dynamic_obstacles[k].prediction = SetBasedPrediction(1, cr_occupancy_list[0:])
         k += 1
 
+
+def _compute_braking_maneuver(x0: State, cosys: CoordinateSystem, dT: float, params: VehModelParameters):
+
+    # transform into curvilinear coordinate system
+    s0,d0 = cosys.convert_to_curvilinear_coords(x0.position[0],x0.position[1])
+
+    # compute braking maneuver
+    v0 = x0.velocity
+    t_brake = abs(v0/params.a_max)
+    t = np.arange(0,t_brake+dT,dT)
+    if t[-1] > t_brake:
+        t = t[:-1]
+    s_brake = s0 + v0*t -0.5*params.a_max*np.square(t)
+
+    # transform back to Cartesian coordinate system
+    x_brake = list()
+    y_brake = list()
+    for s in s_brake:
+        x,y, = cosys.convert_to_cartesian_coords(s,0)
+        x_brake.append(x)
+        y_brake.append(y)
+
+    # compute orientation
+    theta_brake = np.interp(s_brake,cosys.ref_pos(),cosys.ref_theta())
+
+    # compute list of rectangles
+    shapes = list()
+    for i in range(len(x_brake)):
+        shapes.append(pycrcc.RectOBB(0.5 * params.veh_length, 0.5 * params.veh_width, theta_brake[i], x_brake[i], y_brake[i]))
+
+    return shapes
+
+
+
+
+def compute_simplified_ttr(intended: Trajectory, cc, cosys: CoordinateSystem, dT: float, params: VehModelParameters) -> int:
+
+    # initial ttr
+    ttr = -1
+    # go through states
+    for i,x in enumerate(intended.state_list):
+        shapes = _compute_braking_maneuver(x, cosys, dT, params)
+        collide = False
+        for shape in shapes:
+            if cc.collide(shape):
+                collide = True
+                break
+
+        if not collide:
+            if ttr == i - 1:
+                ttr = i
+            else:
+                break
+
+    return ttr

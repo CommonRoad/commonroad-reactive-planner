@@ -75,9 +75,15 @@ class ReactivePlanner(object):
         # sampling levels
         self._sampling_level = fs_sampling.max_iteration
 
+        # coordinate system
+        self._co = None
+
     def set_reference_path(self, reference_path: np.ndarray):
         self._co: CoordinateSystem = CoordinateSystem(reference_path)
 
+
+    def coordinate_system(self):
+        return self._co
 
     def no_of_samples(self, samp_level: int) -> int:
         """

@@ -27,7 +27,7 @@ if __name__ == '__main__':
 
     scenario = 'scenarios_lg_single_lane_23.xml'
     scenario = 'scenarios_lg_borregas_ave_59.xml'
-    #scenario = 'scenarios_borregas_ave_traffic_routing_3_v2_scenario_borregas_ave_844.xml'
+    scenario = 'scenarios_borregas_ave_traffic_routing_3_v2_scenario_borregas_ave_844.xml'
 
     print('Loading scenario {}'.format(scenario))
 
@@ -36,8 +36,8 @@ if __name__ == '__main__':
     scenario, problem = crfr.open()
     ego_original = scenario.obstacle_by_id(999999)
     scenario.remove_obstacle(ego_original)  # remove ego vehicle
-    #spot_setup(scenario,next(iter(problem.planning_problem_dict.values())))
-    #set_obstacle_occupancy_prediction(scenario)
+    # spot_setup(scenario,next(iter(problem.planning_problem_dict.values())))
+    # set_obstacle_occupancy_prediction(scenario)
     road_boundary_sg, road_boundary_obstacle = create_road_boundary(scenario, draw=False)
     lanelet_network = scenario.lanelet_network
     lanelets = lanelet_network.lanelets
@@ -69,25 +69,28 @@ if __name__ == '__main__':
     reference_path = chaikins_corner_cutting(reference_path)
     reference_path = chaikins_corner_cutting(reference_path)
 
-    #plt.plot(reference_path[:,0],reference_path[:,1],'-xk')
-    #draw_object(Rectangle(4.5,2.1,center=ego_initial_state.position,orientation=ego_initial_state.orientation),draw_params=draw_parameters_itended)
-    #plt.show(block=True)
+    # plt.plot(reference_path[:,0],reference_path[:,1],'-xk')
+    # draw_object(Rectangle(4.5,2.1,center=ego_initial_state.position,orientation=ego_initial_state.orientation),draw_params=draw_parameters_itended)
 
-    #plt.show(block=True)
-
-    # create initial state
-    x_0 = ego_initial_state
+    # plt.show(block=True)
 
     planner: ReactivePlanner = ReactivePlanner(0.2, 6, 30)
     planner.set_reference_path(reference_path)
 
-    x_cl = None
+    # compute TTR
+    ttr = compute_simplified_ttr(ego_original.prediction.trajectory, collision_checker,planner.coordinate_system(),scenario.dt,planner.constraints)
+    print("TTR is {}".format(ttr))
 
+    # create initial state
+    #x_0 = ego_initial_state
+    x_0 = ego_original.prediction.trajectory.state_list[ttr]
+
+    x_cl = None
     optimal = planner.plan(x_0, collision_checker, cl_states=x_cl)
     # convert to CR obstacle
     ego = planner.convert_cr_trajectory_to_object(optimal[0])
-    #draw_object(ego.prediction.occupancy_set[0])
-    #plt.show(block=True)
+    # draw_object(ego.prediction.occupancy_set[0])
+    # plt.show(block=True)
     # draw intended trajectory
     for occ in ego_original.prediction.occupancy_set:
         draw_object(occ, draw_params=draw_parameters_itended)
@@ -96,13 +99,9 @@ if __name__ == '__main__':
         draw_object(occ, draw_params=draw_parameters_fail_safe)
     plt.pause(0.1)
 
-    #for state in optimal[0].state_list:
-    #    print(state.orientation)
 
     x_0 = optimal[0].state_list[1]
     x_cl = (optimal[2][1], optimal[3][1])
-
-        #print("Goal state is: {}".format(optimal[1].state_list[-1]))
 
     print('Done')
     plt.show(block=True)
