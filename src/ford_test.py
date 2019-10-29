@@ -1,20 +1,18 @@
 __author__ = "Christian Pek"
 __copyright__ = "TUM Cyber-Physical Systems Group"
 __credits__ = ["BMW Group CAR@TUM, interACT"]
-__version__ = "0.1"
+__version__ = "0.5"
 __maintainer__ = "Christian Pek"
 __email__ = "Christian.Pek@tum.de"
-__status__ = "Alpha"
+__status__ = "Beta"
 
 from commonroad.common.file_reader import CommonRoadFileReader
 from commonroad.visualization.draw_dispatch_cr import draw_object
 from commonroad_rp.reactive_planner import ReactivePlanner
-from commonroad_ccosy.geometry.trapezoid_coordinate_system import create_coordinate_system_from_polyline
 from commonroad_ccosy.geometry.util import chaikins_corner_cutting, resample_polyline
 from scenario_helpers import *
 import commonroad_cc.visualization.draw_dispatch as crd
 from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_checker
-from commonroad.geometry.shape import Rectangle
 
 
 import matplotlib.pyplot as plt
@@ -48,10 +46,10 @@ if __name__ == '__main__':
     lanelets = lanelet_network.lanelets
 
 
-
+    # Create figure and draw CommonRoad scneario
     plt.figure(figsize=(25, 10))
     draw_object(scenario)
-    crd.draw_object(road_boundary_sg)
+    #crd.draw_object(road_boundary_sg)
     plt.axis('equal')
     plt.show(block=False)
     plt.pause(1)
@@ -67,35 +65,35 @@ if __name__ == '__main__':
 
     print('Initial state of ego vehicle is {}'.format(ego_initial_state))
 
-    # create coordinate system
+    # create reference path for curvilinear coordinate system
     reference_path = obtain_reference_path(ego_initial_state, scenario)
     reference_path = resample_polyline(reference_path, step = 2)
+    # smooth reference
     reference_path = chaikins_corner_cutting(reference_path)
     reference_path = chaikins_corner_cutting(reference_path)
     reference_path = chaikins_corner_cutting(reference_path)
 
     # plt.plot(reference_path[:,0],reference_path[:,1],'-xk')
     # draw_object(Rectangle(4.5,2.1,center=ego_initial_state.position,orientation=ego_initial_state.orientation),draw_params=draw_parameters_itended)
-
     # plt.show(block=True)
+
+    # create new instance of reactive planner
     planner: ReactivePlanner = ReactivePlanner(0.2, t_fs, N_fs, factor=10)
     planner.set_reference_path(reference_path)
 
-    # compute TTR
+    # compute TTR for branch point of fail-safe trajectory
     ttr = compute_simplified_ttr(ego_original.prediction.trajectory, collision_checker,planner.coordinate_system(),scenario.dt,planner.constraints)
     print("TTR is {}".format(ttr))
 
-    # create initial state
-    #x_0 = ego_initial_state
+    # obtain initial state for fail-safe planner and draw it
     x_0 = ego_original.prediction.trajectory.state_list[ttr]
     draw_object(x_0)
 
-    x_cl = None
-    optimal = planner.plan(x_0, collision_checker, cl_states=x_cl)
+    # plan trajectory
+    optimal = planner.plan(x_0, collision_checker)
+
     # convert to CR obstacle
     ego = planner.convert_cr_trajectory_to_object(optimal[0])
-    # draw_object(ego.prediction.occupancy_set[0])
-    # plt.show(block=True)
     # draw intended trajectory
     for occ in ego_original.prediction.occupancy_set:
         draw_object(occ, draw_params=draw_parameters_itended)
@@ -103,10 +101,6 @@ if __name__ == '__main__':
     for occ in ego.prediction.occupancy_set:
         draw_object(occ, draw_params=draw_parameters_fail_safe)
     plt.pause(0.1)
-
-
-    x_0 = optimal[0].state_list[1]
-    x_cl = (optimal[2][1], optimal[3][1])
 
     print('Done')
     plt.show(block=True)

@@ -1,11 +1,10 @@
 __author__ = "Christian Pek"
 __copyright__ = "TUM Cyber-Physical Systems Group"
 __credits__ = ["BMW Group CAR@TUM, interACT"]
-__version__ = "0.1"
+__version__ = "0.5"
 __maintainer__ = "Christian Pek"
 __email__ = "Christian.Pek@tum.de"
-__status__ = "Alpha"
-
+__status__ = "Beta"
 
 # python packages
 from typing import List
@@ -23,7 +22,6 @@ from commonroad.scenario.trajectory import Trajectory, State
 
 # commonroad imports
 from commonroad_rp.parameter import DefFailSafeSampling, VehModelParameters
-from commonroad_rp.parameter import parameter_velocity_reaching
 from commonroad_rp.polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
 from commonroad_rp.trajectories import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample
 from commonroad_rp.cost_function import DefaultCostFunctionFailSafe
@@ -31,7 +29,23 @@ from commonroad_rp.utils import CoordinateSystem
 
 
 class ReactivePlanner(object):
-    def __init__(self, dt: float, t_h: float, N: int, v_desired=14, collision_check_in_cl: bool = False, factor:int = 1):
+    """
+    Reactive planner class that plans trajectories in a sampling-based fashion
+    """
+
+    def __init__(self, dt: float, t_h: float, N: int, v_desired=14, collision_check_in_cl: bool = False,
+                 factor: int = 1):
+        """
+        Constructor of the reactive planner
+        :param dt: The time step of planned trajectories
+        :param t_h: The time horizon of planned trajectories
+        :param N: The number of steps of planned trajectories (int)
+        :param v_desired: The desired velocity of for planning trajectories
+        :param collision_check_in_cl: Boolean if the collision checker has been provided in curvilinear
+        coordinates (default=False)
+        :param factor: Factor when performing collision checks and the scenario is given in a different time
+        step, e.g., 0.02 for scenario and 0.2 for planner results in a factor of 10.
+        """
 
         assert is_positive(dt), '<ReactivePlanner>: provided dt is not correct! dt = {}'.format(dt)
         assert is_positive(N) and is_natural_number(N), '<ReactivePlanner>: provided N is not correct! dt = {}'.format(
@@ -80,10 +94,17 @@ class ReactivePlanner(object):
         self._co = None
 
     def set_reference_path(self, reference_path: np.ndarray):
+        """
+        Sets the reference path and automatically creates a coordinate system
+        :param reference_path: The reference path
+        """
         self._co: CoordinateSystem = CoordinateSystem(reference_path)
 
-
-    def coordinate_system(self):
+    def coordinate_system(self) -> CoordinateSystem:
+        """
+        Returns the created coordinate system of the reactive planner
+        :return: The coordinate system
+        """
         return self._co
 
     def no_of_samples(self, samp_level: int) -> int:
@@ -92,8 +113,9 @@ class ReactivePlanner(object):
         :param samp_level: The sampling level
         :return: Number of trajectory samples for given sampling level
         """
-        #return len(self._v_sets[samp_level]) * len(self._d_sets[samp_level]) * len(self._t_sets[samp_level])
-        return len(self._sampling_v.to_range(samp_level)) * len(self._sampling_d.to_range(samp_level)) * len(self._sampling_t.to_range(samp_level))
+        # return len(self._v_sets[samp_level]) * len(self._d_sets[samp_level]) * len(self._t_sets[samp_level])
+        return len(self._sampling_v.to_range(samp_level)) * len(self._sampling_d.to_range(samp_level)) * len(
+            self._sampling_t.to_range(samp_level))
 
     def no_of_infeasible_trajectories_collision(self) -> int:
         """
@@ -124,9 +146,6 @@ class ReactivePlanner(object):
         NOTE: Here, no collision or feasibility check is done!
         """
 
-        # get parameters for planning
-        params = parameter_velocity_reaching()
-
         # reset cost statistic
         self._min_cost = 10 ** 9
         self._max_cost = 0
@@ -151,8 +170,7 @@ class ReactivePlanner(object):
                             trajectories.append(trajectory_sample)
 
         # perform pre check and order trajectories according their cost
-        trajectory_bundle = TrajectoryBundle(trajectories, params,
-                                             cost_function=DefaultCostFunctionFailSafe())
+        trajectory_bundle = TrajectoryBundle(trajectories, cost_function=DefaultCostFunctionFailSafe())
 
         return trajectory_bundle
 
@@ -170,8 +188,8 @@ class ReactivePlanner(object):
 
     def _compute_initial_states(self, x_0: State) -> (np.ndarray, np.ndarray):
         """
-        Computes the initial states for the polynomial planner based on a TrajPoint object
-        :param x_0: The TrajPoint object representing the initial state of the vehicle
+        Computes the initial states for the polynomial planner based on a CommonRoad state
+        :param x_0: The CommonRoad state object representing the initial state of the vehicle
         :return: A tuple containing the initial longitudinal and lateral states (lon,lat)
         """
 
@@ -192,26 +210,71 @@ class ReactivePlanner(object):
         s_d = x_0.velocity * np.cos(theta_cl) / (1 - np.interp(s, self._co.ref_pos(), self._co.ref_curv()) * d)
         if s_d < 0:
             raise Exception(
-                "Initial state or reference incorrect! Curvilinear velocity is negative which indicates that the ego vehicle is not driving in the same direction as specified by the reference")
+                "Initial state or reference incorrect! Curvilinear velocity is negative which indicates that the "
+                "ego vehicle is not driving in the same direction as specified by the reference")
 
         s_dd = x_0.acceleration
         s_dd -= (s_d ** 2 / np.cos(theta_cl)) * (
-                (1 - kr * d) * np.tan(theta_cl) * (x_0.yaw_rate * ((1 - kr * d) / (np.cos(theta_cl)) - kr)) - (
-                kr_d * d + kr * d_p))
+                (1 - kr * d) * np.tan(theta_cl) * (x_0.yaw_rate * ((1 - kr * d) / (np.cos(theta_cl)) - kr)) -
+                (kr_d * d + kr * d_p))
         s_dd /= ((1 - kr * d) / (np.cos(theta_cl)))
 
         # d_d =(1-kr*d)*np.tan(theta_cl) #x_0.v * np.sin(theta_cl)
 
-        x_0_lon = [s, s_d, s_dd]
-        x_0_lat = [d, d_p, d_pp]
+        x_0_lon: List[float] = [s, s_d, s_dd]
+        x_0_lat: List[float] = [d, d_p, d_pp]
 
         print("<ReactivePlanner>: Starting planning with: \n#################")
-        print('Initial state for planning is {}'.format(x_0))
-        print('Initial x_0 lon = {}'.format(x_0_lon))
-        print('Initial x_0 lat = {}'.format(x_0_lat))
+        print(f'Initial state for planning is {x_0}')
+        print(f'Initial x_0 lon = {x_0_lon}')
+        print(f'Initial x_0 lat = {x_0_lat}')
         print("#################")
 
-        return (x_0_lon, x_0_lat)
+        return x_0_lon, x_0_lat
+
+    @staticmethod
+    def _compute_trajectory_pair(trajectory: TrajectorySample) -> tuple:
+        """
+        Computes the output required for visualizing in CommonRoad framework
+        :param trajectory: the optimal trajectory
+        :return: (CartesianTrajectory, FrenetTrajectory, lon sample, lat sample)
+        """
+        # go along state list
+        cart_list = list()
+        cl_list = list()
+
+        lon_list = list()
+        lat_list = list()
+        for i in range(len(trajectory.cartesian.x)):
+            # create Cartesian state
+            cart_states = dict()
+            cart_states['time_step'] = i
+            cart_states['position'] = np.array([trajectory.cartesian.x[i], trajectory.cartesian.y[i]])
+            cart_states['velocity'] = trajectory.cartesian.v[i]
+            cart_states['acceleration'] = trajectory.cartesian.a[i]
+            cart_states['orientation'] = trajectory.cartesian.theta[i]
+            cart_states['yaw_rate'] = trajectory.cartesian.kappa[i]
+            cart_list.append(State(**cart_states))
+
+            # create curvilinear state
+            cl_states = dict()
+            cl_states['time_step'] = i
+            cl_states['position'] = np.array([trajectory.curvilinear.s[i], trajectory.curvilinear.d[i]])
+            cl_states['velocity'] = trajectory.cartesian.v[i]
+            cl_states['acceleration'] = trajectory.cartesian.a[i]
+            cl_states['orientation'] = trajectory.cartesian.theta[i]
+            cl_states['yaw_rate'] = trajectory.cartesian.kappa[i]
+            cl_list.append(State(**cl_states))
+
+            lon_list.append(
+                [trajectory.curvilinear.s[i], trajectory.curvilinear.s_dot[i], trajectory.curvilinear.s_ddot[i]])
+            lat_list.append(
+                [trajectory.curvilinear.d[i], trajectory.curvilinear.d_dot[i], trajectory.curvilinear.d_ddot[i]])
+
+        cartTraj = Trajectory(0, cart_list)
+        freTraj = Trajectory(0, cl_list)
+
+        return (cartTraj, freTraj, lon_list, lat_list)
 
     def plan(self, x_0: State, cc: object, cl_states=None) -> tuple:
         """
@@ -272,14 +335,23 @@ class ReactivePlanner(object):
             print('<ReactivePlanner>: Cannot find trajectory with default sampling parameters. '
                   'Switching to emergency mode!')
         else:
-            print('<ReactivePlanner>: Found optimal trajectory with costs = {}, which corresponds to {} percent of seen costs'.format(
-                optimal_trajectory.cost,
-                ((optimal_trajectory.cost - bundle.min_costs().cost) / (
+            print(
+                '<ReactivePlanner>: Found optimal trajectory with costs = {}, which '
+                'corresponds to {} percent of seen costs'.format(
+                    optimal_trajectory.cost,
+                    ((optimal_trajectory.cost - bundle.min_costs().cost) / (
                             bundle.max_costs().cost - bundle.min_costs().cost))))
 
         return self._compute_trajectory_pair(optimal_trajectory) if not bundle.empty() else None
 
     def _compute_standstill_trajectory(self, x_0, x_0_lon, x_0_lat) -> TrajectorySample:
+        """
+        Computes a standstill trajectory if the vehicle is already at velocity 0
+        :param x_0: The current state of the ego vehicle
+        :param x_0_lon: The longitudinal state in curvilinear coordinates
+        :param x_0_lat: The lateral state in curvilinear coordinates
+        :return: The TrajectorySample for a standstill trajectory
+        """
         # create artifical standstill trajectory
         print('Adding standstill trajectory')
         traj_lon = QuarticTrajectory(tau_0=0, delta_tau=self.horizon, x_0=x_0_lon,
@@ -295,63 +367,19 @@ class ReactivePlanner(object):
                                           np.repeat(x_0_lon[2], self.N))
         return p
 
-    def _compute_trajectory_pair(self, trajectory: TrajectorySample) -> tuple:
-        """
-        Computes the output required for visualizing in CommonRoad framework
-        :param trajectory: the optimal trajectory
-        :return: (CartesianTrajectory, FrenetTrajectory, lon sample, lat sample)
-        """
-        # go along state list
-        cart_list = list()
-        cl_list = list()
-
-        lon_list = list()
-        lat_list = list()
-        for i in range(len(trajectory.cartesian.x)):
-            # create Cartesian state
-            cart_states = dict()
-            cart_states['time_step'] = i
-            cart_states['position'] = np.array([trajectory.cartesian.x[i], trajectory.cartesian.y[i]])
-            cart_states['velocity'] = trajectory.cartesian.v[i]
-            cart_states['acceleration'] = trajectory.cartesian.a[i]
-            cart_states['orientation'] = trajectory.cartesian.theta[i]
-            cart_states['yaw_rate'] = trajectory.cartesian.kappa[i]
-            cart_list.append(State(**cart_states))
-
-            # create curvilinear state
-            cl_states = dict()
-            cl_states['time_step'] = i
-            cl_states['position'] = np.array([trajectory.curvilinear.s[i], trajectory.curvilinear.d[i]])
-            cl_states['velocity'] = trajectory.cartesian.v[i]
-            cl_states['acceleration'] = trajectory.cartesian.a[i]
-            cl_states['orientation'] = trajectory.cartesian.theta[i]
-            cl_states['yaw_rate'] = trajectory.cartesian.kappa[i]
-            cl_list.append(State(**cl_states))
-
-            lon_list.append(
-                [trajectory.curvilinear.s[i], trajectory.curvilinear.s_dot[i], trajectory.curvilinear.s_ddot[i]])
-            lat_list.append(
-                [trajectory.curvilinear.d[i], trajectory.curvilinear.d_dot[i], trajectory.curvilinear.d_ddot[i]])
-
-        cartTraj = Trajectory(0, cart_list)
-        freTraj = Trajectory(0, cl_list)
-
-        return (cartTraj, freTraj, lon_list, lat_list)
-
     def check_kinematics(self, trajectory_bundle: TrajectoryBundle) -> List[TrajectorySample]:
         """
-        Checks the kinematics of given trajectory and computes the cartesian trajectory information
-        :param trajectory: The trajectory to check
-        :return: True if the trajectory is feasible and false otherwise
+        Checks the kinematics of given trajectories in a bundle and computes the cartesian trajectory information
+        :param trajectory_bundle: The trajectory bundle to check
+        :return: The list of trajectories which are kinematically feasible
         """
-
         # constants
         _LOW_VEL_MODE = True
 
         feasible_trajectories = list()
         for trajectory in trajectory_bundle.trajectories:
             # create time array and precompute time interval information
-            t = np.arange(0, np.round(trajectory.trajectory_long.delta_tau + self.dT,5), self.dT)
+            t = np.arange(0, np.round(trajectory.trajectory_long.delta_tau + self.dT, 5), self.dT)
             t2 = np.square(t)
             t3 = t2 * t
             t4 = np.square(t2)
@@ -393,10 +421,10 @@ class ReactivePlanner(object):
             for i in range(0, s_length):
                 # compute Global position
                 try:
-                    pos = self._co.convert_to_cartesian_coords(s[i], d[i])
+                    pos: np.ndarray = self._co.convert_to_cartesian_coords(s[i], d[i])
                 except ValueError:
                     # outside of projection domain
-                    return False
+                    pass
                 x[i] = pos[0]
                 y[i] = pos[1]
 
@@ -425,7 +453,8 @@ class ReactivePlanner(object):
                 s_idx = np.argmin(np.abs(self._co.ref_pos() - s[i]))
                 if self._co.ref_pos()[s_idx] < s[i]:
                     s_idx += 1
-                s_lambda = (self._co.ref_pos()[s_idx] - s[i]) / (self._co.ref_pos()[s_idx + 1] - self._co.ref_pos()[s_idx])
+                s_lambda = (self._co.ref_pos()[s_idx] - s[i]) / (
+                        self._co.ref_pos()[s_idx + 1] - self._co.ref_pos()[s_idx])
 
                 # add cl and gl orientation
                 if s_velocity[i] > 0.005:
@@ -433,7 +462,8 @@ class ReactivePlanner(object):
                         theta_cl[i] = np.arctan2(dp, 1.0)
                     else:
                         theta_cl[i] = np.arctan2(d_velocity[i], s_velocity[i])
-                    theta_gl[i] = theta_cl[i] + (self._co.ref_theta()[s_idx + 1] - self._co.ref_theta()[s_idx]) * s_lambda + \
+                    theta_gl[i] = theta_cl[i] + (
+                            self._co.ref_theta()[s_idx + 1] - self._co.ref_theta()[s_idx]) * s_lambda + \
                                   self._co.ref_theta()[s_idx]
 
                 else:
@@ -443,14 +473,16 @@ class ReactivePlanner(object):
                     theta_gl[i] = theta_cl[i]
 
                 # Compute curvature of reference at current position
-                k_r = (self._co.ref_curv()[s_idx + 1] - self._co.ref_curv()[s_idx]) * s_lambda + self._co.ref_curv()[s_idx]
+                k_r = (self._co.ref_curv()[s_idx + 1] - self._co.ref_curv()[s_idx]) * s_lambda + self._co.ref_curv()[
+                    s_idx]
                 k_r_d = (self._co.ref_curv_d()[s_idx + 1] - self._co.ref_curv_d()[s_idx]) * s_lambda + \
                         self._co.ref_curv_d()[s_idx]
                 # compute global curvature based on appendix A of Moritz Werling's PhD thesis
                 oneKrD = (1 - k_r * d[i])
                 cosTheta = np.cos(theta_cl[i])
                 tanTheta = np.tan(theta_cl[i])
-                kappa_gl[i] = (dpp + k_r * dp * tanTheta) * cosTheta * (cosTheta / oneKrD) ** 2 + (cosTheta / oneKrD) * k_r
+                kappa_gl[i] = (dpp + k_r * dp * tanTheta) * cosTheta * (cosTheta / oneKrD) ** 2 + (
+                        cosTheta / oneKrD) * k_r
                 kappa_cl[i] = kappa_gl[i] - k_r
 
                 # velocity
@@ -463,47 +495,55 @@ class ReactivePlanner(object):
 
                 # check kinematics to already discard infeasible trajectories
                 if abs(kappa_gl[i] > self.constraints.kappa_max):
-                    #print("Kappa")
+                    # print("Kappa")
                     feasible = False
                     break
                 if abs((kappa_gl[i] - kappa_gl[i - 1]) / self.dT if i > 0 else 0.) > self.constraints.kappa_dot_max:
-                    #print("KappaDOT")
+                    # print("KappaDOT")
                     feasible = False
                     break
                 if abs(a[i]) > self.constraints.a_max:
-                    #print("Acceleration")
+                    # print("Acceleration")
                     feasible = False
                     break
                 if abs(v[i]) < -0.1:
-                    #print("Velocity")
+                    # print("Velocity")
                     feasible = False
                     break
-                if abs((theta_gl[i-1]-theta_gl[i])/self.dT if i > 0 else 0.) > 0.4:
-                    #print("Theta")
+                if abs((theta_gl[i - 1] - theta_gl[i]) / self.dT if i > 0 else 0.) > 0.4:
+                    # print("Theta")
                     feasible = False
                     break
 
             if feasible:
                 # store Cartesian trajectory
-                trajectory.cartesian = CartesianSample(x, y, theta_gl, v, a, kappa_gl, np.append([0], np.diff(kappa_gl)))
+                trajectory.cartesian = CartesianSample(x, y, theta_gl, v, a, kappa_gl,
+                                                       np.append([0], np.diff(kappa_gl)))
 
                 # store Curvilinear trajectory
-                trajectory.curvilinear = CurviLinearSample(s, d, theta_cl, ss=s_velocity, sss=s_acceleration, dd=d_velocity,
+                trajectory.curvilinear = CurviLinearSample(s, d, theta_cl, ss=s_velocity, sss=s_acceleration,
+                                                           dd=d_velocity,
                                                            ddd=d_acceleration)
 
                 # check if trajectories planning horizon is shorter than expected and extend if necessary
-                #if self.horizon > trajectory.trajectory_long.delta_tau:
-                if self.N+1 > len(trajectory.cartesian.x):
-                    trajectory.enlarge(self.N+1-len(trajectory.cartesian.x), self.dT)
+                # if self.horizon > trajectory.trajectory_long.delta_tau:
+                if self.N + 1 > len(trajectory.cartesian.x):
+                    trajectory.enlarge(self.N + 1 - len(trajectory.cartesian.x), self.dT)
 
-                assert self.N+1 == len(trajectory.cartesian.x) == len(trajectory.cartesian.y) == len(
-                    trajectory.cartesian.theta), '<ReactivePlanner/kinematics>: Trajectory computation is incorrect! Lenghts of state variables is not equal.'
+                assert self.N + 1 == len(trajectory.cartesian.x) == len(trajectory.cartesian.y) == len(
+                    trajectory.cartesian.theta), '<ReactivePlanner/kinematics>: Trajectory computation is incorrect!' \
+                                                 ' Lenghts of state variables is not equal.'
                 feasible_trajectories.append(trajectory)
         return feasible_trajectories
 
-
-
-    def _get_optimal_trajectory(self, trajectory_bundle: TrajectoryBundle, cc: object) -> TrajectorySample:
+    def _get_optimal_trajectory(self, trajectory_bundle: TrajectoryBundle, cc: pycrcc.CollisionChecker) \
+            -> TrajectorySample:
+        """
+        Computes the optimal trajectroy from a given trajectory bundle
+        :param trajectory_bundle: The trajectory bundle
+        :param cc: The collision checker object for the collision-checks
+        :return: The optimal trajectory if exists (otherwise None)
+        """
 
         # reset statistics
         self._infeasible_count_collision = 0
@@ -520,8 +560,8 @@ class ReactivePlanner(object):
         # sort trajectories according to their costs
         trajectory_bundle.sort()
 
-        #self.draw_trajectory_set(feasible_trajectories)
-        #plt.show(block=True)
+        # self.draw_trajectory_set(feasible_trajectories)
+        # plt.show(block=True)
 
         # go through sorted list of trajectories and check for collisions
         for trajectory in trajectory_bundle.get_sorted_list():
@@ -533,7 +573,7 @@ class ReactivePlanner(object):
             # check each pose for collisions
             collide = False
             for i in range(len(pos1)):
-                ego = pycrcc.TimeVariantCollisionObject(self.x_0.time_step+i*self._factor)
+                ego = pycrcc.TimeVariantCollisionObject(self.x_0.time_step + i * self._factor)
                 ego.append_obstacle(pycrcc.RectOBB(0.5 * self._length, 0.5 * self._width, theta[i], pos1[i], pos2[i]))
                 if cc.collide(ego):
                     self._infeasible_count_collision += 1
@@ -548,12 +588,11 @@ class ReactivePlanner(object):
         profiler.print_stats("time")
         return None
 
-
     def convert_cr_trajectory_to_object(self, trajectory: Trajectory):
         """
         Converts a CR trajectory to a CR dynamic obstacle with given dimensions
         :param trajectory: The trajectory of the vehicle
-        :return:
+        :return: CR dynamic obstacles representing the ego vehicle
         """
 
         # get shape of vehicle

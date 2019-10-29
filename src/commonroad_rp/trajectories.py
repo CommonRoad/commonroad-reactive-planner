@@ -1,84 +1,40 @@
+__author__ = "Christian Pek"
+__copyright__ = "TUM Cyber-Physical Systems Group"
+__credits__ = ["BMW Group CAR@TUM, interACT"]
+__version__ = "0.5"
+__maintainer__ = "Christian Pek"
+__email__ = "Christian.Pek@tum.de"
+__status__ = "Beta"
+
 from typing import Union, List
 import numpy as np
 from abc import ABC, abstractmethod
 
 from commonroad_rp.polynomial_trajectory import PolynomialTrajectory
-from commonroad_rp.utils import CoordinateSystem
-from pycrccosy import TrapezoidCoordinateSystem
-
 import commonroad.common.validity as val
 
 
-
-# planning parameter
-class PlanningParameter:
-    k_long = None
-    k_lat = None
-
-    k_jerk_lon = None
-    k_jerk_lat = None
-    k_time = None
-    k_distance = None
-
-    prediction_horizon = None
-    speed_limit = None
-
-    t_step_size = None
-    lat_step_size = None
-    long_step_size = None
-
-
-# vehicle parameter
-class VehicleParameter:
-    jerk_long_max = None
-    jerk_lat_max = None
-
-    acceleration_max = 8  # m/s²
-    velocity_max = 150 / 3.6  # m/s
-
-    curvature_max = 0.2
-
-    width = 1.674  # vehicle width [m]
-    length = 4.298  # vehicle length [m]
-
-    # parameters for calculating steering angle
-
-    length_front = length / 3
-    length_rear = 2 * length / 3
-    stiffness_front = 40000  # front tire stiffness [N/rad]
-    stiffness_rear = 40000  # rear tire stiffens [N/rad]
-    mass = 1500  # mass of vehicle [kg]
-
-
-def parameter_velocity_reaching():
-    params = PlanningParameter()
-
-    params.k_long = .1
-    params.k_lat = 5.0
-
-    params.k_jerk_lat = 5.0
-    params.k_jerk_lon = 5.0
-    params.k_time = 10.0
-    params.k_distance = 2.0
-
-    params.prediction_horizon = 3.0  # s
-    params.speed_limit = 130.0 / 3.6  # m/s
-
-    params.t_step_size = .5  # s
-    params.lat_step_size = 1
-    params.long_step_size = 1
-
-    return params
-
-
 class Sample(ABC):
+    """
+    Abstract class representing a trajectory ssample in a certain coordinate system
+    """
 
     @abstractmethod
     def length(self) -> int:
+        """
+        Returns the length of the sample
+        :return:
+        """
         pass
 
     @abstractmethod
     def enlarge(self, steps: int, dt: float):
+        """
+        Enlarges the sample specified by a certain number of steps
+        :param steps: The steps for enlarging the sample
+        :param dt: The time step of between each step
+        :return:
+        """
         pass
 
 
@@ -101,7 +57,8 @@ class CartesianSample(Sample):
         # assert val.is_real_number_vector(
         #     a, length=len(x)), '<CartesianSample/init>: Provided accelerations are not valid! a = {}'.format(a)
         # assert val.is_real_number_vector(
-        #     kappa, length=len(x)), '<CartesianSample/init>: Provided curvatures are not valid! kappa = {}'.format(kappa)
+        #     kappa, length=len(x)), '<CartesianSample/init>: Provided curvatures are not valid! kappa =
+        #     {}'.format(kappa)
         # assert val.is_real_number_vector(
         #     kappa_dot,
         #     length=len(x)), '<CartesianSample/init>: Provided curvature changes are not valid! kappa_dot = {}'.format(
@@ -207,11 +164,16 @@ class CartesianSample(Sample):
         return len(self.x)
 
     def enlarge(self, steps: int, dt: float):
+        """
+        Enlarges the Cartesian sample specified by the number of steps
+        :param steps: The number of steps for enlarging the sample
+        :param dt: The time step between two consecutive steps
+        """
         assert val.is_positive(steps), '<CartesianSample>: Provided steps is not valid! steps = {}'.format(steps)
         assert val.is_real_number(dt), '<CartesianSample>: Provided time step is not valid! dt = {}'.format(dt)
 
         # create time index
-        t = np.arange(1,steps+1,1)*dt
+        t = np.arange(1, steps + 1, 1) * dt
         # enlarge acceleration values
         self._a = np.append(self.a, np.repeat(self.a[-1], steps))
 
@@ -231,7 +193,6 @@ class CartesianSample(Sample):
         # enlarge positions
         self._x = np.append(self.x, self.x[-1] + np.cumsum(dt * v_temp * np.cos(self.theta[-1])))
         self._y = np.append(self.y, self.y[-1] + np.cumsum(dt * v_temp * np.sin(self.theta[-1])))
-
 
 
 class CurviLinearSample(Sample):
@@ -259,6 +220,10 @@ class CurviLinearSample(Sample):
 
     @property
     def s(self) -> np.ndarray:
+        """
+        Returns the s coordinate of the sample
+        :return:
+        """
         return self._s
 
     @s.setter
@@ -267,6 +232,10 @@ class CurviLinearSample(Sample):
 
     @property
     def d(self) -> np.ndarray:
+        """
+        Returns the d coordinate of the sample
+        :return:
+        """
         return self._d
 
     @d.setter
@@ -275,6 +244,10 @@ class CurviLinearSample(Sample):
 
     @property
     def theta(self) -> np.ndarray:
+        """
+        Returns the orientations of the sample
+        :return:
+        """
         return self._theta
 
     @theta.setter
@@ -283,6 +256,10 @@ class CurviLinearSample(Sample):
 
     @property
     def d_dot(self) -> np.ndarray:
+        """
+        Returns the derivation of the d coordinate
+        :return:
+        """
         return self._d_dot
 
     @d_dot.setter
@@ -291,6 +268,10 @@ class CurviLinearSample(Sample):
 
     @property
     def d_ddot(self) -> np.ndarray:
+        """
+        Returns the second derivation of the d coordinate
+        :return:
+        """
         return self._d_ddot
 
     @d_ddot.setter
@@ -299,6 +280,10 @@ class CurviLinearSample(Sample):
 
     @property
     def s_dot(self) -> np.ndarray:
+        """
+        Returns the derivation of the s coordinate
+        :return:
+        """
         return self._s_dot
 
     @s_dot.setter
@@ -307,6 +292,10 @@ class CurviLinearSample(Sample):
 
     @property
     def s_ddot(self) -> np.ndarray:
+        """
+        Returns the second derivation of the s coordinate
+        :return:
+        """
         return self._s_ddot
 
     @s_ddot.setter
@@ -317,11 +306,17 @@ class CurviLinearSample(Sample):
         return len(self.s)
 
     def enlarge(self, steps: int, dt: float):
+        """
+        Enlarges the curvilinear sample specified by the number of steps
+        :param steps: The number of steps for enlarging
+        :param dt: The time step between two v steps
+        :return:
+        """
         assert val.is_positive(steps), '<CartesianSample>: Provided steps is not valid! steps = {}'.format(steps)
         assert val.is_real_number(dt), '<CartesianSample>: Provided time step is not valid! dt = {}'.format(dt)
 
         # create time array
-        t = np.arange(1, (steps + 1), 1)*dt
+        t = np.arange(1, (steps + 1), 1) * dt
         # enlarge velocities by considering acceleration
         s_dot_temp = self.s_dot[-1] + t * self.s_ddot[-1]
         # remove negative velocities
@@ -346,7 +341,8 @@ class CurviLinearSample(Sample):
 
 class TrajectorySample(Sample):
     """
-    Class representing a TrajectorySample which stores the information about the polynomials for the longitudinal and lateral motion
+    Class representing a TrajectorySample which stores the information about the polynomials
+    for the longitudinal and lateral motion
     """
 
     def __init__(self, horizon: float, dt: float, trajectory_long: PolynomialTrajectory,
@@ -354,11 +350,13 @@ class TrajectorySample(Sample):
         self.horizon = horizon
         self.dt = dt
         assert isinstance(trajectory_long,
-                          PolynomialTrajectory), '<TrajectorySample/init>: Provided longitudinal trajectory is not valid! trajectory = {}'.format(
+                          PolynomialTrajectory), '<TrajectorySample/init>: Provided longitudinal trajectory ' \
+                                                 'is not valid! trajectory = {}'.format(
             trajectory_long)
         self._trajectory_long = trajectory_long
         assert isinstance(trajectory_lat,
-                          PolynomialTrajectory), '<TrajectorySample/init>: Provided lateral trajectory is not valid! trajectory = {}'.format(
+                          PolynomialTrajectory), '<TrajectorySample/init>: Provided lateral trajectory ' \
+                                                 'is not valid! trajectory = {}'.format(
             trajectory_lat)
         self._trajectory_lat = trajectory_lat
 
@@ -371,53 +369,92 @@ class TrajectorySample(Sample):
 
     @property
     def trajectory_long(self) -> PolynomialTrajectory:
+        """
+        Returns the longitudinal polynomial trajectory
+        :return: The longitudinal polynomial trajectory
+        """
         return self._trajectory_long
 
     @trajectory_long.setter
-    def trajectory_long(self, traj):
+    def trajectory_long(self, trajectory_long):
         pass
 
     @property
     def trajectory_lat(self) -> PolynomialTrajectory:
+        """
+        Returns the lateral polynomial trajectory
+        :return: The lateral polynomial trajectory
+        """
         return self._trajectory_lat
 
     @trajectory_lat.setter
-    def trajectory_lat(self):
+    def trajectory_lat(self, trajectory_lat):
         pass
 
     @property
     def cost(self) -> float:
+        """
+        Evaluated cost of the trajectory sample
+        :return: The cost of the trajectory sample
+        """
         return self._cost
 
     @cost.setter
     def cost(self, cost_function):
+        """
+        Sets the cost function for evaluating the costs of the polynomial trajectory
+        :param cost_function: The cost function for computing the costs
+        """
         self._cost = cost_function.evaluate(self)
         self._cost_function = cost_function
-        return self._cost
 
     @property
     def curvilinear(self) -> CurviLinearSample:
+        """
+        The curvilinear sample of the trajectory sample
+        :return: The curvilinear sample
+        """
         return self._curvilinear
 
     @curvilinear.setter
     def curvilinear(self, curvilinear: CurviLinearSample):
+        """
+        Sets the curvilinear sample of the trajectory sample
+        :param curvilinear: The computed curvilinear sample
+        """
         assert isinstance(curvilinear, CurviLinearSample)
         self._curvilinear = curvilinear
 
     @property
     def cartesian(self) -> CartesianSample:
+        """
+        Returns the Cartesian sample of the trajectory sample
+        :return: The Cartesian sample
+        """
         return self._cartesian
 
     @cartesian.setter
     def cartesian(self, cartesian: CartesianSample):
+        """
+        Sets the Cartesian sample of the trajectory sample
+        :param cartesian: The Cartesian sample
+        """
         assert isinstance(cartesian, CartesianSample)
         self._cartesian = cartesian
 
-
     def length(self) -> int:
+        """
+        Length of the trajectory sample (number of states)
+        :return: The number of states in the trajectory sample
+        """
         return self.cartesian.length()
 
     def enlarge(self, steps: int, dt: float):
+        """
+        Enlarges the Cartesian and curvilinear sample specified by the given steps
+        :param steps: The steps for enlarging
+        :param dt: The time step between two consecutive steps
+        """
         assert val.is_positive(steps), '<CartesianSample>: Provided steps is not valid! steps = {}'.format(steps)
         assert val.is_real_number(dt), '<CartesianSample>: Provided time step is not valid! dt = {}'.format(dt)
         self._cartesian.enlarge(steps, dt)
@@ -429,17 +466,18 @@ class TrajectoryBundle:
     Class that represents a collection of trajectories
     """
 
-    def __init__(self, trajectories: List[TrajectorySample], params: PlanningParameter, cost_function):
+    def __init__(self, trajectories: List[TrajectorySample], cost_function):
         """
         Initializer of a TrajectoryBundle
-        :param params: The parameters used for planning the trajectories
+        :param trajectories: The list of trajectory samples
+        :param cost_function: The cost function for the evaluation
         """
         assert isinstance(trajectories, list) and all([isinstance(t, TrajectorySample) for t in
-                                                       trajectories]), '<TrajectoryBundle/init>: Provided list of trajectory samples is not valid! List = {}'.format(
-            trajectories)
+                                                       trajectories]), '<TrajectoryBundle/init>: ' \
+                                                                       'Provided list of trajectory samples is not ' \
+                                                                       'valid! List = {}'.format(trajectories)
         self._trajectory_bundle: List[TrajectorySample] = trajectories
         self._cost_function = cost_function
-        self.params = params
         self._is_sorted = False
 
     def sort(self):
@@ -461,23 +499,24 @@ class TrajectoryBundle:
             return None
         return min(self._trajectory_bundle, key=lambda x: x.total_cost)
 
-    def min_costs(self) -> float:
+    def min_costs(self) -> TrajectorySample:
         """
         Returns the trajectory with the minimal costs.
         :return: The trajectory with the minimal costs
         """
-        return self._trajectory_bundle[0] if self._is_sorted else None  # min([x.total_cost for x in self.trajectory_bundle])
+        return self._trajectory_bundle[0] if self._is_sorted else None
 
-    def max_costs(self) -> float:
+    def max_costs(self) -> TrajectorySample:
         """
         Returns the trajectory with the maximal costs.
         :return: The trajectory with the maximal costs
         """
-        return self._trajectory_bundle[-1] if self._is_sorted else None # max([x.total_cost for x in self.trajectory_bundle])
+        return self._trajectory_bundle[-1] if self._is_sorted else None
 
     def get_sorted_list(self) -> list:
         """
-        Returns an ordered list of the trajectories. The trajectories are ordered according to their costs from lowest to highest.
+        Returns an ordered list of the trajectories. The trajectories are ordered according
+        to their costs from lowest to highest.
         :return: List of trajectories sorted from lowest to highest cost
         """
         if not self._is_sorted:
@@ -486,10 +525,18 @@ class TrajectoryBundle:
 
     @property
     def trajectories(self) -> List[TrajectorySample]:
+        """
+        Returns the list of trajectory samples
+        :return: The list of trajectory samples
+        """
         return self._trajectory_bundle
 
     @trajectories.setter
     def trajectories(self, trajectories: List[TrajectorySample]):
+        """
+        Sets the list of trajectory samples
+        :param trajectories: The list of trajectory samples
+        """
         self._trajectory_bundle = trajectories
 
     def empty(self) -> bool:
@@ -498,6 +545,3 @@ class TrajectoryBundle:
         :return:
         """
         return len(self._trajectory_bundle) == 0
-
-
-

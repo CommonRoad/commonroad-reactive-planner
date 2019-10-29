@@ -1,21 +1,31 @@
+__author__ = "Christian Pek"
+__copyright__ = "TUM Cyber-Physical Systems Group"
+__credits__ = ["BMW Group CAR@TUM, interACT"]
+__version__ = "0.5"
+__maintainer__ = "Christian Pek"
+__email__ = "Christian.Pek@tum.de"
+__status__ = "Beta"
+
 import numpy as np
 import warnings
 from abc import ABC, abstractmethod
 
 import commonroad.common.validity as val
 
-__author__ = "Christian Pek"
-__copyright__ = "TUM Cyber-Physical Systems Group"
-__credits__ = ["BMW Group CAR@TUM, interACT"]
-__version__ = "0.1"
-__maintainer__ = "Christian Pek"
-__email__ = "Christian.Pek@tum.de"
-__status__ = "Alpha"
-
-
 class PolynomialTrajectory(ABC):
+    """
+    Abstract class representing a polynomial trajectory
+    """
 
     def __init__(self, tau_0=0, delta_tau=0, x_0=np.zeros([3, 1]), x_d=np.zeros([3, 1]), power=5):
+        """
+        Initializer of a polynomial trajectory
+        :param tau_0: The start parameter value of the trajectory
+        :param delta_tau: The final parameter value of the trajectory
+        :param x_0: The initial condition of the trajectory
+        :param x_d: The final condition of the trajectory
+        :param power:
+        """
 
         super(PolynomialTrajectory, self).__init__()
 
@@ -157,7 +167,6 @@ class PolynomialTrajectory(ABC):
             cost)
         self._cost = cost
 
-
     def squared_jerk_integral(self, t):
         """
         returns the integral of the squared jerk of a fifth order polynomial in the interval [0, t]
@@ -179,8 +188,6 @@ class PolynomialTrajectory(ABC):
 
         return integral_squared_jerk
 
-
-
     def evaluate_state_at_tau(self, tau: float):
         """
         Returns the position, velocity and acceleration at tau of the polynomial with coefficients self.coeffs
@@ -189,7 +196,6 @@ class PolynomialTrajectory(ABC):
         """
         assert self.coeffs is not None, '<PolynomialTrajectory/evaluate_state_at_tau>: Coefficients are not determined!'
 
-        result = None
         # check if this query has already been processed
         if tau in self._db:
             result = self._db[tau]
@@ -207,11 +213,13 @@ class PolynomialTrajectory(ABC):
             tau4 = tau2 * tau2
             tau5 = tau3 * tau2
 
-            p = (self.coeffs[0] + self.coeffs[1] * tau + self.coeffs[2] * tau2 + self.coeffs[3] * tau3 + self.coeffs[4] * tau4 +
+            p = (self.coeffs[0] + self.coeffs[1] * tau + self.coeffs[2] * tau2 + self.coeffs[3] * tau3 + self.coeffs[
+                4] * tau4 +
                  self.coeffs[5] * tau5)
             p_d = (self.coeffs[1] + 2 * self.coeffs[2] * tau + 3 * self.coeffs[3] * tau2 + 4 * self.coeffs[4] * tau3 +
                    5 * self.coeffs[5] * tau4)
-            p_dd = 2 * self.coeffs[2] + 6 * self.coeffs[3] * tau + 12 * self.coeffs[4] * tau2 + 20 * self.coeffs[5] * tau3
+            p_dd = 2 * self.coeffs[2] + 6 * self.coeffs[3] * tau + 12 * self.coeffs[4] * tau2 + 20 * self.coeffs[
+                5] * tau3
 
             result = np.array([p, p_d, p_dd])
             self._db[tau] = result
@@ -219,11 +227,24 @@ class PolynomialTrajectory(ABC):
         return result
 
     def calc_jerk(self, tau, tau2):
+        """
+        Computes the jerk at the given parameter values
+        :param tau: The values of the query
+        :param tau2: The square of the values of the query
+        :return: The jerk at the given parameter values
+        """
         if self.coeffs is None:
             raise ValueError('Coefficients are not determined')
         return 6 * self.coeffs[3] + 24 * self.coeffs[4] * tau + 60 * self.coeffs[5] * tau2
 
     def calc_acceleration(self, tau, tau2, tau3):
+        """
+        Computes the acceleration at the given parameter values
+        :param tau: The values of the query
+        :param tau2: The square of the values of the query
+        :param tau3: The cubic of the values of the query
+        :return: The acceleration at the given parameter values
+        """
         if self.coeffs is None:
             raise ValueError('Coefficients are not determined')
         return 2 * self.coeffs[2] + 6 * self.coeffs[3] * tau + 12 * self.coeffs[4] * tau2 + 20 * self.coeffs[5] * tau3
@@ -251,10 +272,18 @@ class PolynomialTrajectory(ABC):
 
 
 class QuinticTrajectory(PolynomialTrajectory):
+    """
+    Class representing a quintic polynomial trajectory
+    """
+
     def __init__(self, tau_0=0, delta_tau=0, x_0=np.zeros([3, 1]), x_d=np.zeros([3, 1])):
         super(QuinticTrajectory, self).__init__(tau_0=tau_0, delta_tau=delta_tau, x_0=x_0, x_d=x_d, power=5)
 
-    def calc_coeffs(self):
+    def calc_coeffs(self) -> np.ndarray:
+        """
+        Computes the coefficients of the quintic polynomial trajectory
+        :return: The coefficients
+        """
         p_init, p_init_d, p_init_dd = self.x_0
         p_final, p_final_d, p_final_dd = self.x_d
 
@@ -276,17 +305,25 @@ class QuinticTrajectory(PolynomialTrajectory):
             x = np.linalg.solve(a, b)
         except Exception as e:
             print(e)
-            return None
+            return np.empty(0)
 
         return np.array([p_init, p_init_d, .5 * p_init_dd, x[0], x[1], x[2]])
 
 
 class QuarticTrajectory(PolynomialTrajectory):
+    """
+    Class representing a quartic polynomial trajectory
+    """
+
     def __init__(self, tau_0=0, delta_tau=0, x_0=np.zeros([3, 1]), x_d=np.zeros([2, 1])):
         self._desired_velocity = x_d[0]
         super(QuarticTrajectory, self).__init__(tau_0=tau_0, delta_tau=delta_tau, x_0=x_0, x_d=x_d, power=4)
 
-    def calc_coeffs(self):
+    def calc_coeffs(self) -> np.ndarray:
+        """
+        Computes the coefficients of the quartic polynomial trajectory
+        :return: The coefficients
+        """
         p_init, p_init_d, p_init_dd = self.x_0
 
         t2 = np.power(self.delta_tau, 2)
@@ -303,6 +340,6 @@ class QuarticTrajectory(PolynomialTrajectory):
             x = np.linalg.solve(a, b)
         except Exception as e:
             print(e)
-            return None
+            return np.empty(0)
 
         return np.array([p_init, p_init_d, .5 * p_init_dd, x[0], x[1], 0.])
