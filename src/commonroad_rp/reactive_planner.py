@@ -207,7 +207,7 @@ class ReactivePlanner(object):
                 x_0.yaw_rate * ((1 - kr * d) / (np.cos(theta_cl))) - kr)
 
         # compute s dot and s dot dot -> derivation after time
-        s_d = x_0.velocity * np.cos(theta_cl) / (1 - np.interp(s, self._co.ref_pos(), self._co.ref_curv()) * d)
+        s_d = x_0.velocity * np.cos(theta_cl) / (1 - kr * d)
         if s_d < 0:
             raise Exception(
                 "Initial state or reference incorrect! Curvilinear velocity is negative which indicates that the "
@@ -232,8 +232,7 @@ class ReactivePlanner(object):
 
         return x_0_lon, x_0_lat
 
-    @staticmethod
-    def _compute_trajectory_pair(trajectory: TrajectorySample) -> tuple:
+    def _compute_trajectory_pair(self, trajectory: TrajectorySample) -> tuple:
         """
         Computes the output required for visualizing in CommonRoad framework
         :param trajectory: the optimal trajectory
@@ -248,7 +247,7 @@ class ReactivePlanner(object):
         for i in range(len(trajectory.cartesian.x)):
             # create Cartesian state
             cart_states = dict()
-            cart_states['time_step'] = i
+            cart_states['time_step'] = self.x_0.time_step+self._factor*i
             cart_states['position'] = np.array([trajectory.cartesian.x[i], trajectory.cartesian.y[i]])
             cart_states['velocity'] = trajectory.cartesian.v[i]
             cart_states['acceleration'] = trajectory.cartesian.a[i]
@@ -258,7 +257,7 @@ class ReactivePlanner(object):
 
             # create curvilinear state
             cl_states = dict()
-            cl_states['time_step'] = i
+            cl_states['time_step'] = self.x_0.time_step+self._factor*i
             cl_states['position'] = np.array([trajectory.curvilinear.s[i], trajectory.curvilinear.d[i]])
             cl_states['velocity'] = trajectory.cartesian.v[i]
             cl_states['acceleration'] = trajectory.cartesian.a[i]
@@ -271,8 +270,8 @@ class ReactivePlanner(object):
             lat_list.append(
                 [trajectory.curvilinear.d[i], trajectory.curvilinear.d_dot[i], trajectory.curvilinear.d_ddot[i]])
 
-        cartTraj = Trajectory(0, cart_list)
-        freTraj = Trajectory(0, cl_list)
+        cartTraj = Trajectory(self.x_0.time_step, cart_list)
+        freTraj = Trajectory(self.x_0.time_step, cl_list)
 
         return (cartTraj, freTraj, lon_list, lat_list)
 
@@ -495,23 +494,23 @@ class ReactivePlanner(object):
 
                 # check kinematics to already discard infeasible trajectories
                 if abs(kappa_gl[i] > self.constraints.kappa_max):
-                    # print("Kappa")
+                    #print("Kappa")
                     feasible = False
                     break
                 if abs((kappa_gl[i] - kappa_gl[i - 1]) / self.dT if i > 0 else 0.) > self.constraints.kappa_dot_max:
-                    # print("KappaDOT")
+                    #print("KappaDOT")
                     feasible = False
                     break
                 if abs(a[i]) > self.constraints.a_max:
-                    # print("Acceleration")
+                    #print(f"Acceleration {a[i]}")
                     feasible = False
                     break
                 if abs(v[i]) < -0.1:
-                    # print("Velocity")
+                    #print("Velocity")
                     feasible = False
                     break
                 if abs((theta_gl[i - 1] - theta_gl[i]) / self.dT if i > 0 else 0.) > 0.4:
-                    # print("Theta")
+                    #print("Theta")
                     feasible = False
                     break
 

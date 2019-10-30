@@ -24,14 +24,14 @@ from commonroad_rp.utils import CoordinateSystem
 #import spot
 from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_object
 
-draw_parameters_itended = copy.deepcopy(default_draw_params)
+draw_parameters_intended = copy.deepcopy(default_draw_params)
 draw_parameters_fail_safe = copy.deepcopy(default_draw_params)
 draw_parameters_ego = copy.deepcopy(default_draw_params)
 
 def update_draw_params():
     # intended
-    draw_parameters_itended['scenario']['dynamic_obstacle']['occupancy']['shape']['rectangle']['facecolor'] = '#000000'
-    draw_parameters_itended['scenario']['dynamic_obstacle']['occupancy']['shape']['rectangle']['edgecolor'] = '#000000'
+    draw_parameters_intended['scenario']['dynamic_obstacle']['occupancy']['shape']['rectangle']['facecolor'] = '#000000'
+    draw_parameters_intended['scenario']['dynamic_obstacle']['occupancy']['shape']['rectangle']['edgecolor'] = '#000000'
 
     # fail-safe
     draw_parameters_fail_safe['scenario']['dynamic_obstacle']['occupancy']['shape']['rectangle'][
@@ -40,8 +40,8 @@ def update_draw_params():
         'facecolor'] = '#FF0000'
 
     # static obstacles
-    draw_parameters_itended['scenario']['static_obstacle']['shape']['rectangle']['facecolor'] = '#1d7eea'
-    draw_parameters_itended['scenario']['static_obstacle']['shape']['rectangle']['edgecolor'] = '#0066cc'
+    draw_parameters_intended['scenario']['static_obstacle']['shape']['rectangle']['facecolor'] = '#1d7eea'
+    draw_parameters_intended['scenario']['static_obstacle']['shape']['rectangle']['edgecolor'] = '#0066cc'
 
     # ego initial shape
     draw_parameters_ego['shape']['rectangle']['facecolor'] = '#000000'
@@ -99,8 +99,9 @@ def _obtain_correct_lanelet_for_pose(state: State, lanelet_network: LaneletNetwo
 
     return best_lane
 
-def obtain_reference_path(state: State, scenario: Scenario) -> np.ndarray:
+def obtain_reference_path(trajectory: Trajectory, scenario: Scenario) -> np.ndarray:
     # create coordinate system
+    state = trajectory.state_list[0]
     ego_lanelet_id = scenario.lanelet_network.find_lanelet_by_position([state.position])[0]
     if len(ego_lanelet_id) > 1:
         ego_lanelet = _obtain_correct_lanelet_for_pose(state, scenario.lanelet_network, ego_lanelet_id)
@@ -116,8 +117,23 @@ def obtain_reference_path(state: State, scenario: Scenario) -> np.ndarray:
     temp = ego_lanelet
     visited = set()
     visited.add(temp.lanelet_id)
-    while len(temp.successor) and temp.successor[0] not in visited: #( if len(temp.successor) else False):
-        temp = scenario.lanelet_network.find_lanelet_by_id(temp.successor[0])
+    # get all positions from trajectory
+    positions = list()
+    for state in trajectory.state_list:
+        positions.append(state.position)
+    positions = np.array(positions)
+    while len(temp.successor) and any(temp.successor[i] not in visited for i in range(len(temp.successor))): #( if len(temp.successor) else False):
+        # find matching successor for trajectory
+        candidate = scenario.lanelet_network.find_lanelet_by_id(temp.successor[0])
+        points = 0
+        for i in range(len(temp.successor)):
+            lane = scenario.lanelet_network.find_lanelet_by_id(temp.successor[i])
+            matches = sum(lane.contains_points(positions))
+            if matches > points:
+                candidate = lane
+                points = matches
+
+        temp = candidate
         visited.add(temp.lanelet_id)
         new_lanelet = Lanelet.merge_lanelets(new_lanelet,temp)
 
@@ -226,7 +242,6 @@ def _compute_braking_maneuver(x0: State, cosys: CoordinateSystem, dT: float, par
 
     # compute list of rectangles
     shapes = list()
-    print("Starting at {}".format(x0.time_step))
     for i in range(len(x_brake)):
         ego = pycrcc.TimeVariantCollisionObject(x0.time_step + i)
         ego.append_obstacle(pycrcc.RectOBB(0.5 * params.veh_length, 0.5 * params.veh_width, theta_brake[i], x_brake[i], y_brake[i]))
@@ -245,6 +260,7 @@ def compute_simplified_ttr(intended: Trajectory, cc, cosys: CoordinateSystem, dT
     for i,x in enumerate(intended.state_list):
         shapes = _compute_braking_maneuver(x, cosys, dT, params)
         collide = False
+
         for shape in shapes:
             if cc.collide(shape):
                 collide = True
