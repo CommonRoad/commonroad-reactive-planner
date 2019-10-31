@@ -17,7 +17,7 @@ from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_c
 
 import matplotlib.pyplot as plt
 
-#import spot
+import spot
 
 
 
@@ -40,8 +40,8 @@ if __name__ == '__main__':
     ego_original = scenario.obstacle_by_id(999999)
 
     scenario.remove_obstacle(ego_original)  # remove ego vehicle
-    # spot_setup(scenario,next(iter(problem.planning_problem_dict.values())))
-    # set_obstacle_occupancy_prediction(scenario,end_time=len(ego_original.prediction.state_list)*scenario.dt+t_fs)
+    spot_setup(scenario,next(iter(problem.planning_problem_dict.values())))
+    set_obstacle_occupancy_prediction(scenario,end_time=len(ego_original.prediction.trajectory.state_list)*scenario.dt+t_fs)
     road_boundary_sg, road_boundary_obstacle = create_road_boundary(scenario, draw=False)
     lanelet_network = scenario.lanelet_network
     lanelets = lanelet_network.lanelets
@@ -49,8 +49,8 @@ if __name__ == '__main__':
 
     # Create figure and draw CommonRoad scneario
     plt.figure(figsize=(25, 10))
-    draw_object(scenario)
-    draw_object(ego_original)
+    draw_object(scenario, draw_params=draw_parameters_scenario)
+    draw_object(ego_original, draw_params=draw_parameters_intended)
     #draw_object(ego_original.initial_state)
     #crd.draw_object(road_boundary_sg)
     plt.axis('equal')
@@ -86,8 +86,6 @@ if __name__ == '__main__':
 
     # obtain initial state for fail-safe planner and draw it
     x_0 = ego_original.prediction.trajectory.state_list[ttr]
-    x_0.yaw_rate = 0
-    x_0.acceleration = 0
     draw_object(x_0)
     plt.plot(x_0.position[0],x_0.position[1],'xk')
 
@@ -102,6 +100,7 @@ if __name__ == '__main__':
     # draw fail-safe trajectory
     for occ in ego.prediction.occupancy_set:
         draw_object(occ, draw_params=draw_parameters_fail_safe)
+
     plt.pause(0.1)
 
     # scenario.add_objects(ego)

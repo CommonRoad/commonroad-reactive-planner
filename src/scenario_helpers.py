@@ -21,31 +21,44 @@ from commonroad_rp.parameter import VehModelParameters
 from commonroad_rp.utils import CoordinateSystem
 
 
-#import spot
+import spot
 from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_object
 
-draw_parameters_intended = copy.deepcopy(default_draw_params)
-draw_parameters_fail_safe = copy.deepcopy(default_draw_params)
+draw_parameters_intended = {} # copy.deepcopy(default_draw_params)
+draw_parameters_fail_safe = {}
+# draw_parameters_fail_safe = copy.deepcopy(default_draw_params)
 draw_parameters_ego = copy.deepcopy(default_draw_params)
+draw_parameters_scenario = {}
 
 def update_draw_params():
     # intended
-    draw_parameters_intended['scenario']['dynamic_obstacle']['occupancy']['shape']['rectangle']['facecolor'] = '#000000'
-    draw_parameters_intended['scenario']['dynamic_obstacle']['occupancy']['shape']['rectangle']['edgecolor'] = '#000000'
+    draw_parameters_intended.update({'facecolor': '#000000'})
+    draw_parameters_intended.update({'edgecolor': '#000000'})
+    draw_parameters_intended.update({'dynamic_obstacle': {'trajectory_steps': 200}})
+    draw_parameters_intended.update({'time_end': 200})
+    draw_parameters_intended.update({'trajectory': {'facecolor': 'r'}})
+    draw_parameters_intended.update({'static_obstacle': {'shape': {'rectangle': {'facecolor': '##1d7eea'}}}})
+    draw_parameters_intended.update({'static_obstacle': {'shape': {'rectangle': {'edgecolor': '#0066cc'}}}})
 
     # fail-safe
-    draw_parameters_fail_safe['scenario']['dynamic_obstacle']['occupancy']['shape']['rectangle'][
-        'edgecolor'] = '#FF0000'
-    draw_parameters_fail_safe['scenario']['dynamic_obstacle']['occupancy']['shape']['rectangle'][
-        'facecolor'] = '#FF0000'
+    draw_parameters_fail_safe.update({'dynamic_obstacle': {'trajectory_steps': 200}})
+    draw_parameters_fail_safe.update({'edgecolor': '#FF0000'})
+    draw_parameters_fail_safe.update({'facecolor': '#FF0000'})
+    draw_parameters_fail_safe.update({'time_end': 200})
+
+    # scenario
+    draw_parameters_scenario.update({'time_end': 200})
+    draw_parameters_scenario.update({'dynamic_obstacle': {'trajectory_steps': 200}})
 
     # static obstacles
-    draw_parameters_intended['scenario']['static_obstacle']['shape']['rectangle']['facecolor'] = '#1d7eea'
-    draw_parameters_intended['scenario']['static_obstacle']['shape']['rectangle']['edgecolor'] = '#0066cc'
+    # draw_parameters_intended['scenario']['static_obstacle']['shape']['rectangle']['facecolor'] = '#1d7eea'
+    # draw_parameters_intended['scenario']['static_obstacle']['shape']['rectangle']['edgecolor'] = '#0066cc'
+
 
     # ego initial shape
     draw_parameters_ego['shape']['rectangle']['facecolor'] = '#000000'
     draw_parameters_ego['shape']['rectangle']['edgecolor'] = '#000000'
+
 
 update_draw_params()
 
@@ -216,10 +229,10 @@ def set_obstacle_occupancy_prediction(scenario: Scenario, update_dict=None, end_
         k += 1
 
 
-def _compute_braking_maneuver(x0: State, cosys: CoordinateSystem, dT: float, params: VehModelParameters):
+def _compute_braking_maneuver(x0: State, cosys: CoordinateSystem, dT: float, params: VehModelParameters, t_react=0.3):
 
     # transform into curvilinear coordinate system
-    s0,d0 = cosys.convert_to_curvilinear_coords(x0.position[0],x0.position[1])
+    s0, d0 = cosys.convert_to_curvilinear_coords(x0.position[0],x0.position[1])
 
     # compute braking maneuver
     v0 = x0.velocity
@@ -227,7 +240,7 @@ def _compute_braking_maneuver(x0: State, cosys: CoordinateSystem, dT: float, par
     t = np.arange(0,t_brake+dT,dT)
     if t[-1] > t_brake:
         t = t[:-1]
-    s_brake = s0 + v0*t -0.5*params.a_max*np.square(t)
+    s_brake = s0 + v0*(t + t_react) -0.5*params.a_max*np.square(t)
 
     # transform back to Cartesian coordinate system
     x_brake = list()

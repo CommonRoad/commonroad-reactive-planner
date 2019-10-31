@@ -334,12 +334,16 @@ class ReactivePlanner(object):
             print('<ReactivePlanner>: Cannot find trajectory with default sampling parameters. '
                   'Switching to emergency mode!')
         else:
-            print(
-                '<ReactivePlanner>: Found optimal trajectory with costs = {}, which '
-                'corresponds to {} percent of seen costs'.format(
-                    optimal_trajectory.cost,
-                    ((optimal_trajectory.cost - bundle.min_costs().cost) / (
-                            bundle.max_costs().cost - bundle.min_costs().cost))))
+            if len(bundle.trajectories) == 1:
+                print('<ReactivePlanner>: Found optimal trajectory with costs = {}'.format(
+                        optimal_trajectory.cost))
+            else:
+                print(
+                    '<ReactivePlanner>: Found optimal trajectory with costs = {}, which '
+                    'corresponds to {} percent of seen costs'.format(
+                        optimal_trajectory.cost,
+                        ((optimal_trajectory.cost - bundle.min_costs().cost) / (
+                                bundle.max_costs().cost - bundle.min_costs().cost))))
 
         return self._compute_trajectory_pair(optimal_trajectory) if not bundle.empty() else None
 
@@ -549,8 +553,8 @@ class ReactivePlanner(object):
         self._infeasible_count_kinematics = 0
 
         # check kinematics of each trajectory
-        profiler = cProfile.Profile()
-        profiler.enable()
+        # profiler = cProfile.Profile()
+        # profiler.enable()
         feasible_trajectories = self.check_kinematics(trajectory_bundle)
         self._infeasible_count_kinematics = len(trajectory_bundle.trajectories) - len(feasible_trajectories)
 
@@ -579,12 +583,12 @@ class ReactivePlanner(object):
                     collide = True
                     break
             if not collide:
-                profiler.disable()
-                profiler.print_stats("time")
+                # profiler.disable()
+                # profiler.print_stats("time")
                 return trajectory
 
-        profiler.disable()
-        profiler.print_stats("time")
+        # profiler.disable()
+        # profiler.print_stats("time")
         return None
 
     def convert_cr_trajectory_to_object(self, trajectory: Trajectory):
