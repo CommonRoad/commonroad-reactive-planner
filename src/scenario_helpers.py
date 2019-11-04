@@ -2,6 +2,7 @@ import construction
 import triangle_builder
 from typing import List
 import copy
+from scipy.interpolate import splprep, splev
 
 import pycrcc
 from pycrcc import *
@@ -21,7 +22,7 @@ from commonroad_rp.parameter import VehModelParameters
 from commonroad_rp.utils import CoordinateSystem
 
 
-import spot
+#import spot
 from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_object
 
 draw_parameters_intended = {} # copy.deepcopy(default_draw_params)
@@ -288,24 +289,21 @@ def compute_simplified_ttr(intended: Trajectory, cc, cosys: CoordinateSystem, dT
     return ttr if ttr >= 0 else 0
 
 def smooth_reference(reference: np.ndarray) -> np.ndarray:
-    import numpy as np
-    import matplotlib.pyplot as plt
-    from scipy.interpolate import interp1d
+    """
+    Smooths a given reference polyline for lower curvature rates. The smoothing is done using splines from scipy.
+    :param reference: The reference to smooth
+    :return: The smoothed reference
+    """
 
-    x = reference[:,0]
-    y = reference[:,1]
+    tck, u = splprep(reference.T, u=None, s=0.0)  # , per=1)
+    u_new = np.linspace(u.min(), u.max(), 1000)
+    x_new, y_new = splev(u_new, tck, der=0)
 
-    # Pad the x and y series so it "wraps around".
-    # Note that if x and y are numpy arrays, you'll need to
-    # use np.r_ or np.concatenate instead of addition!
-    orig_len = len(x)
-    x = np.append(np.append(x[-3:-1],x),x[1:3])
-    y = np.append(np.append(y[-3:-1],y),y[1:3])
+    return np.array([x_new, y_new]).transpose()
 
-    t = np.arange(len(x))
-    ti = np.linspace(2, orig_len + 1, 10 * orig_len)
 
-    xi = interp1d(t, x, kind='cubic')(ti)
-    yi = interp1d(t, y, kind='cubic')(ti)
 
-    return np.array([xi,yi]).transpose()
+
+
+
+

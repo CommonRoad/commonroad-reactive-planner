@@ -496,27 +496,34 @@ class ReactivePlanner(object):
                         oneKrD * tanTheta * (kappa_gl[i] * oneKrD / cosTheta - k_r) - (
                         k_r_d * d[i] + k_r * d_velocity[i]))
 
+                DEBUG = False
+
                 # check kinematics to already discard infeasible trajectories
                 if abs(kappa_gl[i] > self.constraints.kappa_max):
-                    print(f"Kappa {kappa_gl[i]}")
+                    if DEBUG:
+                        print(f"Kappa {kappa_gl[i]}")
                     feasible = False
                     break
                 if abs((kappa_gl[i] - kappa_gl[i - 1]) / self.dT if i > 0 else 0.) > self.constraints.kappa_dot_max:
-                    print(f"KappaDOT {abs((kappa_gl[i] - kappa_gl[i - 1]) / self.dT if i > 0 else 0.)}")
+                    if DEBUG:
+                        print(f"KappaDOT {abs((kappa_gl[i] - kappa_gl[i - 1]) / self.dT if i > 0 else 0.)}")
                     feasible = False
                     break
                 if abs(a[i]) > self.constraints.a_max:
-                    print(f"Acceleration {a[i]}")
+                    if DEBUG:
+                        print(f"Acceleration {a[i]}")
                     feasible = False
                     break
                 if abs(v[i]) < -0.1:
-                    print(f"Velocity {v[i]}")
+                    if DEBUG:
+                        print(f"Velocity {v[i]}")
                     feasible = False
                     break
-                #if abs((theta_gl[i - 1] - theta_gl[i]) / self.dT if i > 0 else 0.) > 0.4:
-                #    print(f"Theta {abs((theta_gl[i - 1] - theta_gl[i]) / self.dT if i > 0 else 0.)}")
-                #    feasible = False
-                #    break
+                if abs((theta_gl[i - 1] - theta_gl[i]) / self.dT if i > 0 else 0.) > 0.4:
+                    if DEBUG:
+                        print(f"Theta {abs((theta_gl[i - 1] - theta_gl[i]) / self.dT if i > 0 else 0.)}")
+                    feasible = False
+                    break
 
             if feasible:
                 # store Cartesian trajectory
