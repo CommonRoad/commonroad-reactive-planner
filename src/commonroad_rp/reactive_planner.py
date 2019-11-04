@@ -498,25 +498,25 @@ class ReactivePlanner(object):
 
                 # check kinematics to already discard infeasible trajectories
                 if abs(kappa_gl[i] > self.constraints.kappa_max):
-                    #print("Kappa")
+                    print(f"Kappa {kappa_gl[i]}")
                     feasible = False
                     break
                 if abs((kappa_gl[i] - kappa_gl[i - 1]) / self.dT if i > 0 else 0.) > self.constraints.kappa_dot_max:
-                    #print("KappaDOT")
+                    print(f"KappaDOT {abs((kappa_gl[i] - kappa_gl[i - 1]) / self.dT if i > 0 else 0.)}")
                     feasible = False
                     break
                 if abs(a[i]) > self.constraints.a_max:
-                    #print(f"Acceleration {a[i]}")
+                    print(f"Acceleration {a[i]}")
                     feasible = False
                     break
                 if abs(v[i]) < -0.1:
-                    #print("Velocity")
+                    print(f"Velocity {v[i]}")
                     feasible = False
                     break
-                if abs((theta_gl[i - 1] - theta_gl[i]) / self.dT if i > 0 else 0.) > 0.4:
-                    #print("Theta")
-                    feasible = False
-                    break
+                #if abs((theta_gl[i - 1] - theta_gl[i]) / self.dT if i > 0 else 0.) > 0.4:
+                #    print(f"Theta {abs((theta_gl[i - 1] - theta_gl[i]) / self.dT if i > 0 else 0.)}")
+                #    feasible = False
+                #    break
 
             if feasible:
                 # store Cartesian trajectory

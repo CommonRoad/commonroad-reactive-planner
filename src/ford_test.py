@@ -9,6 +9,7 @@ __status__ = "Beta"
 from commonroad.common.file_reader import CommonRoadFileReader
 from commonroad.visualization.draw_dispatch_cr import draw_object
 from commonroad_rp.reactive_planner import ReactivePlanner
+from commonroad_rp.utils import compute_curvature_from_polyline, compute_pathlength_from_polyline
 from commonroad_ccosy.geometry.util import chaikins_corner_cutting, resample_polyline
 from scenario_helpers import *
 import commonroad_cc.visualization.draw_dispatch as crd
@@ -65,11 +66,33 @@ if __name__ == '__main__':
 
     # create reference path for curvilinear coordinate system
     reference_path = obtain_reference_path(ego_original.prediction.trajectory, scenario)
-    reference_path = resample_polyline(reference_path, step = 2)
+    #reference_path = resample_polyline(reference_path, step = 2)
+
+    #plt.figure()
+    #plt.plot(reference_path[:,0],reference_path[:,1],'k')
+    #reference_path = smooth_reference(reference_path)
+    #plt.plot(reference_path[:, 0], reference_path[:, 1], 'b')
+    #plt.show(block=True)
+
     # smooth reference
-    reference_path = chaikins_corner_cutting(reference_path)
-    reference_path = chaikins_corner_cutting(reference_path)
-    reference_path = chaikins_corner_cutting(reference_path)
+    i = 50
+    #plt.figure()
+    while np.max(compute_curvature_from_polyline(reference_path)) > 0.09 and i < 50:
+        plt.plot(compute_pathlength_from_polyline(reference_path), compute_curvature_from_polyline(reference_path))
+        plt.pause(0.2)
+        plt.show(block=False)
+        reference_path = chaikins_corner_cutting(reference_path)
+        i += 1
+        print(f'Step {i} with curvature {np.max(compute_curvature_from_polyline(reference_path))}')
+
+
+    print(f'Smoothing done in {i} steps')
+
+
+
+
+    #reference_path = chaikins_corner_cutting(reference_path)
+    #reference_path = chaikins_corner_cutting(reference_path)
 
     # plt.plot(reference_path[:,0],reference_path[:,1],'-xk')
     # draw_object(Rectangle(4.5,2.1,center=ego_initial_state.position,orientation=ego_initial_state.orientation),draw_params=draw_parameters_itended)
@@ -80,12 +103,17 @@ if __name__ == '__main__':
     planner.set_reference_path(reference_path)
 
     # compute TTR for branch point of fail-safe trajectory
-    ttr = compute_simplified_ttr(ego_original.prediction.trajectory, collision_checker,planner.coordinate_system(),scenario.dt,planner.constraints)
+    ttr = 63 # compute_simplified_ttr(ego_original.prediction.trajectory, collision_checker,planner.coordinate_system(),scenario.dt,planner.constraints)
     print(planner.coordinate_system().ref_theta())
     print("TTR is {}".format(ttr))
 
     # obtain initial state for fail-safe planner and draw it
     x_0 = ego_original.prediction.trajectory.state_list[ttr]
+
+    s,d = planner.coordinate_system().convert_to_curvilinear_coords(x_0.position[0],x_0.position[1])
+    x_0.yaw_rate = np.interp(s, planner.coordinate_system().ref_pos(), planner.coordinate_system().ref_curv())
+    x_0.slip_angle = np.interp(s, planner.coordinate_system().ref_pos(), planner.coordinate_system().ref_curv_d())
+    x_0.acceleration = 0
     draw_object(x_0)
     plt.plot(x_0.position[0],x_0.position[1],'xk')
 
@@ -100,6 +128,7 @@ if __name__ == '__main__':
     # draw fail-safe trajectory
     for occ in ego.prediction.occupancy_set:
         draw_object(occ, draw_params=draw_parameters_fail_safe)
+        plt.pause(1)
 
     plt.pause(0.1)
 
