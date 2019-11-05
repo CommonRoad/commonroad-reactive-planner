@@ -345,7 +345,7 @@ class ReactivePlanner(object):
                         ((optimal_trajectory.cost - bundle.min_costs().cost) / (
                                 bundle.max_costs().cost - bundle.min_costs().cost))))
 
-        return self._compute_trajectory_pair(optimal_trajectory) if not bundle.empty() else None
+        return self._compute_trajectory_pair(optimal_trajectory) if optimal_trajectory is not None else None
 
     def _compute_standstill_trajectory(self, x_0, x_0_lon, x_0_lat) -> TrajectorySample:
         """

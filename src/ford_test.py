@@ -13,18 +13,20 @@ from commonroad_rp.utils import compute_curvature_from_polyline
 from scenario_helpers import *
 import commonroad_cc.visualization.draw_dispatch as crd
 from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_checker
-
 import matplotlib.pyplot as plt
+from commonroad_ccosy.geometry.util import resample_polyline
 
-#import spot
+
+import spot
+import os
 
 
 
 if __name__ == '__main__':
 
     scenario = 'scenarios_lg_single_lane_23.xml'
-    scenario = 'scenarios_lg_borregas_ave_59.xml'
-    scenario = 'scenarios_borregas_ave_traffic_routing_3_v2_scenario_borregas_ave_844.xml'
+    # scenario = 'scenarios_lg_borregas_ave_59.xml'
+    # scenario = 'scenarios_borregas_ave_traffic_routing_3_v2_scenario_borregas_ave_844.xml'
 
     print('Loading scenario {}'.format(scenario))
 
@@ -39,8 +41,28 @@ if __name__ == '__main__':
     ego_original = scenario.obstacle_by_id(999999)
 
     scenario.remove_obstacle(ego_original)  # remove ego vehicle
-    #spot_setup(scenario,next(iter(problem.planning_problem_dict.values())))
-    #set_obstacle_occupancy_prediction(scenario,end_time=len(ego_original.prediction.trajectory.state_list)*scenario.dt+t_fs)
+
+
+    update_dict = {
+        "obstacles": {
+            0: {  # 0 means that all obstacles will be changed
+                "a_max": 8.0,
+                "a_max_long": 6.0,
+                "compute_occ_m1": True,
+                "compute_occ_m2": True,
+                "compute_occ_m3": True
+            }
+        },
+        "egoVehicle": {
+            0: {  # ID is ignored for ego vehicle (which is created based on cr_planning problem)
+                "a_max": 1.0,
+                "length": 5.0,
+                "width": 2.0
+            }
+        }
+    }
+    spot_setup(scenario,next(iter(problem.planning_problem_dict.values())), update_dict)
+    set_obstacle_occupancy_prediction(scenario,end_time=len(ego_original.prediction.trajectory.state_list)*scenario.dt+t_fs)
     road_boundary_sg, road_boundary_obstacle = create_road_boundary(scenario, draw=False)
     lanelet_network = scenario.lanelet_network
     lanelets = lanelet_network.lanelets
@@ -68,6 +90,8 @@ if __name__ == '__main__':
 
     #plt.figure()
     #plt.plot(reference_path[:,0],reference_path[:,1],'k')
+    if reference_path.shape[0] < 5:
+        reference_path = resample_polyline(reference_path)
     reference_path = smooth_reference(reference_path)
     #plt.plot(reference_path[:,0], reference_path[:,1], 'b')
     #plt.show(block=True)
@@ -95,27 +119,30 @@ if __name__ == '__main__':
     # plan trajectory
     optimal = planner.plan(x_0, collision_checker)
 
-    # convert to CR obstacle
-    ego = planner.convert_cr_trajectory_to_object(optimal[0])
-    # draw intended trajectory
-    for occ in ego_original.prediction.occupancy_set:
-        draw_object(occ, draw_params=draw_parameters_intended)
-    # draw fail-safe trajectory
-    for occ in ego.prediction.occupancy_set:
-        draw_object(occ, draw_params=draw_parameters_fail_safe)
+    if optimal is not None:
 
-    plt.pause(0.1)
+        # convert to CR obstacle
+        ego = planner.convert_cr_trajectory_to_object(optimal[0])
+        # draw intended trajectory
+        for occ in ego_original.prediction.occupancy_set:
+            draw_object(occ, draw_params=draw_parameters_intended)
+        # draw fail-safe trajectory
+        for occ in ego.prediction.occupancy_set:
+            draw_object(occ, draw_params=draw_parameters_fail_safe)
 
-    # scenario.add_objects(ego)
-    # plt.figure()
-    # draw_object(scenario.lanelet_network)
-    # for state in ego.prediction.trajectory.state_list:
-    #     print(state.time_step)
-    #     draw_object(scenario.occupancies_at_time_step(state.time_step))
-    #     plt.axis('equal')
-    #     plt.autoscale()
-    #     plt.pause(0.5)
+        plt.pause(0.1)
+
+        # scenario.add_objects(ego)
+        # plt.figure()
+        # draw_object(scenario.lanelet_network)
+        # for state in ego.prediction.trajectory.state_list:
+        #     print(state.time_step)
+        #     draw_object(scenario.occupancies_at_time_step(state.time_step))
+        #     plt.axis('equal')
+        #     plt.autoscale()
+        #     plt.pause(0.5)
 
 
     print('Done')
     plt.show(block=True)
+    remove_scenario_from_spot()

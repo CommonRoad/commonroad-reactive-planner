@@ -21,13 +21,11 @@ from commonroad_rp.utils import compute_pathlength_from_polyline, compute_orient
 from commonroad_rp.parameter import VehModelParameters
 from commonroad_rp.utils import CoordinateSystem
 
-
-#import spot
+import spot
 from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_object
 
-draw_parameters_intended = {} # copy.deepcopy(default_draw_params)
+draw_parameters_intended = {}
 draw_parameters_fail_safe = {}
-# draw_parameters_fail_safe = copy.deepcopy(default_draw_params)
 draw_parameters_ego = copy.deepcopy(default_draw_params)
 draw_parameters_scenario = {}
 
@@ -155,9 +153,11 @@ def obtain_reference_path(trajectory: Trajectory, scenario: Scenario) -> np.ndar
 
 
 
-def spot_setup(scenario: Scenario, planning_problem: PlanningProblem):
+def spot_setup(scenario: Scenario, planning_problem: PlanningProblem, update_dict: dict):
     # Register scenario input id, lanelets, dynamic obstacle, problem_set
     spot.registerScenario(1, scenario.lanelet_network.lanelets, scenario.dynamic_obstacles, [planning_problem],np.empty([0, 2], float))
+
+    spot.updateProperties(1, update_dict)
 
 def compute_lanelet_polygons(lanelets) -> pycrcc.ShapeGroup:
     def lanelet_rep_setup(lanelets):
@@ -228,6 +228,11 @@ def set_obstacle_occupancy_prediction(scenario: Scenario, update_dict=None, end_
 
         scenario.dynamic_obstacles[k].prediction = SetBasedPrediction(1, cr_occupancy_list[0:])
         k += 1
+
+
+def remove_scenario_from_spot():
+
+    spot.removeScenario(1)
 
 
 def _compute_braking_maneuver(x0: State, cosys: CoordinateSystem, dT: float, params: VehModelParameters, t_react=0.3):
