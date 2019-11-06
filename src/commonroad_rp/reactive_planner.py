@@ -334,7 +334,7 @@ class ReactivePlanner(object):
             print('<ReactivePlanner>: Cannot find trajectory with default sampling parameters. '
                   'Switching to emergency mode!')
         else:
-            if len(bundle.trajectories) == 1:
+            if len(bundle.trajectories) <= 1 or bundle is None:
                 print('<ReactivePlanner>: Found optimal trajectory with costs = {}'.format(
                         optimal_trajectory.cost))
             else:
