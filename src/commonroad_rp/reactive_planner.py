@@ -456,6 +456,10 @@ class ReactivePlanner(object):
                 s_idx = np.argmin(np.abs(self._co.ref_pos() - s[i]))
                 if self._co.ref_pos()[s_idx] < s[i]:
                     s_idx += 1
+
+                if s_idx + 1 >= len(self._co.ref_pos()):
+                    feasible = False
+                    break
                 s_lambda = (self._co.ref_pos()[s_idx] - s[i]) / (
                         self._co.ref_pos()[s_idx + 1] - self._co.ref_pos()[s_idx])
 
