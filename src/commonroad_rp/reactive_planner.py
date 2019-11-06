@@ -357,9 +357,9 @@ class ReactivePlanner(object):
         """
         # create artifical standstill trajectory
         print('Adding standstill trajectory')
-        traj_lon = QuarticTrajectory(tau_0=0, delta_tau=self.horizon, x_0=x_0_lon,
+        traj_lon = QuarticTrajectory(tau_0=0, delta_tau=self.horizon, x_0=np.array(x_0_lon),
                                      x_d=np.array([self._desired_speed, 0]))
-        traj_lat = QuinticTrajectory(tau_0=0, delta_tau=self.horizon, x_0=x_0_lat, x_d=np.array([x_0_lat[0], 0, 0]))
+        traj_lat = QuinticTrajectory(tau_0=0, delta_tau=self.horizon, x_0=np.array(x_0_lat), x_d=np.array([x_0_lat[0], 0, 0]))
         p = TrajectorySample(self.horizon, self.dT, traj_lon, traj_lat)
         p.cartesian = CartesianSample(np.repeat(x_0.position[0], self.N), np.repeat(x_0.position[1], self.N),
                                       np.repeat(x_0.orientation, self.N), np.repeat(0, self.N),
