@@ -38,7 +38,7 @@ def compute_orientation_from_polyline(polyline: np.ndarray) -> np.ndarray:
         tmp = pt2 - pt1
         orientation.append(np.arctan2(tmp[1], tmp[0]))
 
-    orientation = np.array(orientation) + 2*np.pi * (np.array(orientation) < 0)
+    orientation = np.array(orientation) + 2 * np.pi * (np.array(orientation) < 0)
 
     return orientation
 

@@ -42,13 +42,16 @@ class DefaultCostFunction(CostFunction):
 
     def evaluate(self, trajectory: commonroad_rp.trajectories.TrajectorySample):
         # acceleration costs
-        costs = np.sum((1 * trajectory.cartesian.a) ** 2)
+        costs = np.sum((5 * trajectory.cartesian.a) ** 2)
         # velocity costs
-        costs += np.sum((5 * (trajectory.cartesian.v - self.desired_speed)) ** 2)
+        costs += np.sum((5 * (trajectory.cartesian.v - self.desired_speed)) ** 2) + \
+                 (50 * (trajectory.cartesian.v[-1] - self.desired_speed) ** 2) + \
+                 (100 * (trajectory.cartesian.v[int(len(trajectory.cartesian.v)/2)] - self.desired_speed) ** 2)
+
         # distance costs
-        costs += np.sum((0.15 * trajectory.curvilinear.d) ** 2) + (20 * trajectory.curvilinear.d[-1]) ** 2
+        costs += np.sum((0.25 * trajectory.curvilinear.d) ** 2) + (20 * trajectory.curvilinear.d[-1]) ** 2
         # orientation costs
-        costs += np.sum((0.1 * np.abs(trajectory.curvilinear.theta)) ** 2) + (
+        costs += np.sum((0.25 * np.abs(trajectory.curvilinear.theta)) ** 2) + (
                 5 * (np.abs(trajectory.curvilinear.theta[-1]))) ** 2
 
         return costs
