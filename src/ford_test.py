@@ -26,22 +26,7 @@ import os
 
 
 
-def smoothing_reference_path(reference_path):
-    """
-    Smooths a given reference polyline for lower curvature rates. The smoothing is done using splines from scipy.
-    :param reference_path: The reference_path to smooth [array]
-    :return: The smoothed reference
-    """
-    transposed_reference_path = reference_path.T
-    okay = np.where(np.abs(np.diff(transposed_reference_path[0])) + np.abs(np.diff(transposed_reference_path[1])) > 0)
-    xp = np.r_[transposed_reference_path[0][okay], transposed_reference_path[0][-1]]
-    yp = np.r_[transposed_reference_path[1][okay], transposed_reference_path[1][-1]]
-    tck, u = splprep([xp, yp], s=0)
-    # tck, u = splprep(transposed_reference_path)
-    u_new = np.linspace(u.min(), u.max(), 1000)
-    x_new, y_new = splev(u_new, tck, der=0)
 
-    return np.array([x_new, y_new]).transpose()
 
 
 if __name__ == '__main__':

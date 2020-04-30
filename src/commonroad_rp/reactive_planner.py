@@ -25,8 +25,9 @@ from commonroad_rp.parameter import DefFailSafeSampling, VehModelParameters, Def
 from commonroad_rp.polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
 from commonroad_rp.trajectories import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample
 from commonroad_rp.cost_function import DefaultCostFunctionFailSafe, DefaultCostFunction
-from commonroad_rp.utils import CoordinateSystem
+from commonroad_rp.utils import CoordinateSystem, interpolate_angle
 
+_LOW_VEL_MODE = False
 
 class ReactivePlanner(object):
     """
@@ -194,7 +195,7 @@ class ReactivePlanner(object):
 
                         end_state_lat = np.array([d, 0.0, 0.0])
                         # SWITCHING TO POSITION DOMAIN FOR LATERAL TRAJECTORY PLANNING
-                        if trajectory_long.calc_velocity(t, t**2, t**3, t**4) < 600:
+                        if _LOW_VEL_MODE:
                             s_lon_goal = trajectory_long.evaluate_state_at_tau(t)[0] - x_0_lon[0]
                             if s_lon_goal <= 0:
                                 s_lon_goal = t
@@ -464,8 +465,6 @@ class ReactivePlanner(object):
         :param trajectory_bundle: The trajectory bundle to check
         :return: The list of trajectories which are kinematically feasible
         """
-        # constants
-        _LOW_VEL_MODE = True
 
         feasible_trajectories = list()
         for trajectory in trajectory_bundle.trajectories:
@@ -511,11 +510,8 @@ class ReactivePlanner(object):
             feasible = True
             for i in range(0, s_length):
                 # compute Global position
-                try:
-                    pos: np.ndarray = self._co.convert_to_cartesian_coords(s[i], d[i])
-                except ValueError:
-                    # outside of projection domain
-                    pass
+                pos: np.ndarray = self._co.convert_to_cartesian_coords(s[i], d[i])
+
                 x[i] = pos[0]
                 y[i] = pos[1]
 
@@ -558,14 +554,28 @@ class ReactivePlanner(object):
                         theta_cl[i] = np.arctan2(dp, 1.0)
                     else:
                         theta_cl[i] = np.arctan2(d_velocity[i], s_velocity[i])
-                    theta_gl[i] = theta_cl[i] + (
-                            self._co.ref_theta()[s_idx + 1] - self._co.ref_theta()[s_idx]) * s_lambda + \
-                                  self._co.ref_theta()[s_idx]
+                    theta_gl[i] = theta_cl[i] + interpolate_angle(
+                            s[i],
+                            self._co.ref_pos()[s_idx],
+                            self._co.ref_pos()[s_idx + 1],
+                            self._co.ref_theta()[s_idx],
+                            self._co.ref_theta()[s_idx + 1]
+                        )
+                    # theta_gl[i] = theta_cl[i] + (
+                    #         self._co.ref_theta()[s_idx + 1] - self._co.ref_theta()[s_idx]) * s_lambda + \
+                    #               self._co.ref_theta()[s_idx]
 
                 else:
                     # theta_cl.append(np.interp(s[i], self._co.ref_pos(), self._co.ref_theta()))
-                    theta_cl[i] = (self._co.ref_theta()[s_idx + 1] - self._co.ref_theta()[s_idx]) * s_lambda + \
-                                  self._co.ref_theta()[s_idx]
+                    # theta_cl[i] = (self._co.ref_theta()[s_idx + 1] - self._co.ref_theta()[s_idx]) * s_lambda + \
+                    #               self._co.ref_theta()[s_idx]
+                    theta_cl[i] = interpolate_angle(
+                            s[i],
+                            self._co.ref_pos()[s_idx],
+                            self._co.ref_pos()[s_idx + 1],
+                            self._co.ref_theta()[s_idx],
+                            self._co.ref_theta()[s_idx + 1]
+                        )
                     theta_gl[i] = theta_cl[i]
 
                 # Compute curvature of reference at current position
