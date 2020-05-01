@@ -17,8 +17,15 @@ import matplotlib.pyplot as plt
 from commonroad_ccosy.geometry.util import resample_polyline
 
 
+
+from scipy import spatial
+from scipy.interpolate import splprep, splev
+
 import spot
 import os
+
+
+
 
 
 
@@ -86,6 +93,7 @@ if __name__ == '__main__':
 
     # create reference path for curvilinear coordinate system
     reference_path = obtain_reference_path(ego_original.prediction.trajectory, scenario)
+    reference_path = smoothing_reference_path(reference_path)
     #reference_path = resample_polyline(reference_path, step = 1)
 
     #plt.figure()
@@ -99,25 +107,23 @@ if __name__ == '__main__':
     print(f'Smoothing done with curvature of {np.max(compute_curvature_from_polyline(reference_path))}')
 
     # create new instance of reactive planner
-    planner: ReactivePlanner = ReactivePlanner(0.2, t_fs, N_fs, factor=10)
+    t_h = 3.0 # planning horizon
+    desired_speed = 1.5 + ego_original.prediction.trajectory.state_list[0].velocity
+    planner: ReactivePlanner = ReactivePlanner(scenario.dt, t_h, int(t_h / scenario.dt), scenario_id=scenario.benchmark_id)
     planner.set_reference_path(reference_path)
+    planner.set_desired_velocity(desired_speed)
 
-    # compute TTR for branch point of fail-safe trajectory
-    ttr = compute_simplified_ttr(ego_original.prediction.trajectory, collision_checker,planner.coordinate_system(),scenario.dt,planner.constraints)
-    print(planner.coordinate_system().ref_theta())
-    print("TTR is {}".format(ttr))
 
     # obtain initial state for fail-safe planner and draw it
-    x_0 = ego_original.prediction.trajectory.state_list[ttr]
-
-    s,d = planner.coordinate_system().convert_to_curvilinear_coords(x_0.position[0],x_0.position[1])
-    x_0.yaw_rate = np.interp(s, planner.coordinate_system().ref_pos(), planner.coordinate_system().ref_curv())
-    x_0.slip_angle = np.interp(s, planner.coordinate_system().ref_pos(), planner.coordinate_system().ref_curv_d())
+    x_0 = ego_original.prediction.trajectory.state_list[0]
+    x_0.yaw_rate = 0
+    x_0.acceleration = 0
     draw_object(x_0)
     plt.plot(x_0.position[0],x_0.position[1],'xk')
 
     # plan trajectory
     optimal = planner.plan(x_0, collision_checker)
+
 
     if optimal is not None:
 
@@ -141,6 +147,7 @@ if __name__ == '__main__':
         #     plt.axis('equal')
         #     plt.autoscale()
         #     plt.pause(0.5)
+
 
 
     print('Done')

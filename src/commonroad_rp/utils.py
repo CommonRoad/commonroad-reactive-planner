@@ -11,7 +11,7 @@ import numpy as np
 from pycrccosy import TrapezoidCoordinateSystem
 from commonroad_ccosy.geometry.trapezoid_coordinate_system import create_coordinate_system_from_polyline
 
-
+from commonroad.common.util import make_valid_orientation
 
 def compute_orientation_from_polyline(polyline: np.ndarray) -> np.ndarray:
     """
@@ -38,7 +38,7 @@ def compute_orientation_from_polyline(polyline: np.ndarray) -> np.ndarray:
         tmp = pt2 - pt1
         orientation.append(np.arctan2(tmp[1], tmp[0]))
 
-    orientation = np.array(orientation) + 2*np.pi * (np.array(orientation) < 0)
+    orientation = np.array(orientation) + 2 * np.pi * (np.array(orientation) < 0)
 
     return orientation
 
@@ -96,6 +96,25 @@ def extend_trajectory(s, d, s_dot, theta, v, a, duration, dT) -> tuple:
 
     return (s_n, d_n, theta_n, v_n, a_n)
 
+def interpolate_angle(x: float, x1: float, x2: float, y1: float, y2:float) -> float:
+    """
+    Interpolates an angle value between two angles according to the miminal value of the absolute difference
+    :param x: value of other dimension to interpolate
+    :param x1: lower bound of the other dimension
+    :param x2: upper bound of the other dimension
+    :param y1: lower bound of angle to interpolate
+    :param y2: upper bound of angle to interpolate
+    :return: interpolated angular value (in rad)
+    """
+    def absmin(x):
+        return x[np.argmin(np.abs(x))]
+
+    delta = y2 - y1
+    delta_2pi_minus = delta - 2 * np.pi
+    delta_2pi_plus = delta + 2 * np.pi
+    delta = absmin(np.array([delta, delta_2pi_minus, delta_2pi_plus]))
+
+    return make_valid_orientation(delta * (x - x1) / (x2 - x1) + y1)
 
 class CoordinateSystem():
 

@@ -169,8 +169,8 @@ class CartesianSample(Sample):
         :param steps: The number of steps for enlarging the sample
         :param dt: The time step between two consecutive steps
         """
-        assert val.is_positive(steps), '<CartesianSample>: Provided steps is not valid! steps = {}'.format(steps)
-        assert val.is_real_number(dt), '<CartesianSample>: Provided time step is not valid! dt = {}'.format(dt)
+        # assert val.is_positive(steps), '<CartesianSample>: Provided steps is not valid! steps = {}'.format(steps)
+        # assert val.is_real_number(dt), '<CartesianSample>: Provided time step is not valid! dt = {}'.format(dt)
 
         # create time index
         t = np.arange(1, steps + 1, 1) * dt
@@ -312,8 +312,8 @@ class CurviLinearSample(Sample):
         :param dt: The time step between two v steps
         :return:
         """
-        assert val.is_positive(steps), '<CartesianSample>: Provided steps is not valid! steps = {}'.format(steps)
-        assert val.is_real_number(dt), '<CartesianSample>: Provided time step is not valid! dt = {}'.format(dt)
+        # assert val.is_positive(steps), '<CartesianSample>: Provided steps is not valid! steps = {}'.format(steps)
+        # assert val.is_real_number(dt), '<CartesianSample>: Provided time step is not valid! dt = {}'.format(dt)
 
         # create time array
         t = np.arange(1, (steps + 1), 1) * dt
@@ -455,8 +455,8 @@ class TrajectorySample(Sample):
         :param steps: The steps for enlarging
         :param dt: The time step between two consecutive steps
         """
-        assert val.is_positive(steps), '<CartesianSample>: Provided steps is not valid! steps = {}'.format(steps)
-        assert val.is_real_number(dt), '<CartesianSample>: Provided time step is not valid! dt = {}'.format(dt)
+        # assert val.is_positive(steps), '<CartesianSample>: Provided steps is not valid! steps = {}'.format(steps)
+        # assert val.is_real_number(dt), '<CartesianSample>: Provided time step is not valid! dt = {}'.format(dt)
         self._cartesian.enlarge(steps, dt)
         self._curvilinear.enlarge(steps, dt)
 
