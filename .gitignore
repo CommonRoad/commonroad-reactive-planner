@@ -6,3 +6,5 @@
 .ipynb_checkpoints
 .pyc
 __pycache__
+
+src/scenarios
