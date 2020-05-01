@@ -31,10 +31,24 @@ def create_graph_from_lanelet_network(lanelet_network: LaneletNetwork) -> nx.DiG
 
 def get_goal_lanelet(scenario: Scenario, planning_problem: PlanningProblem):
     if planning_problem.goal.lanelets_of_goal_position is None:
-        goal_lanelet_id_list = scenario.lanelet_network.find_lanelet_by_position(
-            [planning_problem.goal.state_list[0].position.center])[0]
+        if hasattr(planning_problem.goal.state_list[0], 'position'):
+            goal_lanelet_id_list = scenario.lanelet_network.find_lanelet_by_position(
+                [planning_problem.goal.state_list[0].position.center])[0]
+        else:
+            # naively concatenate successors, TODO: use some neuristic?
+            l_id = scenario.lanelet_network.find_lanelet_by_position([planning_problem.initial_state.position])[0][0]
+            current_lanelet = scenario.lanelet_network.find_lanelet_by_id(l_id)
+            min_dist = planning_problem.initial_state.velocity * planning_problem.goal.state_list[0].time_step.end + 200
+            dist = current_lanelet.distance[-1]
+            while dist < min_dist and current_lanelet is not None:
+                l_id = current_lanelet.successor[0] if len(current_lanelet.successor) > 0 else None
+                current_lanelet = scenario.lanelet_network.find_lanelet_by_id(l_id) if l_id is not None else None
+                if current_lanelet is not None:
+                    dist += current_lanelet.distance[-1]
+
+            goal_lanelet_id_list = [current_lanelet.lanelet_id]
     else:
-        goal_lanelet_id_list = planning_problem.goal.lanelets_of_goal_position
+        goal_lanelet_id_list = list(planning_problem.goal.lanelets_of_goal_position.keys())
         assert isinstance(goal_lanelet_id_list, list), "goal_lanelet_id_list should be a list of ids!"
     return goal_lanelet_id_list
 

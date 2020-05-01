@@ -1,12 +1,11 @@
-# Ford Fail-Safe Trajectory Planning
-The goal of this project is to develop a safety layer fro trajectory planning according to [1].
+# Reactive Planner
 
 Currently, this project generates solutions to trajectory planning problems given in the [commonroad](https://commonroad.gitlab.io) .xml format.
 The trajectories are determined according to the sampling-based approach in [2].
 
 
 ## Getting Started
-These instructions should help you to install the trajectory planner and use it for development and testing purposes. See development to get 
+These instructions should help you to install the trajectory planner and use it for development and testing purposes. See development to get
 further information about the functionality of the modules.
 
 ### Requirements
@@ -18,36 +17,42 @@ For the python installation, we suggest the usage of [Anaconda](http://www.anaco
 For the development IDE we suggest [PyCharm](http://www.jetbrains.com/pycharm/)
 
 ### Prerequisites
-This project uses three other framworks:
+1. add the folder reactive_planner to your python path
 
-* commonroad-collision-checker:
+2. his project uses three other framworks:
 
-    This is an open-sourced tool to check collision between objects. Please clone it from [here](https://gitlab.lrz.de/tum-cps/commonroad-collision-checker) and follow the installation instructions.
+  * commonroad-collision-checker:
 
-* commonroad-io:
+      This is an open-sourced tool to check collision between objects. Please clone it from [here](https://gitlab.lrz.de/tum-cps/commonroad-collision-checker) and follow the installation instructions in the readme.
 
-    The commonroad_io package provides methods to read, write, and visualize CommonRoad scenarios and planning problems. The package can be installed via pip:
+  * commonroad-io:
 
-    `pip install commonroad-io`
+      The commonroad_io package provides methods to read, write, and visualize CommonRoad scenarios and planning problems. The package can be installed via pip:
 
-* commonroad-curvilinear-coordinate-system:
+      `pip install commonroad-io`
 
-    This tool is used to create a Frenet frame. Currently, there is no public access. Please extract the commonroad-curvilinear-coordinate-system.zip file we provided and follow the installation instructions.
+  * commonroad-curvilinear-coordinate-system:
 
-* spot:
+      This tool is used to create a Frenet frame. Currently, there is no public access. Please extract the commonroad-curvilinear-coordinate-system.zip file we provided and follow the installation instructions in the readme.
 
-    SPOT is used for the calculation of occupancy sets. Currently, there is no public access to the C++ code. Please extract the spot-cpp-master.zip we provided and follow the installation steps in section `Installation SPOT with Python-Interface (using commonroad-io)`.
+  * boundary
+
+      This tool is used to generate obstacles representing road boundaries. It can be found under https://gitlab.lrz.de/cps/commonroad-road-boundary. The cloned folder needs to be added to the python path.
+
+  * spot:
+
+      SPOT is used for the calculation of occupancy sets. Currently, there is no public access to the C++ code. Please extract the spot-cpp-master.zip we provided and follow the installation steps in section `Installation SPOT with Python-Interface (using commonroad-io)`.
 
 
+
+### Example script
+
+An example can be executed by
+
+```shell
+example_script.py -p /path/to/scenario/folder
 ```
 
-### Installation of Ford
-
-The code is fully written in python. Only set the path to Ford repository to the interpreter path in PyCharm.
-
-
-
-### Run
 
 
 
