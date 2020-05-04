@@ -21,13 +21,15 @@ from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 from commonroad.scenario.trajectory import Trajectory, State
 
 # commonroad imports
-from commonroad_rp.parameter import DefFailSafeSampling, VehModelParameters, DefGymSampling, TimeSampling, VelocitySampling
+from commonroad_rp.parameter import DefFailSafeSampling, VehModelParameters, DefGymSampling, TimeSampling, \
+    VelocitySampling
 from commonroad_rp.polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
 from commonroad_rp.trajectories import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample
 from commonroad_rp.cost_function import DefaultCostFunctionFailSafe, DefaultCostFunction
 from commonroad_rp.utils import CoordinateSystem, interpolate_angle
 
 _LOW_VEL_MODE = False
+
 
 class ReactivePlanner(object):
     """
@@ -110,7 +112,7 @@ class ReactivePlanner(object):
         """
         self._co: CoordinateSystem = CoordinateSystem(reference_path)
 
-    def set_desired_velocity(self, desired_velocity: float, current_speed: float=None, stopping: bool=False):
+    def set_desired_velocity(self, desired_velocity: float, current_speed: float = None, stopping: bool = False):
         """
         Sets desired velocity and calculates velocity for each sample
         :param v_desired: velocity in m/s
@@ -124,7 +126,7 @@ class ReactivePlanner(object):
                 reference_speed = self._desired_speed
 
             min_v = max(0, reference_speed - (0.125 * self.horizon * self.constraints.a_max))
-            max_v = max(min_v+5.0, reference_speed + (0.25 * self.horizon * self.constraints.a_max))
+            max_v = max(min_v + 5.0, reference_speed + (0.25 * self.horizon * self.constraints.a_max))
             self._sampling_v = VelocitySampling(min_v, max_v, self._sampling_level)
         else:
             self._sampling_v = VelocitySampling(self._desired_speed, self._desired_speed, self._sampling_level)
@@ -185,8 +187,8 @@ class ReactivePlanner(object):
 
             # Longitudinal sampling for all possible velocities
             for v in self._sampling_v.to_range(samp_level):
-                #end_state_lon = np.array([t * v + x_0_lon[0], v, 0.0])
-                #trajectory_long = QuinticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lon), x_d=end_state_lon)
+                # end_state_lon = np.array([t * v + x_0_lon[0], v, 0.0])
+                # trajectory_long = QuinticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lon), x_d=end_state_lon)
                 trajectory_long = QuarticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lon), x_d=np.array([v, 0]))
 
                 # Sample lateral end states (add x_0_lat to sampled states)
@@ -251,9 +253,16 @@ class ReactivePlanner(object):
             self.set_reference_path(reference_path)
             s, d = self._co.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
 
-
         # compute orientation in curvilinear coordinate frame
-        theta_cl = x_0.orientation - np.interp(s, self._co.ref_pos(), self._co.ref_theta())
+        s_idx = np.argmin(np.abs(self._co.ref_pos() - s))
+        theta_cl = interpolate_angle(
+            s,
+            self._co.ref_pos()[s_idx],
+            self._co.ref_pos()[s_idx + 1],
+            self._co.ref_theta()[s_idx],
+            self._co.ref_theta()[s_idx + 1]
+        )
+        # theta_cl = x_0.orientation - np.interp(s, self._co.ref_pos(), self._co.ref_theta())
         # compute curvatures
         kr = np.interp(s, self._co.ref_pos(), self._co.ref_curv())
         kr_d = np.interp(s, self._co.ref_pos(), self._co.ref_curv_d())
@@ -448,7 +457,8 @@ class ReactivePlanner(object):
             print("x_0_lat is {}".format(x_0_lat))
         traj_lon = QuarticTrajectory(tau_0=0, delta_tau=self.horizon, x_0=np.asarray(x_0_lon),
                                      x_d=np.array([self._desired_speed, 0]))
-        traj_lat = QuinticTrajectory(tau_0=0, delta_tau=self.horizon, x_0=np.asarray(x_0_lat), x_d=np.array([x_0_lat[0], 0, 0]))
+        traj_lat = QuinticTrajectory(tau_0=0, delta_tau=self.horizon, x_0=np.asarray(x_0_lat),
+                                     x_d=np.array([x_0_lat[0], 0, 0]))
         p = TrajectorySample(self.horizon, self.dT, traj_lon, traj_lat)
         p.cartesian = CartesianSample(np.repeat(x_0.position[0], self.N), np.repeat(x_0.position[1], self.N),
                                       np.repeat(x_0.orientation, self.N), np.repeat(0, self.N),
@@ -546,7 +556,7 @@ class ReactivePlanner(object):
                     break
 
                 s_lambda = (self._co.ref_pos()[s_idx] - s[i]) / (
-                            self._co.ref_pos()[s_idx + 1] - self._co.ref_pos()[s_idx])
+                        self._co.ref_pos()[s_idx + 1] - self._co.ref_pos()[s_idx])
 
                 # add cl and gl orientation
                 if s_velocity[i] > 0.005:
@@ -555,12 +565,12 @@ class ReactivePlanner(object):
                     else:
                         theta_cl[i] = np.arctan2(d_velocity[i], s_velocity[i])
                     theta_gl[i] = theta_cl[i] + interpolate_angle(
-                            s[i],
-                            self._co.ref_pos()[s_idx],
-                            self._co.ref_pos()[s_idx + 1],
-                            self._co.ref_theta()[s_idx],
-                            self._co.ref_theta()[s_idx + 1]
-                        )
+                        s[i],
+                        self._co.ref_pos()[s_idx],
+                        self._co.ref_pos()[s_idx + 1],
+                        self._co.ref_theta()[s_idx],
+                        self._co.ref_theta()[s_idx + 1]
+                    )
                     # theta_gl[i] = theta_cl[i] + (
                     #         self._co.ref_theta()[s_idx + 1] - self._co.ref_theta()[s_idx]) * s_lambda + \
                     #               self._co.ref_theta()[s_idx]
@@ -570,12 +580,12 @@ class ReactivePlanner(object):
                     # theta_cl[i] = (self._co.ref_theta()[s_idx + 1] - self._co.ref_theta()[s_idx]) * s_lambda + \
                     #               self._co.ref_theta()[s_idx]
                     theta_cl[i] = interpolate_angle(
-                            s[i],
-                            self._co.ref_pos()[s_idx],
-                            self._co.ref_pos()[s_idx + 1],
-                            self._co.ref_theta()[s_idx],
-                            self._co.ref_theta()[s_idx + 1]
-                        )
+                        s[i],
+                        self._co.ref_pos()[s_idx],
+                        self._co.ref_pos()[s_idx + 1],
+                        self._co.ref_theta()[s_idx],
+                        self._co.ref_theta()[s_idx + 1]
+                    )
                     theta_gl[i] = theta_cl[i]
 
                 # Compute curvature of reference at current position
@@ -625,7 +635,7 @@ class ReactivePlanner(object):
                     break
 
                 if abs((theta_gl[i - 1] - theta_gl[i]) / self.dT if i > 0 else 0.) > self.constraints.theta_dot_max:
-                    #print("Theta")
+                    # print("Theta")
                     feasible = False
                     break
 
@@ -648,7 +658,7 @@ class ReactivePlanner(object):
                     print(self.N)
                     print(self.horizon)
                     print(self.dT)
-                    print(self.horizon/self.dT)
+                    print(self.horizon / self.dT)
                     print(len(trajectory.cartesian.x))
                     print(self._sampling_t._db)
                     print(t)
@@ -730,13 +740,13 @@ class ReactivePlanner(object):
         return DynamicObstacle(42, ObstacleType.CAR, shape, trajectory.state_list[0], prediction)
 
 
-def shift_angle_to_interval(angle_list,interval_start=-np.pi,interval_end=np.pi):
+def shift_angle_to_interval(angle_list, interval_start=-np.pi, interval_end=np.pi):
     new_angle_list = np.zeros(angle_list.shape)
     for idx, angle in enumerate(angle_list):
         while angle < interval_start:
-            angle += 2*np.pi
+            angle += 2 * np.pi
         while angle > interval_end:
-            angle -= 2*np.pi
+            angle -= 2 * np.pi
         new_angle_list[idx] = angle
 
     return new_angle_list
