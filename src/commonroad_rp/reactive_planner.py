@@ -237,25 +237,25 @@ class ReactivePlanner(object):
         """
 
         # compute curvilinear position
-        try:
-            s, d = self._co.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
-        except ValueError:
-            print('<Reactive_planner>: Value Error for curvilinear transformation')
-            tmp = np.array([x_0.position])
-            print(x_0.position)
-            print(self.scenario_id)
-            print(self._co._reference[0])
-            print(self._co._reference[-1])
-            if self._co._reference[0][0] > x_0.position[0]:
-                reference_path = np.concatenate((tmp, self._co._reference), axis=0)
-            else:
-                reference_path = np.concatenate((self._co._reference, tmp), axis=0)
-            self.set_reference_path(reference_path)
-            s, d = self._co.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
+        # try:
+        s, d = self._co.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
+        # except ValueError:
+        #     print('<Reactive_planner>: Value Error for curvilinear transformation')
+        #     tmp = np.array([x_0.position])
+        #     print(x_0.position)
+        #     print(self.scenario_id)
+        #     print(self._co._reference[0])
+        #     print(self._co._reference[-1])
+        #     if self._co._reference[0][0] > x_0.position[0]:
+        #         reference_path = np.concatenate((tmp, self._co._reference), axis=0)
+        #     else:
+        #         reference_path = np.concatenate((self._co._reference, tmp), axis=0)
+        #     self.set_reference_path(reference_path)
+        #     s, d = self._co.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
 
         # compute orientation in curvilinear coordinate frame
         s_idx = np.argmin(np.abs(self._co.ref_pos() - s))
-        theta_cl = interpolate_angle(
+        theta_cl = x_0.orientation - interpolate_angle(
             s,
             self._co.ref_pos()[s_idx],
             self._co.ref_pos()[s_idx + 1],
