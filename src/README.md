@@ -1,8 +1,7 @@
 # Reactive Planner
 
 Currently, this project generates solutions to trajectory planning problems given in the [commonroad](https://commonroad.gitlab.io) .xml format.
-The trajectories are determined according to the sampling-based approach in [2].
-
+The trajectories are determined according to the sampling-based approach in [2]. 
 
 ## Getting Started
 These instructions should help you to install the trajectory planner and use it for development and testing purposes. See development to get
@@ -39,7 +38,7 @@ For the development IDE we suggest [PyCharm](http://www.jetbrains.com/pycharm/)
 
       This tool is used to generate obstacles representing road boundaries. It can be found under https://gitlab.lrz.de/cps/commonroad-road-boundary. The cloned folder needs to be added to the python path.
 
-  * spot:
+  * (Only for using reactive planner as fail-safe planner) spot:
 
       SPOT is used for the calculation of occupancy sets. Currently, there is no public access to the C++ code. Please extract the spot-cpp-master.zip we provided and follow the installation steps in section `Installation SPOT with Python-Interface (using commonroad-io)`.
 
