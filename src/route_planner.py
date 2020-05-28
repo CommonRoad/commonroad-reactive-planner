@@ -6,9 +6,11 @@ import numpy as np
 from commonroad.planning.planning_problem import PlanningProblem
 from commonroad.scenario.lanelet import LaneletNetwork
 from commonroad.scenario.scenario import Scenario
+from commonroad_ccosy.geometry.util import resample_polyline
 from networkx import NetworkXNoPath
 
 from scenario_helpers import smooth_reference
+
 
 def create_graph_from_lanelet_network(lanelet_network: LaneletNetwork) -> nx.DiGraph:
     graph = nx.DiGraph()
@@ -28,6 +30,7 @@ def create_graph_from_lanelet_network(lanelet_network: LaneletNetwork) -> nx.DiG
     graph.add_nodes_from(nodes)
     graph.add_edges_from(edges)
     return graph
+
 
 def get_goal_lanelet(scenario: Scenario, planning_problem: PlanningProblem):
     if planning_problem.goal.lanelets_of_goal_position is None:
@@ -51,6 +54,7 @@ def get_goal_lanelet(scenario: Scenario, planning_problem: PlanningProblem):
         goal_lanelet_id_list = list(planning_problem.goal.lanelets_of_goal_position.keys())
         assert isinstance(goal_lanelet_id_list, list), "goal_lanelet_id_list should be a list of ids!"
     return goal_lanelet_id_list
+
 
 def find_all_shortest_paths(graph: nx.DiGraph, source_lanelet_id: int, target_lanelet_id: int) -> List[List[int]]:
     return list(nx.all_shortest_paths(graph,
@@ -102,12 +106,12 @@ def get_ref_path_from_route(lanelet_network: LaneletNetwork, route: List[int]) -
         if ref_path is None:
             ref_path = lanelet.center_vertices[
                        int(start_idx_list[idx] * len(lanelet.center_vertices)):int(end_idx_list[idx] * len(
-                           lanelet.center_vertices)), :]
+                           lanelet.center_vertices)) - 5, :]
         else:
             ref_path = np.concatenate((ref_path, lanelet.center_vertices[
-                                                 int(start_idx_list[idx] * len(lanelet.center_vertices)):int(
+                                                 int(start_idx_list[idx] * len(lanelet.center_vertices)) + 5:int(
                                                      end_idx_list[idx] * len(
-                                                         lanelet.center_vertices)), :]), axis=0)
+                                                         lanelet.center_vertices)) - 5, :]), axis=0)
     return ref_path
 
 
@@ -122,8 +126,10 @@ def generate_ref_path(scenario: Scenario, planning_problem: PlanningProblem) -> 
             try:
                 all_route = find_all_shortest_paths(graph_with_adj, initial_lanelet, goal_lanelet_id)
                 route = all_route[0]
-                # route = all_route[1]
                 ref_path = get_ref_path_from_route(scenario.lanelet_network, route)
+                if ref_path.shape[0] < 5:
+                    ref_path = resample_polyline(ref_path)
+                ref_path = smooth_reference(ref_path)
                 ref_path_list.append(ref_path)
             except NetworkXNoPath:
                 pass
