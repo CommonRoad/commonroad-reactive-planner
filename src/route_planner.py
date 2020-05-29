@@ -90,6 +90,13 @@ class RoutePlanner:
                                           target=target_lanelet_id))
 
     def get_instruction_from_route(self, route: List[int]) -> List[int]:
+        """
+        Get lane change instruction for planned shortest path.
+        If the next lanelet is the successor of the previous lanelet, no lane change is needed and the instruction is
+        0.
+        If the next lanelet is the adjacent lanelet of the previous lanelet, lane change is necessary therefore the
+        instruction is 1.
+        """
         instruction = []
         for idx, lanelet_id in enumerate(route):
             if idx < len(route) - 1:
@@ -102,6 +109,12 @@ class RoutePlanner:
         return instruction
 
     def get_split_factor(self, instruction_list: List) -> Tuple[List[float], List[float]]:
+        """
+        Get the split factor for lane change. From the lane change instruction list, the split factor for lane change
+        is calculated.
+        For example, if there are three consecutive lane change (assuming three lanes are all parallel),
+        then the split factor for first lane should be 1/3 and 2/3 for the second lane.
+        """
         consecutive = [list(v) for k, v in itertools.groupby(instruction_list)]
         end_idx_list = []
         start_idx_list = [0.]
