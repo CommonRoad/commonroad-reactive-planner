@@ -133,16 +133,16 @@ class RoutePlanner:
         start_idx_list, end_idx_list = self.get_split_factor(instruction)
         for idx, lanelet_id in enumerate(route):
             lanelet = self.lanelet_network.find_lanelet_by_id(lanelet_id)
-            idx = len(lanelet.center_vertices) // 5 + 1
+            vertice_idx = len(lanelet.center_vertices) // 5 + 1
             # print(len(lanelet.center_vertices), lanelet.distance[-1], np.abs(lanelet.distance-))
             if ref_path is None:
                 ref_path = lanelet.center_vertices[
                            int(start_idx_list[idx] * len(lanelet.center_vertices)):int(end_idx_list[idx] * len(
-                               lanelet.center_vertices)) - idx, :]
+                               lanelet.center_vertices)) - vertice_idx, :]
             else:
                 ref_path = np.concatenate((ref_path, lanelet.center_vertices[
-                                                     int(start_idx_list[idx] * len(lanelet.center_vertices)) + idx:
-                                                     int(end_idx_list[idx] * len(lanelet.center_vertices)) - idx, :]
+                                                     int(start_idx_list[idx] * len(lanelet.center_vertices)) + vertice_idx:
+                                                     int(end_idx_list[idx] * len(lanelet.center_vertices)) - vertice_idx, :]
                                            ), axis=0)
         return ref_path
 
