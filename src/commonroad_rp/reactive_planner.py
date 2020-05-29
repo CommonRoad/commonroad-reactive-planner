@@ -28,7 +28,7 @@ from commonroad_rp.trajectories import TrajectoryBundle, TrajectorySample, Carte
 from commonroad_rp.cost_function import DefaultCostFunctionFailSafe, DefaultCostFunction
 from commonroad_rp.utils import CoordinateSystem, interpolate_angle
 
-_LOW_VEL_MODE = False
+_LOW_VEL_MODE = True
 
 
 class ReactivePlanner(object):
@@ -237,21 +237,7 @@ class ReactivePlanner(object):
         """
 
         # compute curvilinear position
-        # try:
         s, d = self._co.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
-        # except ValueError:
-        #     print('<Reactive_planner>: Value Error for curvilinear transformation')
-        #     tmp = np.array([x_0.position])
-        #     print(x_0.position)
-        #     print(self.scenario_id)
-        #     print(self._co._reference[0])
-        #     print(self._co._reference[-1])
-        #     if self._co._reference[0][0] > x_0.position[0]:
-        #         reference_path = np.concatenate((tmp, self._co._reference), axis=0)
-        #     else:
-        #         reference_path = np.concatenate((self._co._reference, tmp), axis=0)
-        #     self.set_reference_path(reference_path)
-        #     s, d = self._co.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
 
         # compute orientation in curvilinear coordinate frame
         s_idx = np.argmin(np.abs(self._co.ref_pos() - s))

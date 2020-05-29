@@ -1,5 +1,6 @@
 import glob
 import os
+import numpy as np
 
 import commonroad_cc
 import matplotlib.pyplot as plt
@@ -34,15 +35,17 @@ DRAW_PARAMS = {
 
 
 def plan(scenario, planning_problem, plot_dir):
+    scenario.translate_rotate(np.array([0., 0.]), 45 / 180 * np.pi)
+    planning_problem.translate_rotate(np.array([0., 0.]), 45 / 180 * np.pi)
 
     problem_init_state = planning_problem.initial_state
     if not hasattr(problem_init_state, 'acceleration'):
         problem_init_state.acceleration = 0.
     
-    road_boundary_sg, road_boundary_obstacle = create_road_boundary(scenario, draw=False)
+    # road_boundary_sg, road_boundary_obstacle = create_road_boundary(scenario, draw=False)
 
     collision_checker_scenario = create_collision_checker(scenario)
-    collision_checker_scenario.add_collision_object(road_boundary_sg)
+    # collision_checker_scenario.add_collision_object(road_boundary_sg)
 
 
     reference_path = generate_ref_path(scenario, planning_problem)
@@ -78,8 +81,8 @@ def plan(scenario, planning_problem, plot_dir):
 
         plt.plot(rp[:, 0], rp[:, 1], color='g', marker='*', markersize=1, zorder=19, linewidth=0.5,
                  label='Reference route')
-        commonroad_cc.visualization.draw_dispatch.draw_object(road_boundary_sg,
-                                                              draw_params={'collision': {'facecolor': 'yellow'}})
+        # commonroad_cc.visualization.draw_dispatch.draw_object(road_boundary_sg,
+        #                                                       draw_params={'collision': {'facecolor': 'yellow'}})
 
         plt.gca().set_aspect('equal')
 
