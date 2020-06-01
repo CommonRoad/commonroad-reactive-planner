@@ -506,8 +506,12 @@ class ReactivePlanner(object):
             feasible = True
             for i in range(0, s_length):
                 # compute Global position
-                pos: np.ndarray = self._co.convert_to_cartesian_coords(s[i], d[i])
-
+                try:
+                    pos: np.ndarray = self._co.convert_to_cartesian_coords(s[i], d[i])
+                except ValueError:
+                    print("outside of projection domain")
+                    print("=" * 85)
+                    pass
                 x[i] = pos[0]
                 y[i] = pos[1]
 
