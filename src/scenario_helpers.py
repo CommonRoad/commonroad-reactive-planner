@@ -1,7 +1,9 @@
-import construction
-import triangle_builder
+# import construction
+# import triangle_builder
 from typing import List
 import copy
+
+from commonroad_cc.road_boundary import construction, triangle_builder
 from scipy.interpolate import splprep, splev
 
 import pycrcc
@@ -21,7 +23,7 @@ from commonroad_rp.utils import compute_pathlength_from_polyline, compute_orient
 from commonroad_rp.parameter import VehModelParameters
 from commonroad_rp.utils import CoordinateSystem
 
-import spot
+# import spot
 from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_object
 
 draw_parameters_intended = {}
