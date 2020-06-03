@@ -73,7 +73,7 @@ class RoutePlanner:
 
                 goal_lanelet_id_list = [current_lanelet.lanelet_id]
         else:
-            goal_lanelet_id_list = list(self.planning_problem.goal.lanelets_of_goal_position.keys())
+            goal_lanelet_id_list = list(self.planning_problem.goal.lanelets_of_goal_position.values())
             assert isinstance(goal_lanelet_id_list, list), "goal_lanelet_id_list should be a list of ids!"
 
         return goal_lanelet_id_list
@@ -146,19 +146,25 @@ class RoutePlanner:
         start_idx_list, end_idx_list = self.get_split_factor(instruction)
         for idx, lanelet_id in enumerate(route):
             lanelet = self.lanelet_network.find_lanelet_by_id(lanelet_id)
-            # vertice_idx = len(lanelet.center_vertices) // 5 + 1
-            vertice_idx = 5
-            # print(len(lanelet.center_vertices), lanelet.distance[-1], np.abs(lanelet.distance-))
+            # resample the center vertices to prevent too few vertices with too large distance
+            center_vertices_resampled = resample_polyline(lanelet.center_vertices)
+            # we use transition_vertice_idx of vertices of previous and current lanelet to construct lane change
+            transition_vertice_idx_max = 5
+            # define the proportion that transition_vertices_index occupies in the entire lanelet
+            transition_proportion = 5
+            transition_vertice_idx = min(len(center_vertices_resampled) // transition_proportion + 1,
+                                         transition_vertice_idx_max)
+
             if ref_path is None:
-                ref_path = lanelet.center_vertices[
-                           int(start_idx_list[idx] * len(lanelet.center_vertices)):int(end_idx_list[idx] * len(
-                               lanelet.center_vertices)) - vertice_idx, :]
+                ref_path = center_vertices_resampled[
+                           int(start_idx_list[idx] * len(center_vertices_resampled)):int(end_idx_list[idx] * len(
+                               center_vertices_resampled)) - transition_vertice_idx, :]
             else:
-                ref_path = np.concatenate((ref_path, lanelet.center_vertices[
+                ref_path = np.concatenate((ref_path, center_vertices_resampled[
                                                      int(start_idx_list[idx] * len(
-                                                         lanelet.center_vertices)) + vertice_idx:
+                                                         center_vertices_resampled)) + transition_vertice_idx:
                                                      int(end_idx_list[idx] * len(
-                                                         lanelet.center_vertices)) - vertice_idx, :]
+                                                         center_vertices_resampled)) - transition_vertice_idx, :]
                                            ), axis=0)
         return ref_path
 
