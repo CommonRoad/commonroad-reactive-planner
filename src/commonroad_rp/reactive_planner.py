@@ -7,7 +7,7 @@ __email__ = "Christian.Pek@tum.de"
 __status__ = "Beta"
 
 # python packages
-from typing import List
+from typing import List, Tuple
 import cProfile
 import pycrcc
 import time
@@ -27,14 +27,17 @@ from commonroad_rp.trajectories import TrajectoryBundle, TrajectorySample, Carte
 from commonroad_rp.cost_function import DefaultCostFunctionFailSafe, DefaultCostFunction
 from commonroad_rp.utils import CoordinateSystem, interpolate_angle
 
+from route_planner.route_planner import RoutePlanner
+
 _LOW_VEL_MODE = False
+
 
 class ReactivePlanner(object):
     """
     Reactive planner class that plans trajectories in a sampling-based fashion
     """
 
-    def __init__(self, dt: float, t_h: float, N: int, v_desired=14, collision_check_in_cl: bool = False,
+    def __init__(self, scenario, planning_problem, route_planner: RoutePlanner, dt: float, t_h: float, N: int, v_desired=14, collision_check_in_cl: bool = False,
                  factor: int = 1, scenario_id: str = 'dummy'):
         """
         Constructor of the reactive planner
@@ -98,6 +101,11 @@ class ReactivePlanner(object):
         self._DEBUG = False
         self.scenario_id = scenario_id
 
+        # planning problem
+        self.planningProblem = planning_problem
+        self.scenario = scenario
+        self.route_planner = route_planner
+
     def set_t_sampling_parameters(self, t_min, dt, horizon):
         self._sampling_t = TimeSampling(t_min, horizon, self._sampling_level, dt)
         self.N = int(round(horizon / dt))
@@ -113,7 +121,7 @@ class ReactivePlanner(object):
     def set_desired_velocity(self, desired_velocity: float, current_speed: float=None, stopping: bool=False):
         """
         Sets desired velocity and calculates velocity for each sample
-        :param v_desired: velocity in m/s
+        :param desired_velocity: velocity in m/s
         :return: velocity in m/s
         """
         self._desired_speed = desired_velocity
@@ -124,7 +132,8 @@ class ReactivePlanner(object):
                 reference_speed = self._desired_speed
 
             min_v = max(0, reference_speed - (0.125 * self.horizon * self.constraints.a_max))
-            max_v = max(min_v+5.0, reference_speed + (0.25 * self.horizon * self.constraints.a_max))
+            # max_v = max(min_v + 5.0, reference_speed + (0.25 * self.horizon * self.constraints.a_max))
+            max_v = max(min_v + 5.0, reference_speed + 2)
             self._sampling_v = VelocitySampling(min_v, max_v, self._sampling_level)
         else:
             self._sampling_v = VelocitySampling(self._desired_speed, self._desired_speed, self._sampling_level)
@@ -356,7 +365,7 @@ class ReactivePlanner(object):
         Plans an optimal trajectory
         :param x_0: Initial state as CR state
         :param cc:  CollisionChecker object
-        :param cl_states: Curvilinear state if replanning is used
+        :param cl_states: Curvilinear state if re-planning is used
         :return: Optimal trajectory as tuple
         """
         self.x_0 = x_0
@@ -375,7 +384,7 @@ class ReactivePlanner(object):
         optimal_trajectory = None
 
         # initial index of sampling set to use
-        i = 0
+        i = 3
 
         # sample until trajectory has been found or sampling sets are empty
         while optimal_trajectory is None and i < self._sampling_level:
@@ -428,6 +437,70 @@ class ReactivePlanner(object):
                                 bundle.max_costs().cost - bundle.min_costs().cost))))
 
         return self._compute_trajectory_pair(optimal_trajectory) if optimal_trajectory is not None else None
+
+    def re_plan(self, x_0: State, cc: object) -> Tuple:
+        """
+        Re-plans after each given time horizon.
+        :param x_0: Initial state as CR state
+        :param cc:  CollisionChecker object
+        :return: Optimal trajectory as list
+        """
+        self.x_0 = x_0
+
+        # initialization
+        # planned_x = []
+        # planned_y = []
+        planned_states = []
+        # cl_states = None
+        counter = 0
+        ref_route_manager = ReferenceRouteManager(self.route_planner)
+        ref_path = list()
+        ref_path.append(ref_route_manager.get_ref_path())
+        self.set_reference_path(ref_path[0])
+        ref_route_manager.check_lane_change_request()
+
+        # for i in range(60):
+        for i in range(self.planningProblem.goal.state_list[0].time_step.start):
+            # optimal = self.plan(self.x_0, cc, cl_states)
+            optimal = self.plan(self.x_0, cc)
+            if optimal:
+                # cl_states = list()
+                # cl_states.append(optimal[2][1])
+                # cl_states.append(optimal[3][1])
+
+                if counter == 0:
+                    planned_states.append(self.shift_orientation(optimal[0]).state_list[0])
+                    planned_states.append(self.shift_orientation(optimal[0]).state_list[1])
+                else:
+                    # skip the first state of the planned trajectory if this is not the first run.
+                    planned_states.append(self.shift_orientation(optimal[0]).state_list[1])
+            else:
+                new_ref_current_lanelet, new_ref_lane_change = ref_route_manager.re_plan_ref_path(self.x_0)
+                self.set_reference_path(new_ref_current_lanelet)
+                ref_path.append(new_ref_current_lanelet)
+                optimal = self.plan(self.x_0, cc)
+                if optimal:
+                    # cl_states = list()
+                    # cl_states.append(optimal[2][1])
+                    # cl_states.append(optimal[3][1])
+
+                    if counter == 0:
+                        planned_states.append(self.shift_orientation(optimal[0]).state_list[0])
+                        planned_states.append(self.shift_orientation(optimal[0]).state_list[1])
+                    else:
+                        # skip the first state of the planned trajectory if this is not the first run.
+                        planned_states.append(self.shift_orientation(optimal[0]).state_list[1])
+                    if new_ref_lane_change is not None:
+                        self.set_reference_path(new_ref_lane_change)
+                        ref_path.append(new_ref_lane_change)
+                else:
+                    break
+            # Shift the initial state of the planning problem to run the next cycle.
+            counter += 1
+            self.x_0 = planned_states[-1]
+            self.x_0.time_step = counter
+
+        return planned_states, ref_path
 
     def _compute_standstill_trajectory(self, x_0, x_0_lon, x_0_lat) -> TrajectorySample:
         """
@@ -512,8 +585,12 @@ class ReactivePlanner(object):
                 # compute Global position
                 pos: np.ndarray = self._co.convert_to_cartesian_coords(s[i], d[i])
 
-                x[i] = pos[0]
-                y[i] = pos[1]
+                if pos is not None:
+                    x[i] = pos[0]
+                    y[i] = pos[1]
+                else:
+                    feasible = False
+                    break
 
                 # compute orientations
                 if not _LOW_VEL_MODE:
@@ -600,7 +677,7 @@ class ReactivePlanner(object):
                         oneKrD * tanTheta * (kappa_gl[i] * oneKrD / cosTheta - k_r) - (
                         k_r_d * d[i] + k_r * d_velocity[i]))
 
-                DEBUG = False
+                DEBUG = True
 
                 # check kinematics to already discard infeasible trajectories
                 if abs(kappa_gl[i] > self.constraints.kappa_max):
@@ -625,7 +702,8 @@ class ReactivePlanner(object):
                     break
 
                 if abs((theta_gl[i - 1] - theta_gl[i]) / self.dT if i > 0 else 0.) > self.constraints.theta_dot_max:
-                    #print("Theta")
+                    if DEBUG:
+                        print(f"Theta_dot {(theta_gl[i - 1] - theta_gl[i]) / self.dT if i > 0 else 0.}")
                     feasible = False
                     break
 
@@ -729,8 +807,17 @@ class ReactivePlanner(object):
 
         return DynamicObstacle(42, ObstacleType.CAR, shape, trajectory.state_list[0], prediction)
 
+    def shift_orientation(self, trajectory: Trajectory, interval_start=-np.pi, interval_end=np.pi):
+        for state in trajectory.state_list:
+            while state.orientation < interval_start:
+                state.orientation += 2 * np.pi
+            while state.orientation > interval_end:
+                state.orientation -= 2 * np.pi
 
-def shift_angle_to_interval(angle_list,interval_start=-np.pi,interval_end=np.pi):
+        return trajectory
+
+
+def shift_angle_to_interval(angle_list, interval_start=-np.pi, interval_end=np.pi):
     new_angle_list = np.zeros(angle_list.shape)
     for idx, angle in enumerate(angle_list):
         while angle < interval_start:
@@ -740,3 +827,72 @@ def shift_angle_to_interval(angle_list,interval_start=-np.pi,interval_end=np.pi)
         new_angle_list[idx] = angle
 
     return new_angle_list
+
+
+class ReferenceRouteManager(object):
+    """
+    Reference route manager that takes care of lane changes.
+    """
+
+    def __init__(self, route_planner: RoutePlanner):
+        """
+        Constructor of the reference route manager
+        :param current_lanelet_id: the current lanelet id of the ego vehicle
+        :param goal_lanelet_id: lanelet id of the goal region
+        :param current_state: current state of planned trajectory, from which a new cycle of re-planning should start
+        :param route_planner: route planner used for generating reference path
+        """
+
+        self.lane_change_request = False
+        self.route_planner = route_planner
+        self.ref_path = None
+        self.route = None
+        self.instruction = None
+
+    def get_ref_path(self):
+        # ref_path_list, route_list = self.route_planner.generate_ref_path()
+        routes = self.route_planner.search_alg()
+
+        if routes is not None:
+            # self.ref_path = ref_path_list[0]
+            self.route = routes[0]
+            if len(routes) > 1:
+                for i in range(len(routes)):
+                    if len(routes[i]) < len(self.route):
+                        # self.ref_path = ref_path_list[i]
+                        self.route = routes[i]
+
+        self.instruction = self.route_planner.get_instruction_from_route(self.route)
+        if len(self.route) > 1 and self.instruction[0]:
+            ref_lanelet = self.route_planner.lanelet_network.find_lanelet_by_id(self.route[1])
+        else:
+            ref_lanelet = self.route_planner.lanelet_network.find_lanelet_by_id(self.route[0])
+        self.ref_path = self.route_planner.smooth_reference(ref_lanelet.center_vertices)
+
+        return self.ref_path
+
+    def check_lane_change_request(self):
+        self.lane_change_request = {}
+        for i in range(len(self.route)):
+            self.lane_change_request[self.route[i]] = self.instruction[i]
+
+        return self.lane_change_request
+
+    def re_plan_ref_path(self, current_state):
+        current_lanelet_id = self.route_planner.lanelet_network.find_lanelet_by_position(list([current_state.position]))
+        current_lanelet = self.route_planner.lanelet_network.find_lanelet_by_id(current_lanelet_id[0][0])
+        center_vertices_smoothed = self.route_planner.smooth_reference(current_lanelet.center_vertices)
+        ref_path_current_lanelet = center_vertices_smoothed
+        new_route = list()
+        new_route.append(current_lanelet_id[0][0])
+        if self.route.index(current_lanelet_id[0][0]) < len(self.route) - 1:
+            for i in range(self.route.index(current_lanelet_id[0][0]) + 1, len(self.route)):
+                new_route.append(self.route[i])
+
+        ref_path_lane_change = None
+        if self.lane_change_request[current_lanelet_id[0][0]]:
+            ref_path_lane_change = self.route_planner.lanelet_network.find_lanelet_by_id(new_route[1])
+            ref_path_lane_change = self.route_planner.smooth_reference(ref_path_lane_change.center_vertices)
+
+        return ref_path_current_lanelet, ref_path_lane_change
+

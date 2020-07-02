@@ -145,7 +145,12 @@ class CoordinateSystem():
         return self._ref_theta
 
     def convert_to_cartesian_coords(self, s: float, d: float) -> np.ndarray:
-        return self._ccosy.convert_to_cartesian_coords(s, d)
+        try:
+            cartesian_coords = self._ccosy.convert_to_cartesian_coords(s, d)
+        except:
+            cartesian_coords = None
+
+        return cartesian_coords
 
     def convert_to_curvilinear_coords(self, x: float, y: float) -> np.ndarray:
         return self._ccosy.convert_to_curvilinear_coords(x, y)
