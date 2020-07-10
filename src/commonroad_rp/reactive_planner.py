@@ -105,6 +105,7 @@ class ReactivePlanner(object):
         self.planningProblem = planning_problem
         self.scenario = scenario
         self.route_planner = route_planner
+        self.ref_route_manager = ReferenceRouteManager(self.route_planner)
 
     def set_t_sampling_parameters(self, t_min, dt, horizon):
         self._sampling_t = TimeSampling(t_min, horizon, self._sampling_level, dt)
@@ -190,34 +191,34 @@ class ReactivePlanner(object):
         self._max_cost = 0
 
         trajectories = list()
-        for t in self._sampling_t.to_range(samp_level):
-
+        # for t in self._sampling_t.to_range(samp_level):
+        t = self.horizon
             # Longitudinal sampling for all possible velocities
-            for v in self._sampling_v.to_range(samp_level):
-                #end_state_lon = np.array([t * v + x_0_lon[0], v, 0.0])
-                #trajectory_long = QuinticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lon), x_d=end_state_lon)
-                trajectory_long = QuarticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lon), x_d=np.array([v, 0]))
+        for v in self._sampling_v.to_range(samp_level):
+            #end_state_lon = np.array([t * v + x_0_lon[0], v, 0.0])
+            #trajectory_long = QuinticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lon), x_d=end_state_lon)
+            trajectory_long = QuarticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lon), x_d=np.array([v, 0]))
 
-                # Sample lateral end states (add x_0_lat to sampled states)
-                if trajectory_long.coeffs is not None:
-                    for d in self._sampling_d.to_range(samp_level).union({x_0_lat[0]}):
+            # Sample lateral end states (add x_0_lat to sampled states)
+            if trajectory_long.coeffs is not None:
+                for d in self._sampling_d.to_range(samp_level).union({x_0_lat[0]}):
 
-                        end_state_lat = np.array([d, 0.0, 0.0])
-                        # SWITCHING TO POSITION DOMAIN FOR LATERAL TRAJECTORY PLANNING
-                        if _LOW_VEL_MODE:
-                            s_lon_goal = trajectory_long.evaluate_state_at_tau(t)[0] - x_0_lon[0]
-                            if s_lon_goal <= 0:
-                                s_lon_goal = t
-                            trajectory_lat = QuinticTrajectory(tau_0=0, delta_tau=s_lon_goal, x_0=np.array(x_0_lat),
-                                                               x_d=end_state_lat)
+                    end_state_lat = np.array([d, 0.0, 0.0])
+                    # SWITCHING TO POSITION DOMAIN FOR LATERAL TRAJECTORY PLANNING
+                    if _LOW_VEL_MODE:
+                        s_lon_goal = trajectory_long.evaluate_state_at_tau(t)[0] - x_0_lon[0]
+                        if s_lon_goal <= 0:
+                            s_lon_goal = t
+                        trajectory_lat = QuinticTrajectory(tau_0=0, delta_tau=s_lon_goal, x_0=np.array(x_0_lat),
+                                                           x_d=end_state_lat)
 
-                        # Switch to sampling over t for high velocities
-                        else:
-                            trajectory_lat = QuinticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lat),
-                                                               x_d=end_state_lat)
-                        if trajectory_lat.coeffs is not None:
-                            trajectory_sample = TrajectorySample(self.horizon, self.dT, trajectory_long, trajectory_lat)
-                            trajectories.append(trajectory_sample)
+                    # Switch to sampling over t for high velocities
+                    else:
+                        trajectory_lat = QuinticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lat),
+                                                           x_d=end_state_lat)
+                    if trajectory_lat.coeffs is not None:
+                        trajectory_sample = TrajectorySample(self.horizon, self.dT, trajectory_long, trajectory_lat)
+                        trajectories.append(trajectory_sample)
 
         # perform pre check and order trajectories according their cost
         trajectory_bundle = TrajectoryBundle(trajectories, cost_function=DefaultCostFunction(self._desired_speed))
@@ -384,7 +385,10 @@ class ReactivePlanner(object):
         optimal_trajectory = None
 
         # initial index of sampling set to use
-        i = 3
+        if self.ref_route_manager.laneChanging:
+            i = 3
+        else:
+            i = 0
 
         # sample until trajectory has been found or sampling sets are empty
         while optimal_trajectory is None and i < self._sampling_level:
@@ -453,11 +457,10 @@ class ReactivePlanner(object):
         planned_states = []
         # cl_states = None
         counter = 0
-        ref_route_manager = ReferenceRouteManager(self.route_planner)
         ref_path = list()
-        ref_path.append(ref_route_manager.get_ref_path())
+        ref_path.append(self.ref_route_manager.get_ref_path())
         self.set_reference_path(ref_path[0])
-        ref_route_manager.check_lane_change_request()
+        lane_change_request = self.ref_route_manager.check_lane_change_request()
 
         # for i in range(60):
         for i in range(self.planningProblem.goal.state_list[0].time_step.start):
@@ -469,14 +472,37 @@ class ReactivePlanner(object):
                 # cl_states.append(optimal[3][1])
 
                 if counter == 0:
-                    planned_states.append(self.shift_orientation(optimal[0]).state_list[0])
-                    planned_states.append(self.shift_orientation(optimal[0]).state_list[1])
+                    for j in range(len(optimal[0].state_list)):
+                        planned_states.append(self.shift_orientation(optimal[0]).state_list[j])
+                    # planned_states.append(self.shift_orientation(optimal[0]).state_list[0])
+                    # planned_states.append(self.shift_orientation(optimal[0]).state_list[1])
+                    # planned_states.append(self.shift_orientation(optimal[0]).state_list[2])
+                    # planned_states.append(self.shift_orientation(optimal[0]).state_list[3])
+                    # planned_states.append(self.shift_orientation(optimal[0]).state_list[4])
+                    # planned_states.append(self.shift_orientation(optimal[0]).state_list[5])
                 else:
                     # skip the first state of the planned trajectory if this is not the first run.
-                    planned_states.append(self.shift_orientation(optimal[0]).state_list[1])
+                    for j in range(1, len(optimal[0].state_list)):
+                        planned_states.append(self.shift_orientation(optimal[0]).state_list[j])
+
+                    # planned_states.append(self.shift_orientation(optimal[0]).state_list[1])
+                    # planned_states.append(self.shift_orientation(optimal[0]).state_list[2])
+                    # planned_states.append(self.shift_orientation(optimal[0]).state_list[3])
+                    # planned_states.append(self.shift_orientation(optimal[0]).state_list[4])
+                    # planned_states.append(self.shift_orientation(optimal[0]).state_list[5])
+
+                current_lanelet_id = self.route_planner.lanelet_network.find_lanelet_by_position(
+                                                            list([planned_states[-1].position]))
+                if lane_change_request[current_lanelet_id[0][0]]:
+                    new_ref_current_lanelet, new_ref_lane_change = self.ref_route_manager.re_plan_ref_path(planned_states[-1])
+                    self.set_reference_path(new_ref_lane_change)
+                    ref_path.append(new_ref_lane_change)
+                    self.ref_route_manager.laneChanging = True
+
             else:
-                new_ref_current_lanelet, new_ref_lane_change = ref_route_manager.re_plan_ref_path(self.x_0)
+                new_ref_current_lanelet, new_ref_lane_change = self.ref_route_manager.re_plan_ref_path(self.x_0)
                 self.set_reference_path(new_ref_current_lanelet)
+                self.ref_route_manager.laneChanging = False
                 ref_path.append(new_ref_current_lanelet)
                 optimal = self.plan(self.x_0, cc)
                 if optimal:
@@ -487,16 +513,19 @@ class ReactivePlanner(object):
                     if counter == 0:
                         planned_states.append(self.shift_orientation(optimal[0]).state_list[0])
                         planned_states.append(self.shift_orientation(optimal[0]).state_list[1])
+                        planned_states.append(self.shift_orientation(optimal[0]).state_list[2])
                     else:
                         # skip the first state of the planned trajectory if this is not the first run.
                         planned_states.append(self.shift_orientation(optimal[0]).state_list[1])
+                        planned_states.append(self.shift_orientation(optimal[0]).state_list[2])
                     if new_ref_lane_change is not None:
                         self.set_reference_path(new_ref_lane_change)
                         ref_path.append(new_ref_lane_change)
+                        self.ref_route_manager.laneChanging = True
                 else:
                     break
             # Shift the initial state of the planning problem to run the next cycle.
-            counter += 1
+            counter = len(planned_states) - 1
             self.x_0 = planned_states[-1]
             self.x_0.time_step = counter
 
@@ -554,7 +583,12 @@ class ReactivePlanner(object):
             s_acceleration = trajectory.trajectory_long.calc_acceleration(t, t2, t3)  # lon acceleration
 
             # At low speeds, we have to sample the lateral motion over the travelled distance rather than time.
-            if _LOW_VEL_MODE:
+            if not _LOW_VEL_MODE:
+                d = trajectory.trajectory_lat.calc_position(t, t2, t3, t4, t5)  # lat pos
+                d_velocity = trajectory.trajectory_lat.calc_velocity(t, t2, t3, t4)  # lat velocity
+                d_acceleration = trajectory.trajectory_lat.calc_acceleration(t, t2, t3)  # lat acceleration
+
+            else:
                 # compute normalized travelled distance for low velocity mode of lateral planning
                 s1 = s - s[0]
                 s2 = np.square(s1)
@@ -565,10 +599,6 @@ class ReactivePlanner(object):
                 d = trajectory.trajectory_lat.calc_position(s1, s2, s3, s4, s5)  # lat pos
                 d_velocity = trajectory.trajectory_lat.calc_velocity(s1, s2, s3, s4)  # lat velocity
                 d_acceleration = trajectory.trajectory_lat.calc_acceleration(s1, s2, s3)  # lat acceleration
-            else:
-                d = trajectory.trajectory_lat.calc_position(t, t2, t3, t4, t5)  # lat pos
-                d_velocity = trajectory.trajectory_lat.calc_velocity(t, t2, t3, t4)  # lat velocity
-                d_acceleration = trajectory.trajectory_lat.calc_acceleration(t, t2, t3)  # lat acceleration
 
             # Compute cartesian information of trajectory
             s_length = len(s)
@@ -638,6 +668,10 @@ class ReactivePlanner(object):
                             self._co.ref_theta()[s_idx],
                             self._co.ref_theta()[s_idx + 1]
                         )
+                    if theta_gl[i] < -np.pi:
+                        theta_gl[i] += 2 * np.pi
+                    if theta_gl[i] > np.pi:
+                        theta_gl[i] -= 2 * np.pi
                     # theta_gl[i] = theta_cl[i] + (
                     #         self._co.ref_theta()[s_idx + 1] - self._co.ref_theta()[s_idx]) * s_lambda + \
                     #               self._co.ref_theta()[s_idx]
@@ -653,6 +687,10 @@ class ReactivePlanner(object):
                             self._co.ref_theta()[s_idx],
                             self._co.ref_theta()[s_idx + 1]
                         )
+                    if theta_cl[i] < -np.pi:
+                        theta_cl[i] += 2 * np.pi
+                    if theta_cl[i] > np.pi:
+                        theta_cl[i] -= 2 * np.pi
                     theta_gl[i] = theta_cl[i]
 
                 # Compute curvature of reference at current position
@@ -677,7 +715,7 @@ class ReactivePlanner(object):
                         oneKrD * tanTheta * (kappa_gl[i] * oneKrD / cosTheta - k_r) - (
                         k_r_d * d[i] + k_r * d_velocity[i]))
 
-                DEBUG = True
+                DEBUG = False
 
                 # check kinematics to already discard infeasible trajectories
                 if abs(kappa_gl[i] > self.constraints.kappa_max):
@@ -848,6 +886,8 @@ class ReferenceRouteManager(object):
         self.ref_path = None
         self.route = None
         self.instruction = None
+        self.successor = None
+        self.laneChanging = False
 
     def get_ref_path(self):
         # ref_path_list, route_list = self.route_planner.generate_ref_path()
@@ -858,16 +898,35 @@ class ReferenceRouteManager(object):
             self.route = routes[0]
             if len(routes) > 1:
                 for i in range(len(routes)):
-                    if len(routes[i]) < len(self.route):
-                        # self.ref_path = ref_path_list[i]
-                        self.route = routes[i]
+                    if self.route_planner.goal_lanelet_ids:
+                        goal_lanelet_id = self.route_planner.goal_lanelet_ids[0]
+                        if goal_lanelet_id in routes[i]:
+                            if len(routes[i]) < len(self.route) or goal_lanelet_id not in self.route:
+                                self.route = routes[i]
 
         self.instruction = self.route_planner.get_instruction_from_route(self.route)
-        if len(self.route) > 1 and self.instruction[0]:
-            ref_lanelet = self.route_planner.lanelet_network.find_lanelet_by_id(self.route[1])
+        self.successor = {}
+        for i in range(len(self.route)):
+            successor = self.route_planner.lanelet_network.find_lanelet_by_id(self.route[i]).successor
+            if len(successor) != 0:
+                self.successor[self.route[i]] = successor
+            else:
+                self.successor[self.route[i]] = 0
+
+        if len(self.route) > 1:
+            if self.instruction[0]:
+                ref_lanelet = self.route_planner.lanelet_network.find_lanelet_by_id(self.route[1])
+                self.laneChanging = True
+                self.ref_path = self.route_planner.smooth_reference(ref_lanelet.center_vertices)
+            else:
+                self.laneChanging = False
+                subroute = list([self.route[0], self.route[1]])
+                ref_path = self.route_planner.get_ref_path_from_route(subroute)
+                self.ref_path = self.route_planner.smooth_reference(ref_path)
         else:
             ref_lanelet = self.route_planner.lanelet_network.find_lanelet_by_id(self.route[0])
-        self.ref_path = self.route_planner.smooth_reference(ref_lanelet.center_vertices)
+            self.laneChanging = False
+            self.ref_path = self.route_planner.smooth_reference(ref_lanelet.center_vertices)
 
         return self.ref_path
 
@@ -881,18 +940,35 @@ class ReferenceRouteManager(object):
     def re_plan_ref_path(self, current_state):
         current_lanelet_id = self.route_planner.lanelet_network.find_lanelet_by_position(list([current_state.position]))
         current_lanelet = self.route_planner.lanelet_network.find_lanelet_by_id(current_lanelet_id[0][0])
-        center_vertices_smoothed = self.route_planner.smooth_reference(current_lanelet.center_vertices)
-        ref_path_current_lanelet = center_vertices_smoothed
+
+        ref_path_current_lanelet = self.route_planner.smooth_reference(current_lanelet.center_vertices)
+
         new_route = list()
         new_route.append(current_lanelet_id[0][0])
         if self.route.index(current_lanelet_id[0][0]) < len(self.route) - 1:
             for i in range(self.route.index(current_lanelet_id[0][0]) + 1, len(self.route)):
                 new_route.append(self.route[i])
 
+        if len(new_route) > 1 and new_route[1] == self.successor[new_route[0]]:
+            subroute = list()
+            subroute.append(new_route[0])
+            for i in range(len(new_route) - 1):
+                if new_route[i+1] == self.successor[new_route[i]]:
+                    subroute.append(new_route[i+1])
+                else:
+                    break
+            ref_path_current_lanelet = self.route_planner.get_ref_path_from_route(subroute)
+            ref_path_current_lanelet = self.route_planner.smooth_reference(ref_path_current_lanelet)
+
         ref_path_lane_change = None
         if self.lane_change_request[current_lanelet_id[0][0]]:
-            ref_path_lane_change = self.route_planner.lanelet_network.find_lanelet_by_id(new_route[1])
-            ref_path_lane_change = self.route_planner.smooth_reference(ref_path_lane_change.center_vertices)
+            next_lanelet = self.route_planner.lanelet_network.find_lanelet_by_id(new_route[1])
+            ref_path_lane_change = self.route_planner.smooth_reference(next_lanelet.center_vertices)
+
+        if len(new_route) > 2 and new_route[2] == self.successor[new_route[1]]:
+            subroute = list([new_route[1], new_route[2]])
+            ref_path_lane_change = self.route_planner.get_ref_path_from_route(subroute)
+            ref_path_lane_change = self.route_planner.smooth_reference(ref_path_lane_change)
 
         return ref_path_current_lanelet, ref_path_lane_change
 

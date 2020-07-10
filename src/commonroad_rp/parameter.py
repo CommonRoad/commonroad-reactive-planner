@@ -181,9 +181,8 @@ class DefGymSampling(SamplingSet):
 
     def __init__(self, dt, horizon):
         sampling_level = 4
-        t_samples = TimeSampling(0.2, horizon, sampling_level, dt)
-        d_samples = PositionSampling(-0.5, 2.0, sampling_level)
-        # d_samples = PositionSampling(-2.0, 2.0, sampling_level)
+        t_samples = TimeSampling(2.0, horizon, sampling_level, dt)
+        d_samples = PositionSampling(-2.0, 2.0, sampling_level)
         v_samples = VelocitySampling(0., 25.0, sampling_level)
         super(DefGymSampling, self).__init__(t_samples, d_samples, v_samples)
 
