@@ -50,7 +50,7 @@ def plan(scenario, planning_problem, plot_dir):
         route_planner = RoutePlanner(scenario.benchmark_id, scenario.lanelet_network, planning_problem)
         # reference_path = route_planner.generate_ref_path()
         DT = scenario.dt
-        T_H = 3.0
+        T_H = 2.5
         if hasattr(planning_problem.goal.state_list[0], 'velocity'):
             desired_velocity = planning_problem.goal.state_list[0].velocity.start
         else:
@@ -88,7 +88,7 @@ def plan(scenario, planning_problem, plot_dir):
 
         plt.gca().set_aspect('equal')
 
-        plt.legend(loc=(1.04, 0))
+        # plt.legend(loc=(1.04, 0))
         plt.autoscale()
         plt.savefig(os.path.join(plot_dir, scenario.benchmark_id + '.png'), format='png', dpi=300,
                     bbox_inches='tight')
@@ -106,7 +106,7 @@ def main(args):
     scenario_path = os.path.join(args.base_dir, "*.xml")
     files = sorted(glob.glob(scenario_path))
 
-    for f in files[1:]:
+    for f in files:
 
         crfr = CommonRoadFileReader(f)
         scenario, problem_set = crfr.open()

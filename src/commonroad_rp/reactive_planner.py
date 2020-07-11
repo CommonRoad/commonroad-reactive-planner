@@ -38,7 +38,7 @@ class ReactivePlanner(object):
     """
 
     def __init__(self, scenario, planning_problem, route_planner: RoutePlanner, dt: float, t_h: float, N: int, v_desired=14, collision_check_in_cl: bool = False,
-                 factor: int = 1, scenario_id: str = 'dummy'):
+                 factor: int = 1, replanning_cycle_steps: int = 2):
         """
         Constructor of the reactive planner
         :param dt: The time step of planned trajectories
@@ -49,6 +49,7 @@ class ReactivePlanner(object):
         coordinates (default=False)
         :param factor: Factor when performing collision checks and the scenario is given in a different time
         step, e.g., 0.02 for scenario and 0.2 for planner results in a factor of 10.
+        :param replanning_cycle_steps: replanning should be done every this number of time steps.
         """
 
         assert is_positive(dt), '<ReactivePlanner>: provided dt is not correct! dt = {}'.format(dt)
@@ -99,13 +100,13 @@ class ReactivePlanner(object):
 
         # DEBUG Mode
         self._DEBUG = False
-        self.scenario_id = scenario_id
 
         # planning problem
         self.planningProblem = planning_problem
         self.scenario = scenario
         self.route_planner = route_planner
         self.ref_route_manager = ReferenceRouteManager(self.route_planner)
+        self.replanning_cycle_steps = replanning_cycle_steps
 
     def set_t_sampling_parameters(self, t_min, dt, horizon):
         self._sampling_t = TimeSampling(t_min, horizon, self._sampling_level, dt)
@@ -251,7 +252,7 @@ class ReactivePlanner(object):
             print('<Reactive_planner>: Value Error for curvilinear transformation')
             tmp = np.array([x_0.position])
             print(x_0.position)
-            print(self.scenario_id)
+            print(self.scenario.benchmark_id)
             print(self._co._reference[0])
             print(self._co._reference[-1])
             if self._co._reference[0][0] > x_0.position[0]:
@@ -263,7 +264,13 @@ class ReactivePlanner(object):
 
 
         # compute orientation in curvilinear coordinate frame
-        theta_cl = x_0.orientation - np.interp(s, self._co.ref_pos(), self._co.ref_theta())
+        ref_theta = self._co.ref_theta()
+        for i in range(len(ref_theta)):
+            if ref_theta[i] > np.pi:
+                ref_theta[i] -= 2 * np.pi
+            if ref_theta[i] < -np.pi:
+                ref_theta[i] += 2 * np.pi
+        theta_cl = x_0.orientation - np.interp(s, self._co.ref_pos(), ref_theta)
         # compute curvatures
         kr = np.interp(s, self._co.ref_pos(), self._co.ref_curv())
         kr_d = np.interp(s, self._co.ref_pos(), self._co.ref_curv_d())
@@ -271,7 +278,7 @@ class ReactivePlanner(object):
         # compute d prime and d prime prime -> derivation after arclength
         d_p = (1 - kr * d) * np.tan(theta_cl)
         d_pp = -(kr_d * d + kr * d_p) * np.tan(theta_cl) + ((1 - kr * d) / (np.cos(theta_cl) ** 2)) * (
-                x_0.yaw_rate * ((1 - kr * d) / (np.cos(theta_cl))) - kr)
+                x_0.yaw_rate * (1 - kr * d) / np.cos(theta_cl) - kr)
 
         # compute s dot and s dot dot -> derivation after time
         s_d = x_0.velocity * np.cos(theta_cl) / (1 - kr * d)
@@ -285,7 +292,7 @@ class ReactivePlanner(object):
             print(self._co.ref_theta())
             print(self._co.ref_curv())
             print(self._co._reference)
-            print(self.scenario_id)
+            print(self.scenario.benchmark_id)
             print(theta_cl)
             print(kr)
             print(d)
@@ -296,14 +303,15 @@ class ReactivePlanner(object):
 
         s_dd = x_0.acceleration
         s_dd -= (s_d ** 2 / np.cos(theta_cl)) * (
-                (1 - kr * d) * np.tan(theta_cl) * (x_0.yaw_rate * ((1 - kr * d) / (np.cos(theta_cl)) - kr)) -
+                (1 - kr * d) * np.tan(theta_cl) * (x_0.yaw_rate * (1 - kr * d) / (np.cos(theta_cl)) - kr) -
                 (kr_d * d + kr * d_p))
         s_dd /= ((1 - kr * d) / (np.cos(theta_cl)))
 
-        # d_d =(1-kr*d)*np.tan(theta_cl) #x_0.v * np.sin(theta_cl)
+        d_d = x_0.velocity * np.sin(theta_cl)
+        d_dd = s_dd * d_p + s_d ** 2 * d_pp
 
         x_0_lon: List[float] = [s, s_d, s_dd]
-        x_0_lat: List[float] = [d, d_p, d_pp]
+        x_0_lat: List[float] = [d, d_d, d_dd]
 
         if self._DEBUG:
             print("<ReactivePlanner>: Starting planning with: \n#################")
@@ -385,10 +393,7 @@ class ReactivePlanner(object):
         optimal_trajectory = None
 
         # initial index of sampling set to use
-        if self.ref_route_manager.laneChanging:
-            i = 3
-        else:
-            i = 0
+        i = 0
 
         # sample until trajectory has been found or sampling sets are empty
         while optimal_trajectory is None and i < self._sampling_level:
@@ -421,7 +426,7 @@ class ReactivePlanner(object):
         if optimal_trajectory is None and x_0.velocity <= 0.1:
             # for x_i in x_0_lon:
             #     print('<ReactivePlanner>: x_lon list for planning standstill with x_i type {}'.format(type(x_i)))
-            print('<ReactivePlanner>: planning standstill for scenario {}'.format(self.scenario_id))
+            print('<ReactivePlanner>: planning standstill for scenario {}'.format(self.scenario.benchmark_id))
             optimal_trajectory = self._compute_standstill_trajectory(x_0, x_0_lon, x_0_lat)
 
         # check if feasible trajectory exists -> emergency mode
@@ -452,8 +457,6 @@ class ReactivePlanner(object):
         self.x_0 = x_0
 
         # initialization
-        # planned_x = []
-        # planned_y = []
         planned_states = []
         # cl_states = None
         counter = 0
@@ -465,6 +468,8 @@ class ReactivePlanner(object):
         # for i in range(60):
         for i in range(self.planningProblem.goal.state_list[0].time_step.start):
             # optimal = self.plan(self.x_0, cc, cl_states)
+            if i < counter:
+                continue
             optimal = self.plan(self.x_0, cc)
             if optimal:
                 # cl_states = list()
@@ -472,8 +477,11 @@ class ReactivePlanner(object):
                 # cl_states.append(optimal[3][1])
 
                 if counter == 0:
-                    for j in range(len(optimal[0].state_list)):
-                        planned_states.append(self.shift_orientation(optimal[0]).state_list[j])
+                    for j in range(self.replanning_cycle_steps + 1):
+                        planned_state = self.shift_orientation(optimal[0]).state_list[j]
+                        planned_state.time_step = i + j
+                        planned_states.append(planned_state)
+
                     # planned_states.append(self.shift_orientation(optimal[0]).state_list[0])
                     # planned_states.append(self.shift_orientation(optimal[0]).state_list[1])
                     # planned_states.append(self.shift_orientation(optimal[0]).state_list[2])
@@ -482,8 +490,10 @@ class ReactivePlanner(object):
                     # planned_states.append(self.shift_orientation(optimal[0]).state_list[5])
                 else:
                     # skip the first state of the planned trajectory if this is not the first run.
-                    for j in range(1, len(optimal[0].state_list)):
-                        planned_states.append(self.shift_orientation(optimal[0]).state_list[j])
+                    for j in range(self.replanning_cycle_steps):
+                        planned_state = self.shift_orientation(optimal[0]).state_list[j + 1]
+                        planned_state.time_step = i + j + 1
+                        planned_states.append(planned_state)
 
                     # planned_states.append(self.shift_orientation(optimal[0]).state_list[1])
                     # planned_states.append(self.shift_orientation(optimal[0]).state_list[2])
@@ -493,7 +503,7 @@ class ReactivePlanner(object):
 
                 current_lanelet_id = self.route_planner.lanelet_network.find_lanelet_by_position(
                                                             list([planned_states[-1].position]))
-                if lane_change_request[current_lanelet_id[0][0]]:
+                if lane_change_request[current_lanelet_id[0][0]] and not self.ref_route_manager.laneChanging:
                     new_ref_current_lanelet, new_ref_lane_change = self.ref_route_manager.re_plan_ref_path(planned_states[-1])
                     self.set_reference_path(new_ref_lane_change)
                     ref_path.append(new_ref_lane_change)
@@ -511,13 +521,23 @@ class ReactivePlanner(object):
                     # cl_states.append(optimal[3][1])
 
                     if counter == 0:
-                        planned_states.append(self.shift_orientation(optimal[0]).state_list[0])
-                        planned_states.append(self.shift_orientation(optimal[0]).state_list[1])
-                        planned_states.append(self.shift_orientation(optimal[0]).state_list[2])
+                        for j in range(self.replanning_cycle_steps + 1):
+                            planned_state = self.shift_orientation(optimal[0]).state_list[j]
+                            planned_state.time_step = i + j
+                            planned_states.append(planned_state)
+
+                        # planned_states.append(self.shift_orientation(optimal[0]).state_list[0])
+                        # planned_states.append(self.shift_orientation(optimal[0]).state_list[1])
+                        # planned_states.append(self.shift_orientation(optimal[0]).state_list[2])
                     else:
                         # skip the first state of the planned trajectory if this is not the first run.
-                        planned_states.append(self.shift_orientation(optimal[0]).state_list[1])
-                        planned_states.append(self.shift_orientation(optimal[0]).state_list[2])
+                        for j in range(self.replanning_cycle_steps):
+                            planned_state = self.shift_orientation(optimal[0]).state_list[j + 1]
+                            planned_state.time_step = i + j + 1
+                            planned_states.append(planned_state)
+
+                        # planned_states.append(self.shift_orientation(optimal[0]).state_list[1])
+                        # planned_states.append(self.shift_orientation(optimal[0]).state_list[2])
                     if new_ref_lane_change is not None:
                         self.set_reference_path(new_ref_lane_change)
                         ref_path.append(new_ref_lane_change)
@@ -527,7 +547,6 @@ class ReactivePlanner(object):
             # Shift the initial state of the planning problem to run the next cycle.
             counter = len(planned_states) - 1
             self.x_0 = planned_states[-1]
-            self.x_0.time_step = counter
 
         return planned_states, ref_path
 
@@ -715,7 +734,7 @@ class ReactivePlanner(object):
                         oneKrD * tanTheta * (kappa_gl[i] * oneKrD / cosTheta - k_r) - (
                         k_r_d * d[i] + k_r * d_velocity[i]))
 
-                DEBUG = False
+                DEBUG = True
 
                 # check kinematics to already discard infeasible trajectories
                 if abs(kappa_gl[i] > self.constraints.kappa_max):
