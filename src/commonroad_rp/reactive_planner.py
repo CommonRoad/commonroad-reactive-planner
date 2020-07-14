@@ -11,6 +11,7 @@ from typing import List, Tuple
 import cProfile
 import pycrcc
 import time
+from copy import deepcopy
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -107,6 +108,7 @@ class ReactivePlanner(object):
         self.route_planner = route_planner
         self.ref_route_manager = ReferenceRouteManager(self.route_planner)
         self.replanning_cycle_steps = replanning_cycle_steps
+        self.laneChanging = False
 
     def set_t_sampling_parameters(self, t_min, dt, horizon):
         self._sampling_t = TimeSampling(t_min, horizon, self._sampling_level, dt)
@@ -253,15 +255,14 @@ class ReactivePlanner(object):
             tmp = np.array([x_0.position])
             print(x_0.position)
             print(self.scenario.benchmark_id)
-            print(self._co._reference[0])
-            print(self._co._reference[-1])
+            # print(self._co._reference[0])
+            # print(self._co._reference[-1])
             if self._co._reference[0][0] > x_0.position[0]:
                 reference_path = np.concatenate((tmp, self._co._reference), axis=0)
             else:
                 reference_path = np.concatenate((self._co._reference, tmp), axis=0)
             self.set_reference_path(reference_path)
             s, d = self._co.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
-
 
         # compute orientation in curvilinear coordinate frame
         ref_theta = self._co.ref_theta()
@@ -283,20 +284,20 @@ class ReactivePlanner(object):
         # compute s dot and s dot dot -> derivation after time
         s_d = x_0.velocity * np.cos(theta_cl) / (1 - kr * d)
         if s_d < 0:
-            print(x_0.velocity)
-            print(x_0.time_step)
-            print(x_0.position)
-            print(x_0.orientation)
-            print(s)
-            print(self._co.ref_pos())
-            print(self._co.ref_theta())
-            print(self._co.ref_curv())
-            print(self._co._reference)
+            # print(x_0.velocity)
+            # print(x_0.time_step)
+            # print(x_0.position)
+            # print(x_0.orientation)
+            # print(s)
+            # print(self._co.ref_pos())
+            # print(self._co.ref_theta())
+            # print(self._co.ref_curv())
+            # print(self._co._reference)
             print(self.scenario.benchmark_id)
-            print(theta_cl)
-            print(kr)
-            print(d)
-            print(s_d)
+            # print(theta_cl)
+            # print(kr)
+            # print(d)
+            # print(s_d)
             raise Exception(
                 "Initial state or reference incorrect! Curvilinear velocity is negative which indicates that the "
                 "ego vehicle is not driving in the same direction as specified by the reference")
@@ -344,6 +345,7 @@ class ReactivePlanner(object):
             cart_states['acceleration'] = trajectory.cartesian.a[i]
             cart_states['orientation'] = trajectory.cartesian.theta[i]
             cart_states['yaw_rate'] = trajectory.cartesian.kappa[i]
+            cart_states['slip_angle'] = self.x_0.slip_angle
             cart_list.append(State(**cart_states))
 
             # create curvilinear state
@@ -454,94 +456,53 @@ class ReactivePlanner(object):
         :param cc:  CollisionChecker object
         :return: Optimal trajectory as list
         """
-        self.x_0 = x_0
+        self.x_0 = deepcopy(x_0)
 
         # initialization
-        planned_states = []
-        # cl_states = None
+        planned_states = list()
+        planned_states.append(self.x_0)
+        cl_states = list()
         counter = 0
         ref_path = list()
         ref_path.append(self.ref_route_manager.get_ref_path())
         self.set_reference_path(ref_path[0])
-        lane_change_request = self.ref_route_manager.check_lane_change_request()
+        s_0, d_0 = self._co.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
+        x_0.position[0] = s_0
+        x_0.position[1] = d_0
+        cl_states.append(x_0)
 
         # for i in range(60):
-        for i in range(self.planningProblem.goal.state_list[0].time_step.start):
+        for i in range(self.planningProblem.goal.state_list[0].time_step.end):
             # optimal = self.plan(self.x_0, cc, cl_states)
             if i < counter:
                 continue
             optimal = self.plan(self.x_0, cc)
             if optimal:
-                # cl_states = list()
-                # cl_states.append(optimal[2][1])
-                # cl_states.append(optimal[3][1])
+                for j in range(self.replanning_cycle_steps):
+                    planned_state = self.shift_orientation(optimal[0]).state_list[j + 1]
+                    planned_state.time_step = i + j + 1
+                    planned_states.append(planned_state)
+                    cl_states.append(optimal[1].state_list[j + 1])
 
-                if counter == 0:
-                    for j in range(self.replanning_cycle_steps + 1):
-                        planned_state = self.shift_orientation(optimal[0]).state_list[j]
-                        planned_state.time_step = i + j
-                        planned_states.append(planned_state)
+                ref_lanelet_id = self.check_ref_lanelet_id(planned_states[-1])
 
-                    # planned_states.append(self.shift_orientation(optimal[0]).state_list[0])
-                    # planned_states.append(self.shift_orientation(optimal[0]).state_list[1])
-                    # planned_states.append(self.shift_orientation(optimal[0]).state_list[2])
-                    # planned_states.append(self.shift_orientation(optimal[0]).state_list[3])
-                    # planned_states.append(self.shift_orientation(optimal[0]).state_list[4])
-                    # planned_states.append(self.shift_orientation(optimal[0]).state_list[5])
-                else:
-                    # skip the first state of the planned trajectory if this is not the first run.
+                if self.laneChanging and abs(cl_states[-1].position[1]) < 0.5:
+                    new_ref = self.ref_route_manager.switch_ref_path(ref_lanelet_id)
+                    self.set_reference_path(new_ref)
+
+            else:
+                ref_lanelet_id = self.check_ref_lanelet_id(planned_states[-1])
+                new_ref = self.ref_route_manager.switch_ref_path(ref_lanelet_id, cl_state=cl_states[-1])
+                self.set_reference_path(new_ref)
+                optimal = self.plan(self.x_0, cc)
+                if optimal:
                     for j in range(self.replanning_cycle_steps):
                         planned_state = self.shift_orientation(optimal[0]).state_list[j + 1]
                         planned_state.time_step = i + j + 1
                         planned_states.append(planned_state)
-
-                    # planned_states.append(self.shift_orientation(optimal[0]).state_list[1])
-                    # planned_states.append(self.shift_orientation(optimal[0]).state_list[2])
-                    # planned_states.append(self.shift_orientation(optimal[0]).state_list[3])
-                    # planned_states.append(self.shift_orientation(optimal[0]).state_list[4])
-                    # planned_states.append(self.shift_orientation(optimal[0]).state_list[5])
-
-                current_lanelet_id = self.route_planner.lanelet_network.find_lanelet_by_position(
-                                                            list([planned_states[-1].position]))
-                if lane_change_request[current_lanelet_id[0][0]] and not self.ref_route_manager.laneChanging:
-                    new_ref_current_lanelet, new_ref_lane_change = self.ref_route_manager.re_plan_ref_path(planned_states[-1])
-                    self.set_reference_path(new_ref_lane_change)
-                    ref_path.append(new_ref_lane_change)
-                    self.ref_route_manager.laneChanging = True
-
-            else:
-                new_ref_current_lanelet, new_ref_lane_change = self.ref_route_manager.re_plan_ref_path(self.x_0)
-                self.set_reference_path(new_ref_current_lanelet)
-                self.ref_route_manager.laneChanging = False
-                ref_path.append(new_ref_current_lanelet)
-                optimal = self.plan(self.x_0, cc)
-                if optimal:
-                    # cl_states = list()
-                    # cl_states.append(optimal[2][1])
-                    # cl_states.append(optimal[3][1])
-
-                    if counter == 0:
-                        for j in range(self.replanning_cycle_steps + 1):
-                            planned_state = self.shift_orientation(optimal[0]).state_list[j]
-                            planned_state.time_step = i + j
-                            planned_states.append(planned_state)
-
-                        # planned_states.append(self.shift_orientation(optimal[0]).state_list[0])
-                        # planned_states.append(self.shift_orientation(optimal[0]).state_list[1])
-                        # planned_states.append(self.shift_orientation(optimal[0]).state_list[2])
-                    else:
-                        # skip the first state of the planned trajectory if this is not the first run.
-                        for j in range(self.replanning_cycle_steps):
-                            planned_state = self.shift_orientation(optimal[0]).state_list[j + 1]
-                            planned_state.time_step = i + j + 1
-                            planned_states.append(planned_state)
-
-                        # planned_states.append(self.shift_orientation(optimal[0]).state_list[1])
-                        # planned_states.append(self.shift_orientation(optimal[0]).state_list[2])
-                    if new_ref_lane_change is not None:
-                        self.set_reference_path(new_ref_lane_change)
-                        ref_path.append(new_ref_lane_change)
-                        self.ref_route_manager.laneChanging = True
+                        cl_states.append(optimal[1].state_list[j + 1])
+                    new_ref = self.ref_route_manager.switch_ref_path(ref_lanelet_id, cl_state=cl_states[-1])
+                    self.set_reference_path(new_ref)
                 else:
                     break
             # Shift the initial state of the planning problem to run the next cycle.
@@ -549,6 +510,23 @@ class ReactivePlanner(object):
             self.x_0 = planned_states[-1]
 
         return planned_states, ref_path
+
+    def check_ref_lanelet_id(self, current_state):
+        current_lanelet_id = self.route_planner.lanelet_network.find_lanelet_by_position(
+            list([current_state.position]))[0][0]
+        ref_lanelet_id = current_lanelet_id
+        if current_lanelet_id in self.ref_route_manager.route:
+            self.laneChanging = self.ref_route_manager.lane_change_request[current_lanelet_id]
+        else:
+            current_lanelet = self.route_planner.lanelet_network.find_lanelet_by_id(current_lanelet_id)
+            if current_lanelet.adj_left is not None and current_lanelet.adj_left in self.ref_route_manager.route:
+                self.laneChanging = self.ref_route_manager.lane_change_request[current_lanelet.adj_left]
+                ref_lanelet_id = current_lanelet.adj_left
+            else:
+                self.laneChanging = self.ref_route_manager.lane_change_request[current_lanelet.adj_right]
+                ref_lanelet_id = current_lanelet.adj_right
+
+        return ref_lanelet_id
 
     def _compute_standstill_trajectory(self, x_0, x_0_lon, x_0_lat) -> TrajectorySample:
         """
@@ -734,7 +712,7 @@ class ReactivePlanner(object):
                         oneKrD * tanTheta * (kappa_gl[i] * oneKrD / cosTheta - k_r) - (
                         k_r_d * d[i] + k_r * d_velocity[i]))
 
-                DEBUG = True
+                DEBUG = False
 
                 # check kinematics to already discard infeasible trajectories
                 if abs(kappa_gl[i] > self.constraints.kappa_max):
@@ -888,106 +866,185 @@ def shift_angle_to_interval(angle_list, interval_start=-np.pi, interval_end=np.p
 
 class ReferenceRouteManager(object):
     """
-    Reference route manager that takes care of lane changes.
+    Reference route manager that switches reference routes when performing lane changes. Center lines of the lanelets
+    are used as reference routes. If a lane change signal is received, the lane change should be done as early as
+    possible. When no feasible samples can be found during a planning cycle, the reference path will also be changed
+    temporarily.
     """
 
     def __init__(self, route_planner: RoutePlanner):
         """
         Constructor of the reference route manager
-        :param current_lanelet_id: the current lanelet id of the ego vehicle
-        :param goal_lanelet_id: lanelet id of the goal region
-        :param current_state: current state of planned trajectory, from which a new cycle of re-planning should start
         :param route_planner: route planner used for generating reference path
         """
 
-        self.lane_change_request = False
+        self.lane_change_request = None
         self.route_planner = route_planner
         self.ref_path = None
         self.route = None
         self.instruction = None
+        self.ref_path_dict = None
         self.successor = None
-        self.laneChanging = False
+        self.predecessor = None
+        self.ref_path_id = None
 
     def get_ref_path(self):
-        # ref_path_list, route_list = self.route_planner.generate_ref_path()
         routes = self.route_planner.search_alg()
 
         if routes is not None:
             # self.ref_path = ref_path_list[0]
             self.route = routes[0]
             if len(routes) > 1:
-                for i in range(len(routes)):
+                for i in range(1, len(routes)):
                     if self.route_planner.goal_lanelet_ids:
-                        goal_lanelet_id = self.route_planner.goal_lanelet_ids[0]
+                        goal_lanelet_id = self.route_planner.goal_lanelet_ids[-1]
                         if goal_lanelet_id in routes[i]:
                             if len(routes[i]) < len(self.route) or goal_lanelet_id not in self.route:
                                 self.route = routes[i]
 
-        self.instruction = self.route_planner.get_instruction_from_route(self.route)
-        self.successor = {}
-        for i in range(len(self.route)):
-            successor = self.route_planner.lanelet_network.find_lanelet_by_id(self.route[i]).successor
-            if len(successor) != 0:
-                self.successor[self.route[i]] = successor
-            else:
-                self.successor[self.route[i]] = 0
-
-        if len(self.route) > 1:
-            if self.instruction[0]:
-                ref_lanelet = self.route_planner.lanelet_network.find_lanelet_by_id(self.route[1])
-                self.laneChanging = True
-                self.ref_path = self.route_planner.smooth_reference(ref_lanelet.center_vertices)
-            else:
-                self.laneChanging = False
-                subroute = list([self.route[0], self.route[1]])
-                ref_path = self.route_planner.get_ref_path_from_route(subroute)
-                self.ref_path = self.route_planner.smooth_reference(ref_path)
-        else:
-            ref_lanelet = self.route_planner.lanelet_network.find_lanelet_by_id(self.route[0])
-            self.laneChanging = False
-            self.ref_path = self.route_planner.smooth_reference(ref_lanelet.center_vertices)
+        self.check_lane_change_request()
+        self.check_lanelet_connection()
+        self.split_route()
+        self.ref_path = self.ref_path_dict[self.route[0]]
+        self.ref_path_id = self.route[0]
 
         return self.ref_path
 
     def check_lane_change_request(self):
+        self.instruction = self.route_planner.get_instruction_from_route(self.route)
         self.lane_change_request = {}
         for i in range(len(self.route)):
             self.lane_change_request[self.route[i]] = self.instruction[i]
 
         return self.lane_change_request
 
-    def re_plan_ref_path(self, current_state):
-        current_lanelet_id = self.route_planner.lanelet_network.find_lanelet_by_position(list([current_state.position]))
-        current_lanelet = self.route_planner.lanelet_network.find_lanelet_by_id(current_lanelet_id[0][0])
+    def check_lanelet_connection(self):
+        """
+        Check the predecessors and successors of the lanelets in the route.
+        """
+        self.successor = {}
+        self.predecessor = {}
+        for i in range(len(self.route)):
+            successor = self.route_planner.lanelet_network.find_lanelet_by_id(self.route[i]).successor
+            predecessor = self.route_planner.lanelet_network.find_lanelet_by_id(self.route[i]).predecessor
+            if len(successor) != 0:
+                self.successor[self.route[i]] = successor[0]
+            else:
+                self.successor[self.route[i]] = 0
 
-        ref_path_current_lanelet = self.route_planner.smooth_reference(current_lanelet.center_vertices)
+            if len(predecessor) != 0:
+                self.predecessor[self.route[i]] = predecessor[0]
+            else:
+                self.predecessor[self.route[i]] = 0
 
-        new_route = list()
-        new_route.append(current_lanelet_id[0][0])
-        if self.route.index(current_lanelet_id[0][0]) < len(self.route) - 1:
-            for i in range(self.route.index(current_lanelet_id[0][0]) + 1, len(self.route)):
-                new_route.append(self.route[i])
+    def split_route(self):
+        """
+        Split the route into sub-routes, inner which there is no lane change request. Sub-routes are extended by
+        successors and predecessors. When performing lane change, the reference path is switched among the paths
+        generated correspondingly from two sub-routes.
+        Example:
+            lanelets:
+            _________________________________________________________
+            12              | 16                | 20
+            _________________________________________________________
+            13              | 17                | 21
+            _________________________________________________________
+            14              | 18                | 22
+            _________________________________________________________
+            15              | 19                | 23
+            _________________________________________________________
 
-        if len(new_route) > 1 and new_route[1] == self.successor[new_route[0]]:
-            subroute = list()
-            subroute.append(new_route[0])
-            for i in range(len(new_route) - 1):
-                if new_route[i+1] == self.successor[new_route[i]]:
-                    subroute.append(new_route[i+1])
+            route = [12, 16, 17, 18, 22, 23]
+            instructor = [0, 1, 1, 0, 1, 0]
+            successor = {12: 16         |       predecessor = {12: 0
+                         16: 20         |                      16: 12
+                         17: 21         |                      17: 13
+                         18: 22         |                      18: 14
+                         22: 0          |                      22: 18
+                         23: 0}         |                      23: 19}
+
+            Then sub-routes will be:
+                sub_route_0 = [12, 16]
+                sub_route_1 = [17]
+                sub_route_2 = [18, 22]
+                sub_route_3 = [23]
+
+            ref_path_dict will be: (dictionary whose keys are lanelet ids and values are ref_route or pointers)
+            {12: ref_path_0 of lanelets 12, 16, 20 (ndarray, extended with successor of lanelet 16)
+             16: [12, 17] (list of lanelet ids pointing to the first lanelet of the current and next routes)
+             17: ref_path_1 of lanelet 13, 17, 21 (ndarray, extended with predecessor and successor of lanelet 17)
+             18: ref_path_2 of lanelets 14, 18, 22 (ndarray, extended with predecessor of lanelet 18)
+             22: [18, 23] (list)
+             23: ref_path_3 of lanelet 19, 23 (ndarray, extended with predecessor of lanelet 23)}
+        """
+        self.ref_path_dict = {}
+        k = 0
+        sub_routes = {k: list([self.route[0]])}
+        pointer = self.route[0]
+        for i in range(len(self.route) - 1):
+            if pointer != self.route[-1]:
+                for j in range(self.route.index(pointer), len(self.route) - 1):
+                    if not self.instruction[j]:
+                        sub_routes[k].append(self.route[j + 1])
+                        pointer = self.route[j + 1]
+                    else:
+                        k += 1
+                        sub_routes[k] = list([self.route[j + 1]])
+                        pointer = self.route[j + 1]
+                        break
+            else:
+                break
+
+        for num in range(k + 1):
+            sub_route = sub_routes[num][:]
+            if len(sub_route) == 1:
+                ref_lanelet = self.route_planner.lanelet_network.find_lanelet_by_id(sub_route[0])
+                self.ref_path_dict[sub_route[0]] = self.route_planner.smooth_reference(ref_lanelet.center_vertices)
+            else:
+                sub_route_extended = sub_route[:]
+                if num != k and self.successor[sub_route[-1]] != 0:
+                    sub_route_extended.append(self.successor[sub_route[-1]])
+                if num != 0 and self.predecessor[sub_route[0]] != 0:
+                    sub_route_extended.insert(0, self.predecessor[sub_route[0]])
+                ref_path = self.route_planner.get_ref_path_from_route(sub_route_extended)
+                self.ref_path_dict[sub_route[0]] = self.route_planner.smooth_reference(ref_path)
+                for i in range(1, len(sub_route)):
+                    self.ref_path_dict[sub_route[i]] = list([sub_route[0]])
+                    if num < k:
+                        self.ref_path_dict[sub_route[i]].append(sub_routes[num + 1][0])
+                    else:
+                        self.ref_path_dict[sub_route[i]].append(0)
+
+    def switch_ref_path(self, ref_lanelet_id: int, cl_state=None):
+        """
+        Switch reference path when no feasible sample can be found.
+        """
+        if cl_state is None:
+            if type(self.ref_path_dict[ref_lanelet_id]) == list and self.ref_path_dict[ref_lanelet_id][1] != 0:
+                self.ref_path = self.ref_path_dict[self.ref_path_dict[ref_lanelet_id][1]]
+                self.ref_path_id = self.ref_path_dict[ref_lanelet_id][1]
+            else:
+                self.ref_path = self.ref_path_dict[self.route[self.route.index(ref_lanelet_id) + 1]]
+                self.ref_path_id = self.route[self.route.index(ref_lanelet_id) + 1]
+
+        else:
+            if ref_lanelet_id != self.ref_path_id:
+                if type(self.ref_path_dict[ref_lanelet_id]) == list:
+                    self.ref_path = self.ref_path_dict[self.ref_path_dict[ref_lanelet_id][0]]
+                    self.ref_path_id = ref_lanelet_id
                 else:
-                    break
-            ref_path_current_lanelet = self.route_planner.get_ref_path_from_route(subroute)
-            ref_path_current_lanelet = self.route_planner.smooth_reference(ref_path_current_lanelet)
+                    self.ref_path = self.ref_path_dict[ref_lanelet_id]
+                    self.ref_path_id = ref_lanelet_id
+            else:
+                current_ref_lanelet = self.route_planner.lanelet_network.find_lanelet_by_id(self.ref_path_id)
+                new_ref_lanelet_id = self.ref_path_id
+                if cl_state.position[1] >= 0 and current_ref_lanelet.adj_left is not None:
+                    new_ref_lanelet_id = current_ref_lanelet.adj_left
+                elif current_ref_lanelet.adj_right is not None:
+                    new_ref_lanelet_id = current_ref_lanelet.adj_right
+                new_ref_lanelet = self.route_planner.lanelet_network.find_lanelet_by_id(new_ref_lanelet_id)
+                self.ref_path = self.route_planner.smooth_reference(new_ref_lanelet.center_vertices)
+                self.ref_path_id = new_ref_lanelet_id
 
-        ref_path_lane_change = None
-        if self.lane_change_request[current_lanelet_id[0][0]]:
-            next_lanelet = self.route_planner.lanelet_network.find_lanelet_by_id(new_route[1])
-            ref_path_lane_change = self.route_planner.smooth_reference(next_lanelet.center_vertices)
-
-        if len(new_route) > 2 and new_route[2] == self.successor[new_route[1]]:
-            subroute = list([new_route[1], new_route[2]])
-            ref_path_lane_change = self.route_planner.get_ref_path_from_route(subroute)
-            ref_path_lane_change = self.route_planner.smooth_reference(ref_path_lane_change)
-
-        return ref_path_current_lanelet, ref_path_lane_change
+        return self.ref_path
 

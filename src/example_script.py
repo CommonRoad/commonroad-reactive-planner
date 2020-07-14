@@ -2,6 +2,7 @@ import glob
 import os
 import time
 import warnings
+from copy import deepcopy
 
 import commonroad_cc
 import matplotlib.pyplot as plt
@@ -52,7 +53,11 @@ def plan(scenario, planning_problem, plot_dir):
         DT = scenario.dt
         T_H = 2.5
         if hasattr(planning_problem.goal.state_list[0], 'velocity'):
-            desired_velocity = planning_problem.goal.state_list[0].velocity.start
+            if planning_problem.goal.state_list[0].velocity.start != 0:
+                desired_velocity = planning_problem.goal.state_list[0].velocity.start
+            else:
+                desired_velocity = (planning_problem.goal.state_list[0].velocity.start
+                                    + planning_problem.goal.state_list[0].velocity.end) / 2
         else:
             desired_velocity = problem_init_state.velocity
 
@@ -60,7 +65,7 @@ def plan(scenario, planning_problem, plot_dir):
                                   t_h=T_H, N=int(T_H / DT), v_desired=desired_velocity)
 
         planner.set_desired_velocity(desired_velocity)
-        x_0 = problem_init_state
+        x_0 = deepcopy(problem_init_state)
         planned_states, ref_path_list = planner.re_plan(x_0, collision_checker_scenario)
         plt.figure(figsize=(20, 10))
         draw_object(scenario, draw_params=DRAW_PARAMS)
