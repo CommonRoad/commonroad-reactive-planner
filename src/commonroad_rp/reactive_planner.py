@@ -16,10 +16,14 @@ from copy import deepcopy
 import matplotlib.pyplot as plt
 import numpy as np
 from commonroad.common.validity import *
-from commonroad.geometry.shape import Rectangle
-from commonroad.prediction.prediction import TrajectoryPrediction
+from commonroad.geometry.shape import Rectangle, Polygon, ShapeGroup
+from commonroad.prediction.prediction import TrajectoryPrediction, Occupancy, SetBasedPrediction
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 from commonroad.scenario.trajectory import Trajectory, State
+from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_checker
+from scenario_helpers import create_road_boundary
+
+from cr2sumo.rpc.sumo_client import SumoRPCClient
 
 # commonroad imports
 from commonroad_rp.parameter import DefFailSafeSampling, VehModelParameters, DefGymSampling, TimeSampling, VelocitySampling
@@ -29,6 +33,7 @@ from commonroad_rp.cost_function import DefaultCostFunctionFailSafe, DefaultCost
 from commonroad_rp.utils import CoordinateSystem, interpolate_angle
 
 from route_planner.route_planner import RoutePlanner
+import spot
 
 _LOW_VEL_MODE = False
 
@@ -38,10 +43,17 @@ class ReactivePlanner(object):
     Reactive planner class that plans trajectories in a sampling-based fashion
     """
 
-    def __init__(self, scenario, planning_problem, route_planner: RoutePlanner, dt: float, t_h: float, N: int, v_desired=14, collision_check_in_cl: bool = False,
-                 factor: int = 1, replanning_cycle_steps: int = 2):
+    def __init__(self, scenario, scenario_folder, planning_problem_set, route_planner: RoutePlanner,
+                 sumo_client: SumoRPCClient, conf, dt: float, t_h: float, N: int, v_desired=14,
+                 collision_check_in_cl: bool = False, factor: int = 1):
         """
         Constructor of the reactive planner
+        :param scenario: CommonRoad scenario to be planned
+        :param scenario_folder: folder containing the SUMO scenario
+        :param planning_problem_set: planning_problem_set
+        :param route_planner: route planner
+        :param sumo_client: sumo client used for sumo simulation
+        :param conf: SumoCommonRoadConfig
         :param dt: The time step of planned trajectories
         :param t_h: The time horizon of planned trajectories
         :param N: The number of steps of planned trajectories (int)
@@ -50,7 +62,6 @@ class ReactivePlanner(object):
         coordinates (default=False)
         :param factor: Factor when performing collision checks and the scenario is given in a different time
         step, e.g., 0.02 for scenario and 0.2 for planner results in a factor of 10.
-        :param replanning_cycle_steps: replanning should be done every this number of time steps.
         """
 
         assert is_positive(dt), '<ReactivePlanner>: provided dt is not correct! dt = {}'.format(dt)
@@ -103,12 +114,15 @@ class ReactivePlanner(object):
         self._DEBUG = False
 
         # planning problem
-        self.planningProblem = planning_problem
+        self.planning_problem_set = planning_problem_set
+        self.planningProblem = list(planning_problem_set.planning_problem_dict.values())[0]
         self.scenario = scenario
         self.route_planner = route_planner
+        self.sumo_client = sumo_client
+        self.conf = conf
         self.ref_route_manager = ReferenceRouteManager(self.route_planner)
-        self.replanning_cycle_steps = replanning_cycle_steps
         self.laneChanging = False
+        self.scenario_folder = scenario_folder
 
     def set_t_sampling_parameters(self, t_min, dt, horizon):
         self._sampling_t = TimeSampling(t_min, horizon, self._sampling_level, dt)
@@ -265,12 +279,7 @@ class ReactivePlanner(object):
             s, d = self._co.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
 
         # compute orientation in curvilinear coordinate frame
-        ref_theta = self._co.ref_theta()
-        for i in range(len(ref_theta)):
-            if ref_theta[i] > np.pi:
-                ref_theta[i] -= 2 * np.pi
-            if ref_theta[i] < -np.pi:
-                ref_theta[i] += 2 * np.pi
+        ref_theta = np.unwrap(self._co.ref_theta())
         theta_cl = x_0.orientation - np.interp(s, self._co.ref_pos(), ref_theta)
         # compute curvatures
         kr = np.interp(s, self._co.ref_pos(), self._co.ref_curv())
@@ -395,7 +404,7 @@ class ReactivePlanner(object):
         optimal_trajectory = None
 
         # initial index of sampling set to use
-        i = 0
+        i = 1  # Time sampling is not used. To get more samples, start with level 1.
 
         # sample until trajectory has been found or sampling sets are empty
         while optimal_trajectory is None and i < self._sampling_level:
@@ -449,11 +458,10 @@ class ReactivePlanner(object):
 
         return self._compute_trajectory_pair(optimal_trajectory) if optimal_trajectory is not None else None
 
-    def re_plan(self, x_0: State, cc: object) -> Tuple:
+    def re_plan(self, x_0: State) -> Tuple:
         """
         Re-plans after each given time horizon.
         :param x_0: Initial state as CR state
-        :param cc:  CollisionChecker object
         :return: Optimal trajectory as list
         """
         self.x_0 = deepcopy(x_0)
@@ -462,7 +470,7 @@ class ReactivePlanner(object):
         planned_states = list()
         planned_states.append(self.x_0)
         cl_states = list()
-        counter = 0
+
         ref_path = list()
         ref_path.append(self.ref_route_manager.get_ref_path())
         self.set_reference_path(ref_path[0])
@@ -471,47 +479,86 @@ class ReactivePlanner(object):
         x_0.position[1] = d_0
         cl_states.append(x_0)
 
-        # for i in range(60):
+        # send scenario to SUMO
+        self.sumo_client.send_sumo_scenario(self.conf.scenario_name, self.scenario_folder)
+        self.sumo_client.initialize(self.conf)
+
+        # initialize ego vehicle in SUMO simulation
+        # TODO: init_ego_vehicles_from_planning_problem currently does not work properly.
+        #       Re-check the setup when the bug is fixed.
+        self.sumo_client.init_ego_vehicles_from_planning_problem(self.planning_problem_set)
+        road_boundary_sg, road_boundary_obstacle = create_road_boundary(self.scenario, draw=False)
+
         for i in range(self.planningProblem.goal.state_list[0].time_step.end):
-            # optimal = self.plan(self.x_0, cc, cl_states)
-            if i < counter:
-                continue
-            optimal = self.plan(self.x_0, cc)
+
+            # get the scenario of the current time step from SUMO
+            ego_vehicles = self.sumo_client.ego_vehicles
+            time_step = self.sumo_client.current_time_step
+            cr_scenario = self.sumo_client.commonroad_scenario_at_time_step(time_step)
+            # do SPOT prediction
+            cr_scenario = self.spot_prediction(deepcopy(cr_scenario))
+
+            collision_checker_scenario = create_collision_checker(cr_scenario)
+            collision_checker_scenario.add_collision_object(road_boundary_sg)
+            exec("scenario_at_time_step_" + str(i) + " = self.scenario")
+
+            optimal = self.plan(self.x_0, collision_checker_scenario)
             if optimal:
-                for j in range(self.replanning_cycle_steps):
-                    planned_state = self.shift_orientation(optimal[0]).state_list[j + 1]
-                    planned_state.time_step = i + j + 1
-                    planned_states.append(planned_state)
-                    cl_states.append(optimal[1].state_list[j + 1])
+
+                planned_state = self.shift_orientation(optimal[0]).state_list[1]
+                ego_state = deepcopy(planned_state)
+                ego_state.time_step = 1
+                ego_trajectory = [ego_state]
+                for idx, ego_vehicle in ego_vehicles.items():
+                    ego_vehicle.set_planned_trajectory(ego_trajectory)
+
+                self.sumo_client.simulate_step()
+
+                planned_state.time_step = i + 1
+                planned_states.append(planned_state)
+                cl_states.append(optimal[1].state_list[1])
 
                 ref_lanelet_id = self.check_ref_lanelet_id(planned_states[-1])
 
+                # Check for every round of planning the lane change signal.
                 if self.laneChanging and abs(cl_states[-1].position[1]) < 0.5:
                     new_ref = self.ref_route_manager.switch_ref_path(ref_lanelet_id)
                     self.set_reference_path(new_ref)
 
             else:
+                # If no feasible sample found, try to switch the reference route
                 ref_lanelet_id = self.check_ref_lanelet_id(planned_states[-1])
                 new_ref = self.ref_route_manager.switch_ref_path(ref_lanelet_id, cl_state=cl_states[-1])
                 self.set_reference_path(new_ref)
-                optimal = self.plan(self.x_0, cc)
+                optimal = self.plan(self.x_0, collision_checker_scenario)
                 if optimal:
-                    for j in range(self.replanning_cycle_steps):
-                        planned_state = self.shift_orientation(optimal[0]).state_list[j + 1]
-                        planned_state.time_step = i + j + 1
-                        planned_states.append(planned_state)
-                        cl_states.append(optimal[1].state_list[j + 1])
+                    planned_state = self.shift_orientation(optimal[0]).state_list[1]
+                    ego_state = deepcopy(planned_state)
+                    ego_state.time_step = 1
+                    ego_trajectory = [ego_state]
+                    for idx, ego_vehicle in ego_vehicles.items():
+                        ego_vehicle.set_planned_trajectory(ego_trajectory)
+
+                    self.sumo_client.simulate_step()
+
+                    planned_state.time_step = i + 1
+                    planned_states.append(planned_state)
+                    cl_states.append(optimal[1].state_list[1])
                     new_ref = self.ref_route_manager.switch_ref_path(ref_lanelet_id, cl_state=cl_states[-1])
                     self.set_reference_path(new_ref)
                 else:
                     break
             # Shift the initial state of the planning problem to run the next cycle.
-            counter = len(planned_states) - 1
-            self.x_0 = planned_states[-1]
+            self.x_0 = deepcopy(planned_states[-1])
+            self.x_0 = 0
 
         return planned_states, ref_path
 
     def check_ref_lanelet_id(self, current_state):
+        """
+        Check the reference lanelet id for reference route switching.
+        This id will be used to identify next reference route
+        """
         current_lanelet_id = self.route_planner.lanelet_network.find_lanelet_by_position(
             list([current_state.position]))[0][0]
         ref_lanelet_id = current_lanelet_id
@@ -527,6 +574,79 @@ class ReactivePlanner(object):
                 ref_lanelet_id = current_lanelet.adj_right
 
         return ref_lanelet_id
+
+    def spot_prediction(self, cr_scenario):
+        """
+        Do SPOT prediction of the scenario. a_max is set to 1 to get constant-velocity prediction.
+        """
+        time_step_size = self.dT
+        start_time = 0.0
+        end_time = self.horizon
+        num_threads = 4
+        field_of_view = np.empty([0, 2], float)
+        spot_scenario_id = 1
+        test = spot.registerScenario(spot_scenario_id, cr_scenario.lanelet_network, cr_scenario.dynamic_obstacles,
+                                     [self.planningProblem], field_of_view)
+        update_dict = {
+            "vehicle": {
+                0: {  # 0 means that all vehicles will be changed
+                    "a_max": 1.0,
+                    "compute_occ_m1": True,
+                    "compute_occ_m2": True,
+                    "compute_occ_m3": True,
+                    "onlyInLane": True
+                }
+            },
+        }
+
+        test = spot.updateProperties(spot_scenario_id, update_dict)
+        test = spot.doOccupancyPrediction(spot_scenario_id, float(start_time), float(time_step_size), float(end_time),
+                                          num_threads)
+        k = 0  # iterator over cr_dynamic_obstacles
+        phantom_obstacles_id_begin = 50000000  # to avoid non-unique ids in cr_scenario
+        for cpp_obstacle in test:
+            # initialise
+            occupancy_list = []
+
+            for i in range(round(end_time / time_step_size)):
+                occ = Occupancy(i + 1, ShapeGroup([]))
+                occupancy_list.append(occ)
+
+            # all occupancy polygons (cpp_obstacle[1]) are stored in one list; thus, we need to separate each polygon
+            i = 0
+            for vertices_at_time_step in cpp_obstacle[1]:
+                j = 1  # iterator over vertices_at_time_step
+                b = 0  # index to select vertices_at_time_step that are the start of a new polygon
+                while j < len(vertices_at_time_step[1]):
+                    compare_vertice = vertices_at_time_step[1][b]  # first vertice of next polygon
+                    if compare_vertice[0] == vertices_at_time_step[1][j][0] and compare_vertice[1] == \
+                            vertices_at_time_step[1][j][1]:
+                        if (j + 1) - b < 3:  # polygon has less than 3 vertices
+                            print(
+                                'Warning: one duplicated vertice skipped when copying predicted occupancies to CommonRoad')
+                            b += 1
+                        else:
+                            shape_obj = Polygon(np.array(vertices_at_time_step[1][b:j + 1]))
+                            occupancy_list[i].shape.shapes.append(shape_obj)
+                            j += 1
+                            b = j
+                    j += 1
+                assert b == j - 1, ('Last polygon not closed (at time_step = ', i, ', b = ', b)
+                i += 1
+
+            # for phantom object from spot, create new cr_obstacle
+            if k >= len(cr_scenario.dynamic_obstacles):
+                cr_scenario.add_objects(DynamicObstacle(k + 1 + phantom_obstacles_id_begin, ObstacleType.UNKNOWN,
+                                                        Rectangle(0, 0), State(position=np.array([0, 0]), orientation=0,
+                                                                               time_step=0)))
+
+            # set occupancy as prediction of cr_obstacle
+            cr_scenario.dynamic_obstacles[k].prediction = SetBasedPrediction(1, occupancy_list[0:])
+            k += 1
+
+        test = spot.removeScenario(spot_scenario_id)
+
+        return cr_scenario
 
     def _compute_standstill_trajectory(self, x_0, x_0_lon, x_0_lat) -> TrajectorySample:
         """
@@ -889,6 +1009,9 @@ class ReferenceRouteManager(object):
         self.ref_path_id = None
 
     def get_ref_path(self):
+        """
+        Return the center line of the initial lanelet as the reference route.
+        """
         routes = self.route_planner.search_alg()
 
         if routes is not None:
