@@ -13,10 +13,12 @@ from scenario_helpers import smooth_reference
 
 
 class RoutePlanner:
-    def __init__(self, lanelet_network: LaneletNetwork, planning_problem: PlanningProblem):
+    def __init__(self, benchmark_id: int, lanelet_network: LaneletNetwork, planning_problem: PlanningProblem):
+        self.benchmark_id = benchmark_id
         self.planning_problem = planning_problem
         self.lanelet_network = lanelet_network
         self.create_graph_from_lanelet_network()
+        self.goal_lanelet_ids = self.get_goal_lanelet()
 
     def create_graph_from_lanelet_network(self):
         """
@@ -166,6 +168,23 @@ class RoutePlanner:
                                                      int(end_idx_list[idx] * len(
                                                          center_vertices_resampled)) - transition_vertice_idx, :]
                                            ), axis=0)
+        return ref_path
+
+    def search_alg(self):
+        problem_init_state = self.planning_problem.initial_state
+        initial_lanelet_id_list = self.lanelet_network.find_lanelet_by_position([problem_init_state.position])[0]
+        for goal_lanelet_id in self.goal_lanelet_ids:
+            for initial_lanelet in initial_lanelet_id_list:
+                try:
+                    all_route = self.find_all_shortest_paths(initial_lanelet, goal_lanelet_id)
+                    return all_route
+                except NetworkXNoPath:
+                    pass
+
+    def smooth_reference(self, ref_path):
+        if ref_path.shape[0] < 5:
+            ref_path = resample_polyline(ref_path)
+        ref_path = smooth_reference(ref_path)
         return ref_path
 
     def generate_ref_path(self) -> List[np.ndarray]:
