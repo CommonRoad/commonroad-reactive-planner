@@ -22,13 +22,13 @@ from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 from commonroad.scenario.trajectory import Trajectory, State
 
 # commonroad imports
-from commonroad_rp.parameter import DefFailSafeSampling, VehModelParameters, DefGymSampling, TimeSampling, VelocitySampling
+from commonroad_rp.parameter import DefFailSafeSampling, VehModelParameters, DefGymSampling, TimeSampling, \
+    VelocitySampling
 from commonroad_rp.polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
 from commonroad_rp.trajectories import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample
 from commonroad_rp.cost_function import DefaultCostFunctionFailSafe, DefaultCostFunction
 from commonroad_rp.utils import CoordinateSystem, interpolate_angle
-
-from route_planner.route_planner import RoutePlanner
+from route_planner import RoutePlanner
 
 _LOW_VEL_MODE = False
 
@@ -38,7 +38,8 @@ class ReactivePlanner(object):
     Reactive planner class that plans trajectories in a sampling-based fashion
     """
 
-    def __init__(self, scenario, planning_problem, route_planner: RoutePlanner, dt: float, t_h: float, N: int, v_desired=14, collision_check_in_cl: bool = False,
+    def __init__(self, scenario, planning_problem, route_planner: RoutePlanner, dt: float, t_h: float, N: int,
+                 v_desired=14, collision_check_in_cl: bool = False,
                  factor: int = 1, replanning_cycle_steps: int = 2):
         """
         Constructor of the reactive planner
@@ -122,7 +123,7 @@ class ReactivePlanner(object):
         """
         self._co: CoordinateSystem = CoordinateSystem(reference_path)
 
-    def set_desired_velocity(self, desired_velocity: float, current_speed: float=None, stopping: bool=False):
+    def set_desired_velocity(self, desired_velocity: float, current_speed: float = None, stopping: bool = False):
         """
         Sets desired velocity and calculates velocity for each sample
         :param desired_velocity: velocity in m/s
@@ -196,10 +197,10 @@ class ReactivePlanner(object):
         trajectories = list()
         # for t in self._sampling_t.to_range(samp_level):
         t = self.horizon
-            # Longitudinal sampling for all possible velocities
+        # Longitudinal sampling for all possible velocities
         for v in self._sampling_v.to_range(samp_level):
-            #end_state_lon = np.array([t * v + x_0_lon[0], v, 0.0])
-            #trajectory_long = QuinticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lon), x_d=end_state_lon)
+            # end_state_lon = np.array([t * v + x_0_lon[0], v, 0.0])
+            # trajectory_long = QuinticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lon), x_d=end_state_lon)
             trajectory_long = QuarticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lon), x_d=np.array([v, 0]))
 
             # Sample lateral end states (add x_0_lat to sampled states)
@@ -547,7 +548,8 @@ class ReactivePlanner(object):
             print("x_0_lat is {}".format(x_0_lat))
         traj_lon = QuarticTrajectory(tau_0=0, delta_tau=self.horizon, x_0=np.asarray(x_0_lon),
                                      x_d=np.array([self._desired_speed, 0]))
-        traj_lat = QuinticTrajectory(tau_0=0, delta_tau=self.horizon, x_0=np.asarray(x_0_lat), x_d=np.array([x_0_lat[0], 0, 0]))
+        traj_lat = QuinticTrajectory(tau_0=0, delta_tau=self.horizon, x_0=np.asarray(x_0_lat),
+                                     x_d=np.array([x_0_lat[0], 0, 0]))
         p = TrajectorySample(self.horizon, self.dT, traj_lon, traj_lat)
         p.cartesian = CartesianSample(np.repeat(x_0.position[0], self.N), np.repeat(x_0.position[1], self.N),
                                       np.repeat(x_0.orientation, self.N), np.repeat(0, self.N),
@@ -650,7 +652,7 @@ class ReactivePlanner(object):
                     break
 
                 s_lambda = (self._co.ref_pos()[s_idx] - s[i]) / (
-                            self._co.ref_pos()[s_idx + 1] - self._co.ref_pos()[s_idx])
+                        self._co.ref_pos()[s_idx + 1] - self._co.ref_pos()[s_idx])
 
                 # add cl and gl orientation
                 if s_velocity[i] > 0.005:
@@ -659,12 +661,12 @@ class ReactivePlanner(object):
                     else:
                         theta_cl[i] = np.arctan2(d_velocity[i], s_velocity[i])
                     theta_gl[i] = theta_cl[i] + interpolate_angle(
-                            s[i],
-                            self._co.ref_pos()[s_idx],
-                            self._co.ref_pos()[s_idx + 1],
-                            self._co.ref_theta()[s_idx],
-                            self._co.ref_theta()[s_idx + 1]
-                        )
+                        s[i],
+                        self._co.ref_pos()[s_idx],
+                        self._co.ref_pos()[s_idx + 1],
+                        self._co.ref_theta()[s_idx],
+                        self._co.ref_theta()[s_idx + 1]
+                    )
                     if theta_gl[i] < -np.pi:
                         theta_gl[i] += 2 * np.pi
                     if theta_gl[i] > np.pi:
@@ -678,12 +680,12 @@ class ReactivePlanner(object):
                     # theta_cl[i] = (self._co.ref_theta()[s_idx + 1] - self._co.ref_theta()[s_idx]) * s_lambda + \
                     #               self._co.ref_theta()[s_idx]
                     theta_cl[i] = interpolate_angle(
-                            s[i],
-                            self._co.ref_pos()[s_idx],
-                            self._co.ref_pos()[s_idx + 1],
-                            self._co.ref_theta()[s_idx],
-                            self._co.ref_theta()[s_idx + 1]
-                        )
+                        s[i],
+                        self._co.ref_pos()[s_idx],
+                        self._co.ref_pos()[s_idx + 1],
+                        self._co.ref_theta()[s_idx],
+                        self._co.ref_theta()[s_idx + 1]
+                    )
                     if theta_cl[i] < -np.pi:
                         theta_cl[i] += 2 * np.pi
                     if theta_cl[i] > np.pi:
@@ -761,7 +763,7 @@ class ReactivePlanner(object):
                     print(self.N)
                     print(self.horizon)
                     print(self.dT)
-                    print(self.horizon/self.dT)
+                    print(self.horizon / self.dT)
                     print(len(trajectory.cartesian.x))
                     print(self._sampling_t._db)
                     print(t)
@@ -856,9 +858,9 @@ def shift_angle_to_interval(angle_list, interval_start=-np.pi, interval_end=np.p
     new_angle_list = np.zeros(angle_list.shape)
     for idx, angle in enumerate(angle_list):
         while angle < interval_start:
-            angle += 2*np.pi
+            angle += 2 * np.pi
         while angle > interval_end:
-            angle -= 2*np.pi
+            angle -= 2 * np.pi
         new_angle_list[idx] = angle
 
     return new_angle_list
@@ -1047,4 +1049,3 @@ class ReferenceRouteManager(object):
                 self.ref_path_id = new_ref_lanelet_id
 
         return self.ref_path
-
