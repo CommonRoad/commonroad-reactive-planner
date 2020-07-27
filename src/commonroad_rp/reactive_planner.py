@@ -44,7 +44,7 @@ class ReactivePlanner(object):
     """
 
     def __init__(self, scenario, scenario_folder, planning_problem_set, route_planner: RoutePlanner,
-                 sumo_client: SumoRPCClient, conf, dt: float, t_h: float, N: int, v_desired=14,
+                 dt: float, t_h: float, N: int, v_desired=14, sumo_client: SumoRPCClient = None, conf=None,
                  collision_check_in_cl: bool = False, factor: int = 1):
         """
         Constructor of the reactive planner
@@ -118,8 +118,10 @@ class ReactivePlanner(object):
         self.planningProblem = list(planning_problem_set.planning_problem_dict.values())[0]
         self.scenario = scenario
         self.route_planner = route_planner
-        self.sumo_client = sumo_client
-        self.conf = conf
+        if sumo_client is not None:
+            self.sumo_client = sumo_client
+        if conf is not None:
+            self.conf = conf
         self.ref_route_manager = ReferenceRouteManager(self.route_planner)
         self.laneChanging = False
         self.scenario_folder = scenario_folder
@@ -458,10 +460,11 @@ class ReactivePlanner(object):
 
         return self._compute_trajectory_pair(optimal_trajectory) if optimal_trajectory is not None else None
 
-    def re_plan(self, x_0: State) -> Tuple:
+    def re_plan(self, x_0: State, sumo: bool = False) -> Tuple:
         """
         Re-plans after each given time horizon.
         :param x_0: Initial state as CR state
+        :param sumo: whether planning for interactive scenarios / sumo simulation is used
         :return: Optimal trajectory as list
         """
         self.x_0 = deepcopy(x_0)
@@ -480,23 +483,28 @@ class ReactivePlanner(object):
         cl_states.append(x_0)
 
         # send scenario to SUMO
-        self.sumo_client.send_sumo_scenario(self.conf.scenario_name, self.scenario_folder)
-        self.sumo_client.initialize(self.conf)
+        if sumo:
+            self.sumo_client.send_sumo_scenario(self.conf.scenario_name, self.scenario_folder)
+            self.sumo_client.initialize(self.conf)
 
-        # initialize ego vehicle in SUMO simulation
-        # TODO: init_ego_vehicles_from_planning_problem currently does not work properly.
-        #       Re-check the setup when the bug is fixed.
-        self.sumo_client.init_ego_vehicles_from_planning_problem(self.planning_problem_set)
+            # initialize ego vehicle in SUMO simulation
+            # TODO: init_ego_vehicles_from_planning_problem currently does not work properly.
+            #       Re-check the setup when the bug is fixed.
+            self.sumo_client.init_ego_vehicles_from_planning_problem(self.planning_problem_set)
+
         road_boundary_sg, road_boundary_obstacle = create_road_boundary(self.scenario, draw=False)
 
         for i in range(self.planningProblem.goal.state_list[0].time_step.end):
 
-            # get the scenario of the current time step from SUMO
-            ego_vehicles = self.sumo_client.ego_vehicles
-            time_step = self.sumo_client.current_time_step
-            cr_scenario = self.sumo_client.commonroad_scenario_at_time_step(time_step)
-            # do SPOT prediction
-            cr_scenario = self.spot_prediction(deepcopy(cr_scenario))
+            if sumo:
+                # get the scenario of the current time step from SUMO
+                ego_vehicles = self.sumo_client.ego_vehicles
+                time_step = self.sumo_client.current_time_step
+                cr_scenario = self.sumo_client.commonroad_scenario_at_time_step(time_step)
+                # do SPOT prediction
+                cr_scenario = self.spot_prediction(deepcopy(cr_scenario))
+            else:
+                cr_scenario = self.scenario
 
             collision_checker_scenario = create_collision_checker(cr_scenario)
             collision_checker_scenario.add_collision_object(road_boundary_sg)
@@ -504,15 +512,15 @@ class ReactivePlanner(object):
 
             optimal = self.plan(self.x_0, collision_checker_scenario)
             if optimal:
-
                 planned_state = self.shift_orientation(optimal[0]).state_list[1]
-                ego_state = deepcopy(planned_state)
-                ego_state.time_step = 1
-                ego_trajectory = [ego_state]
-                for idx, ego_vehicle in ego_vehicles.items():
-                    ego_vehicle.set_planned_trajectory(ego_trajectory)
 
-                self.sumo_client.simulate_step()
+                if sumo:
+                    ego_state = deepcopy(planned_state)
+                    ego_state.time_step = 1
+                    ego_trajectory = [ego_state]
+                    for idx, ego_vehicle in ego_vehicles.items():
+                        ego_vehicle.set_planned_trajectory(ego_trajectory)
+                    self.sumo_client.simulate_step()
 
                 planned_state.time_step = i + 1
                 planned_states.append(planned_state)
@@ -533,13 +541,14 @@ class ReactivePlanner(object):
                 optimal = self.plan(self.x_0, collision_checker_scenario)
                 if optimal:
                     planned_state = self.shift_orientation(optimal[0]).state_list[1]
-                    ego_state = deepcopy(planned_state)
-                    ego_state.time_step = 1
-                    ego_trajectory = [ego_state]
-                    for idx, ego_vehicle in ego_vehicles.items():
-                        ego_vehicle.set_planned_trajectory(ego_trajectory)
 
-                    self.sumo_client.simulate_step()
+                    if sumo:
+                        ego_state = deepcopy(planned_state)
+                        ego_state.time_step = 1
+                        ego_trajectory = [ego_state]
+                        for idx, ego_vehicle in ego_vehicles.items():
+                            ego_vehicle.set_planned_trajectory(ego_trajectory)
+                        self.sumo_client.simulate_step()
 
                     planned_state.time_step = i + 1
                     planned_states.append(planned_state)
@@ -550,7 +559,7 @@ class ReactivePlanner(object):
                     break
             # Shift the initial state of the planning problem to run the next cycle.
             self.x_0 = deepcopy(planned_states[-1])
-            self.x_0 = 0
+            self.x_0.time_step = i
 
         return planned_states, ref_path
 
@@ -559,8 +568,15 @@ class ReactivePlanner(object):
         Check the reference lanelet id for reference route switching.
         This id will be used to identify next reference route
         """
-        current_lanelet_id = self.route_planner.lanelet_network.find_lanelet_by_position(
-            list([current_state.position]))[0][0]
+        current_lanelet_id_list = self.route_planner.lanelet_network.find_lanelet_by_position(
+            list([current_state.position]))[0]
+        current_lanelet_id = current_lanelet_id_list[0]
+        if len(current_lanelet_id_list) > 1:
+            for lanelet_id in current_lanelet_id_list:
+                if lanelet_id in self.ref_route_manager.route:
+                    current_lanelet_id = lanelet_id
+                    break
+
         ref_lanelet_id = current_lanelet_id
         if current_lanelet_id in self.ref_route_manager.route:
             self.laneChanging = self.ref_route_manager.lane_change_request[current_lanelet_id]
@@ -1122,7 +1138,13 @@ class ReferenceRouteManager(object):
             sub_route = sub_routes[num][:]
             if len(sub_route) == 1:
                 ref_lanelet = self.route_planner.lanelet_network.find_lanelet_by_id(sub_route[0])
-                self.ref_path_dict[sub_route[0]] = self.route_planner.smooth_reference(ref_lanelet.center_vertices)
+                ref_path_sub_route = ref_lanelet.center_vertices
+                try:
+                    if len(ref_lanelet.center_vertices) < 5:
+                        ref_path_sub_route = self.route_planner.resample_polyline(ref_path_sub_route)
+                    self.ref_path_dict[sub_route[0]] = self.route_planner.smooth_reference(ref_path_sub_route)
+                except:
+                    self.ref_path_dict[sub_route[0]] = ref_path_sub_route
             else:
                 sub_route_extended = sub_route[:]
                 if num != k and self.successor[sub_route[-1]] != 0:
@@ -1166,7 +1188,15 @@ class ReferenceRouteManager(object):
                 elif current_ref_lanelet.adj_right is not None:
                     new_ref_lanelet_id = current_ref_lanelet.adj_right
                 new_ref_lanelet = self.route_planner.lanelet_network.find_lanelet_by_id(new_ref_lanelet_id)
-                self.ref_path = self.route_planner.smooth_reference(new_ref_lanelet.center_vertices)
+                new_ref_path = new_ref_lanelet.center_vertices
+
+                try:
+                    if len(new_ref_path) < 5:
+                        new_ref_path = self.route_planner.resample_polyline(new_ref_path)
+                    self.ref_path = self.route_planner.smooth_reference(new_ref_path)
+                except:
+                    self.ref_path = new_ref_path
+
                 self.ref_path_id = new_ref_lanelet_id
 
         return self.ref_path
