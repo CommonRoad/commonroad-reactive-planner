@@ -467,9 +467,34 @@ class ReactivePlanner(object):
         :param sumo: whether planning for interactive scenarios / sumo simulation is used
         :return: Optimal trajectory as list
         """
-        self.x_0 = deepcopy(x_0)
+        # send scenario to SUMO
+        if sumo:
+            self.sumo_client.send_sumo_scenario(self.conf.scenario_name, self.scenario_folder)
+            self.sumo_client.initialize(self.conf)
 
-        # initialization
+            # initialize ego vehicle in SUMO simulation
+            # TODO: init_ego_vehicles_from_planning_problem currently does not work properly.
+            #       Re-check the setup when the bug is fixed.
+            # self.sumo_client.init_ego_vehicles_from_planning_problem(self.planning_problem_set)
+
+            # Check for the time step that the ego vehicle enters the simulation
+            for t in range(1000):
+                ego_vehicles = self.sumo_client.ego_vehicles
+                time_step = self.sumo_client.current_time_step
+                if len(ego_vehicles) > 0:
+                    break
+
+                self.sumo_client.send_ego_vehicles(ego_vehicles)
+                self.sumo_client.simulate_step()
+
+            ego_vehicle = list(ego_vehicles.values())[0]
+            current_state = ego_vehicle.current_state
+            current_state.time_step = 0
+            current_state.yaw_rate = 0.0
+            current_state.slip_angle = 0.0
+            x_0 = deepcopy(current_state)
+
+        self.x_0 = deepcopy(x_0)
         planned_states = list()
         planned_states.append(self.x_0)
         cl_states = list()
@@ -481,34 +506,30 @@ class ReactivePlanner(object):
         x_0.position[0] = s_0
         x_0.position[1] = d_0
         cl_states.append(x_0)
-
-        # send scenario to SUMO
-        if sumo:
-            self.sumo_client.send_sumo_scenario(self.conf.scenario_name, self.scenario_folder)
-            self.sumo_client.initialize(self.conf)
-
-            # initialize ego vehicle in SUMO simulation
-            # TODO: init_ego_vehicles_from_planning_problem currently does not work properly.
-            #       Re-check the setup when the bug is fixed.
-            self.sumo_client.init_ego_vehicles_from_planning_problem(self.planning_problem_set)
+        planned_scenario_list = []
 
         road_boundary_sg, road_boundary_obstacle = create_road_boundary(self.scenario, draw=False)
 
-        for i in range(self.planningProblem.goal.state_list[0].time_step.end):
+        # for i in range(self.planningProblem.goal.state_list[0].time_step.end):
+        for i in range(100):
 
             if sumo:
                 # get the scenario of the current time step from SUMO
                 ego_vehicles = self.sumo_client.ego_vehicles
+                if len(ego_vehicles) == 0:
+                    break
                 time_step = self.sumo_client.current_time_step
+                ego_vehicle = list(ego_vehicles.values())[0]
                 cr_scenario = self.sumo_client.commonroad_scenario_at_time_step(time_step)
                 # do SPOT prediction
                 cr_scenario = self.spot_prediction(deepcopy(cr_scenario))
             else:
                 cr_scenario = self.scenario
 
+            planned_scenario_list.append(cr_scenario)
             collision_checker_scenario = create_collision_checker(cr_scenario)
             collision_checker_scenario.add_collision_object(road_boundary_sg)
-            exec("scenario_at_time_step_" + str(i) + " = self.scenario")
+            # exec("scenario_at_time_step_" + str(i) + " = self.scenario")
 
             optimal = self.plan(self.x_0, collision_checker_scenario)
             if optimal:
@@ -518,8 +539,8 @@ class ReactivePlanner(object):
                     ego_state = deepcopy(planned_state)
                     ego_state.time_step = 1
                     ego_trajectory = [ego_state]
-                    for idx, ego_vehicle in ego_vehicles.items():
-                        ego_vehicle.set_planned_trajectory(ego_trajectory)
+                    ego_vehicle.set_planned_trajectory(ego_trajectory)
+                    self.sumo_client.send_ego_vehicles(ego_vehicles)
                     self.sumo_client.simulate_step()
 
                 planned_state.time_step = i + 1
@@ -546,8 +567,7 @@ class ReactivePlanner(object):
                         ego_state = deepcopy(planned_state)
                         ego_state.time_step = 1
                         ego_trajectory = [ego_state]
-                        for idx, ego_vehicle in ego_vehicles.items():
-                            ego_vehicle.set_planned_trajectory(ego_trajectory)
+                        ego_vehicle.set_planned_trajectory(ego_trajectory)
                         self.sumo_client.simulate_step()
 
                     planned_state.time_step = i + 1
@@ -559,9 +579,8 @@ class ReactivePlanner(object):
                     break
             # Shift the initial state of the planning problem to run the next cycle.
             self.x_0 = deepcopy(planned_states[-1])
-            self.x_0.time_step = i
 
-        return planned_states, ref_path
+        return planned_states, ref_path, planned_scenario_list
 
     def check_ref_lanelet_id(self, current_state):
         """

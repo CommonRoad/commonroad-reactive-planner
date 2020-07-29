@@ -68,13 +68,13 @@ def plan(scenario, planning_problem_set, plot_dir, scenario_folder, make_video: 
                                     + planning_problem.goal.state_list[0].velocity.end) / 2
         else:
             desired_velocity = problem_init_state.velocity
-
+        desired_velocity = 2.0
         planner = ReactivePlanner(scenario, scenario_folder=scenario_folder, planning_problem_set=planning_problem_set,
                                   route_planner=route_planner, sumo_client=sumo_client, conf=conf, dt=DT, t_h=T_H,
                                   N=int(T_H / DT), v_desired=desired_velocity)
 
         planner.set_desired_velocity(desired_velocity)
-        planned_states, ref_path_list = planner.re_plan(deepcopy(problem_init_state))
+        planned_states, ref_path_list, planned_scenario_list = planner.re_plan(deepcopy(problem_init_state), sumo=True)
 
         sumo_client.stop()
 
@@ -127,15 +127,15 @@ def main(args):
 
     os.makedirs(plot_dir, exist_ok=True)
 
-    scenario_path = os.path.join(args.base_dir, "*.xml")
+    scenario_path = os.path.join(args.base_dir, "DEU_Muehlhausen-13_1_I.xml")
     files = sorted(glob.glob(scenario_path))
 
     for f in files:
 
         crfr = CommonRoadFileReader(f)
         scenario, planning_problem_set = crfr.open()
-        scenario_folder = os.path.join('./scenarios', scenario.benchmark_id)
-
+        # scenario_folder = os.path.join('./scenarios', scenario.benchmark_id)
+        scenario_folder = '/home/zechen/MPfAV/commonroad-interactive-ss20/commonroad-sumo-manager-development/example/scenarios/DEU_Muehlhausen-13_2_I/'
         plan(scenario, planning_problem_set, plot_dir, scenario_folder)
 
 
