@@ -43,15 +43,13 @@ class ReactivePlanner(object):
     Reactive planner class that plans trajectories in a sampling-based fashion
     """
 
-    def __init__(self, scenario, scenario_folder, planning_problem_set, route_planner: RoutePlanner,
-                 dt: float, t_h: float, N: int, v_desired=14, sumo_client: SumoRPCClient = None, conf=None,
-                 collision_check_in_cl: bool = False, factor: int = 1):
+    def __init__(self, scenario, scenario_folder, planning_problem_set, dt: float, t_h: float, N: int, v_desired=14,
+                 sumo_client: SumoRPCClient = None, conf=None, collision_check_in_cl: bool = False, factor: int = 1):
         """
         Constructor of the reactive planner
         :param scenario: CommonRoad scenario to be planned
         :param scenario_folder: folder containing the SUMO scenario
         :param planning_problem_set: planning_problem_set
-        :param route_planner: route planner
         :param sumo_client: sumo client used for sumo simulation
         :param conf: SumoCommonRoadConfig
         :param dt: The time step of planned trajectories
@@ -84,7 +82,7 @@ class ReactivePlanner(object):
         self._length = self.constraints.veh_length
 
         # Current State
-        self.x_0: State = None
+        self.x_0 = None
 
         # store feasible trajectories of last run
         self._infeasible_count_collision = 0
@@ -117,12 +115,12 @@ class ReactivePlanner(object):
         self.planning_problem_set = planning_problem_set
         self.planningProblem = list(planning_problem_set.planning_problem_dict.values())[0]
         self.scenario = scenario
-        self.route_planner = route_planner
+        self.route_planner = None
+        self.ref_route_manager = None
         if sumo_client is not None:
             self.sumo_client = sumo_client
         if conf is not None:
             self.conf = conf
-        self.ref_route_manager = ReferenceRouteManager(self.route_planner)
         self.laneChanging = False
         self.scenario_folder = scenario_folder
 
@@ -470,6 +468,7 @@ class ReactivePlanner(object):
         # send scenario to SUMO
         if sumo:
             self.sumo_client.send_sumo_scenario(self.conf.scenario_name, self.scenario_folder)
+            self.conf.presimulation_steps = 0
             self.sumo_client.initialize(self.conf)
 
             # initialize ego vehicle in SUMO simulation
@@ -499,6 +498,11 @@ class ReactivePlanner(object):
         planned_states.append(self.x_0)
         cl_states = list()
 
+        self.planningProblem.initial_state = deepcopy(self.x_0)
+        self.route_planner = RoutePlanner(self.scenario.benchmark_id, self.scenario.lanelet_network,
+                                          self.planningProblem)
+        self.ref_route_manager = ReferenceRouteManager(self.route_planner)
+
         ref_path = list()
         ref_path.append(self.ref_route_manager.get_ref_path())
         self.set_reference_path(ref_path[0])
@@ -510,8 +514,8 @@ class ReactivePlanner(object):
 
         road_boundary_sg, road_boundary_obstacle = create_road_boundary(self.scenario, draw=False)
 
-        # for i in range(self.planningProblem.goal.state_list[0].time_step.end):
-        for i in range(100):
+        for i in range(self.planningProblem.goal.state_list[0].time_step.end):
+        # for i in range(100):
 
             if sumo:
                 # get the scenario of the current time step from SUMO

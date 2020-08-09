@@ -70,7 +70,7 @@ def plan(scenario, planning_problem_set, plot_dir, scenario_folder, make_video: 
             desired_velocity = problem_init_state.velocity
         desired_velocity = 2.0
         planner = ReactivePlanner(scenario, scenario_folder=scenario_folder, planning_problem_set=planning_problem_set,
-                                  route_planner=route_planner, sumo_client=sumo_client, conf=conf, dt=DT, t_h=T_H,
+                                  sumo_client=sumo_client, conf=conf, dt=DT, t_h=T_H,
                                   N=int(T_H / DT), v_desired=desired_velocity)
 
         planner.set_desired_velocity(desired_velocity)
