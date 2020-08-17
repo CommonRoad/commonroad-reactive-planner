@@ -41,7 +41,7 @@ class ReactivePlanner(object):
 
     def __init__(self, scenario, planning_problem, route_planner: RoutePlanner, dt: float, t_h: float, N: int,
                  v_desired=14, collision_check_in_cl: bool = False,
-                 factor: int = 1, replanning_cycle_steps: int = 2):
+                 factor: int = 1):
         """
         Constructor of the reactive planner
         :param dt: The time step of planned trajectories
@@ -109,7 +109,6 @@ class ReactivePlanner(object):
         self.scenario = scenario
         self.route_planner = route_planner
         self.ref_route_manager = ReferenceRouteManager(self.route_planner)
-        self.replanning_cycle_steps = replanning_cycle_steps
         self.laneChanging = False
 
     def set_t_sampling_parameters(self, t_min, dt, horizon):
