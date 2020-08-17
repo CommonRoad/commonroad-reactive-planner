@@ -6,29 +6,30 @@ __maintainer__ = "Christian Pek"
 __email__ = "Christian.Pek@tum.de"
 __status__ = "Beta"
 
-# python packages
-from typing import List, Tuple
 import cProfile
-import pycrcc
 import time
 from copy import deepcopy
+# python packages
+from typing import List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pycrcc
 from commonroad.common.validity import *
 from commonroad.geometry.shape import Rectangle
 from commonroad.prediction.prediction import TrajectoryPrediction
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 from commonroad.scenario.trajectory import Trajectory, State
-
+from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_checker
+from commonroad_rp.cost_function import DefaultCostFunction
 # commonroad imports
-from commonroad_rp.parameter import DefFailSafeSampling, VehModelParameters, DefGymSampling, TimeSampling, \
+from commonroad_rp.parameter import VehModelParameters, DefGymSampling, TimeSampling, \
     VelocitySampling
 from commonroad_rp.polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
 from commonroad_rp.trajectories import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample
-from commonroad_rp.cost_function import DefaultCostFunctionFailSafe, DefaultCostFunction
 from commonroad_rp.utils import CoordinateSystem, interpolate_angle
 from route_planner import RoutePlanner
+from scenario_helpers import create_road_boundary
 
 _LOW_VEL_MODE = False
 
@@ -74,7 +75,7 @@ class ReactivePlanner(object):
         self._length = self.constraints.veh_length
 
         # Current State
-        self.x_0: State = None
+        self.x_0 = None
 
         # store feasible trajectories of last run
         self._infeasible_count_collision = 0
@@ -266,12 +267,7 @@ class ReactivePlanner(object):
             s, d = self._co.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
 
         # compute orientation in curvilinear coordinate frame
-        ref_theta = self._co.ref_theta()
-        for i in range(len(ref_theta)):
-            if ref_theta[i] > np.pi:
-                ref_theta[i] -= 2 * np.pi
-            if ref_theta[i] < -np.pi:
-                ref_theta[i] += 2 * np.pi
+        ref_theta = np.unwrap(self._co.ref_theta())
         theta_cl = x_0.orientation - np.interp(s, self._co.ref_pos(), ref_theta)
         # compute curvatures
         kr = np.interp(s, self._co.ref_pos(), self._co.ref_curv())
@@ -396,7 +392,7 @@ class ReactivePlanner(object):
         optimal_trajectory = None
 
         # initial index of sampling set to use
-        i = 0
+        i = 1  # Time sampling is not used. To get more samples, start with level 1.
 
         # sample until trajectory has been found or sampling sets are empty
         while optimal_trajectory is None and i < self._sampling_level:
@@ -450,7 +446,7 @@ class ReactivePlanner(object):
 
         return self._compute_trajectory_pair(optimal_trajectory) if optimal_trajectory is not None else None
 
-    def re_plan(self, x_0: State, cc: object) -> Tuple:
+    def re_plan(self, x_0: State) -> Tuple:
         """
         Re-plans after each given time horizon.
         :param x_0: Initial state as CR state
@@ -458,12 +454,15 @@ class ReactivePlanner(object):
         :return: Optimal trajectory as list
         """
         self.x_0 = deepcopy(x_0)
-
-        # initialization
         planned_states = list()
         planned_states.append(self.x_0)
         cl_states = list()
-        counter = 0
+
+        self.planningProblem.initial_state = deepcopy(self.x_0)
+        self.route_planner = RoutePlanner(self.scenario.benchmark_id, self.scenario.lanelet_network,
+                                          self.planningProblem)
+        self.ref_route_manager = ReferenceRouteManager(self.route_planner)
+
         ref_path = list()
         ref_path.append(self.ref_route_manager.get_ref_path())
         self.set_reference_path(ref_path[0])
@@ -471,50 +470,65 @@ class ReactivePlanner(object):
         x_0.position[0] = s_0
         x_0.position[1] = d_0
         cl_states.append(x_0)
+        planned_scenario_list = []
 
-        # for i in range(60):
+        road_boundary_sg, road_boundary_obstacle = create_road_boundary(self.scenario, draw=False)
+
         for i in range(self.planningProblem.goal.state_list[0].time_step.end):
-            # optimal = self.plan(self.x_0, cc, cl_states)
-            if i < counter:
-                continue
-            optimal = self.plan(self.x_0, cc)
+            cr_scenario = self.scenario
+            planned_scenario_list.append(cr_scenario)
+            collision_checker_scenario = create_collision_checker(cr_scenario)
+            collision_checker_scenario.add_collision_object(road_boundary_sg)
+            optimal = self.plan(self.x_0, collision_checker_scenario)
             if optimal:
-                for j in range(self.replanning_cycle_steps):
-                    planned_state = self.shift_orientation(optimal[0]).state_list[j + 1]
-                    planned_state.time_step = i + j + 1
-                    planned_states.append(planned_state)
-                    cl_states.append(optimal[1].state_list[j + 1])
+                planned_state = self.shift_orientation(optimal[0]).state_list[1]
+
+                planned_state.time_step = i + 1
+                planned_states.append(planned_state)
+                cl_states.append(optimal[1].state_list[1])
 
                 ref_lanelet_id = self.check_ref_lanelet_id(planned_states[-1])
 
+                # Check for every round of planning the lane change signal.
                 if self.laneChanging and abs(cl_states[-1].position[1]) < 0.5:
                     new_ref = self.ref_route_manager.switch_ref_path(ref_lanelet_id)
                     self.set_reference_path(new_ref)
 
             else:
+                # If no feasible sample found, try to switch the reference route
                 ref_lanelet_id = self.check_ref_lanelet_id(planned_states[-1])
                 new_ref = self.ref_route_manager.switch_ref_path(ref_lanelet_id, cl_state=cl_states[-1])
                 self.set_reference_path(new_ref)
-                optimal = self.plan(self.x_0, cc)
+                optimal = self.plan(self.x_0, collision_checker_scenario)
                 if optimal:
-                    for j in range(self.replanning_cycle_steps):
-                        planned_state = self.shift_orientation(optimal[0]).state_list[j + 1]
-                        planned_state.time_step = i + j + 1
-                        planned_states.append(planned_state)
-                        cl_states.append(optimal[1].state_list[j + 1])
+                    planned_state = self.shift_orientation(optimal[0]).state_list[1]
+
+                    planned_state.time_step = i + 1
+                    planned_states.append(planned_state)
+                    cl_states.append(optimal[1].state_list[1])
                     new_ref = self.ref_route_manager.switch_ref_path(ref_lanelet_id, cl_state=cl_states[-1])
                     self.set_reference_path(new_ref)
                 else:
                     break
             # Shift the initial state of the planning problem to run the next cycle.
-            counter = len(planned_states) - 1
-            self.x_0 = planned_states[-1]
+            self.x_0 = deepcopy(planned_states[-1])
 
-        return planned_states, ref_path
+        return planned_states, ref_path, planned_scenario_list
 
     def check_ref_lanelet_id(self, current_state):
-        current_lanelet_id = self.route_planner.lanelet_network.find_lanelet_by_position(
-            list([current_state.position]))[0][0]
+        """
+        Check the reference lanelet id for reference route switching.
+        This id will be used to identify next reference route
+        """
+        current_lanelet_id_list = self.route_planner.lanelet_network.find_lanelet_by_position(
+            list([current_state.position]))[0]
+        current_lanelet_id = current_lanelet_id_list[0]
+        if len(current_lanelet_id_list) > 1:
+            for lanelet_id in current_lanelet_id_list:
+                if lanelet_id in self.ref_route_manager.route:
+                    current_lanelet_id = lanelet_id
+                    break
+
         ref_lanelet_id = current_lanelet_id
         if current_lanelet_id in self.ref_route_manager.route:
             self.laneChanging = self.ref_route_manager.lane_change_request[current_lanelet_id]
@@ -537,7 +551,7 @@ class ReactivePlanner(object):
         :param x_0_lat: The lateral state in curvilinear coordinates
         :return: The TrajectorySample for a standstill trajectory
         """
-        # create artifical standstill trajectory
+        # create artificial standstill trajectory
         if self._DEBUG:
             print('Adding standstill trajectory')
             print("x_0 is {}".format(x_0))
@@ -891,6 +905,9 @@ class ReferenceRouteManager(object):
         self.ref_path_id = None
 
     def get_ref_path(self):
+        """
+        Return the center line of the initial lanelet as the reference route.
+        """
         routes = self.route_planner.search_alg()
 
         if routes is not None:
@@ -1001,7 +1018,13 @@ class ReferenceRouteManager(object):
             sub_route = sub_routes[num][:]
             if len(sub_route) == 1:
                 ref_lanelet = self.route_planner.lanelet_network.find_lanelet_by_id(sub_route[0])
-                self.ref_path_dict[sub_route[0]] = self.route_planner.smooth_reference(ref_lanelet.center_vertices)
+                ref_path_sub_route = ref_lanelet.center_vertices
+                try:
+                    if len(ref_lanelet.center_vertices) < 5:
+                        ref_path_sub_route = self.route_planner.resample_polyline(ref_path_sub_route)
+                    self.ref_path_dict[sub_route[0]] = self.route_planner.smooth_reference(ref_path_sub_route)
+                except:
+                    self.ref_path_dict[sub_route[0]] = ref_path_sub_route
             else:
                 sub_route_extended = sub_route[:]
                 if num != k and self.successor[sub_route[-1]] != 0:
@@ -1045,7 +1068,15 @@ class ReferenceRouteManager(object):
                 elif current_ref_lanelet.adj_right is not None:
                     new_ref_lanelet_id = current_ref_lanelet.adj_right
                 new_ref_lanelet = self.route_planner.lanelet_network.find_lanelet_by_id(new_ref_lanelet_id)
-                self.ref_path = self.route_planner.smooth_reference(new_ref_lanelet.center_vertices)
+                new_ref_path = new_ref_lanelet.center_vertices
+
+                try:
+                    if len(new_ref_path) < 5:
+                        new_ref_path = self.route_planner.resample_polyline(new_ref_path)
+                    self.ref_path = self.route_planner.smooth_reference(new_ref_path)
+                except:
+                    self.ref_path = new_ref_path
+
                 self.ref_path_id = new_ref_lanelet_id
 
         return self.ref_path
