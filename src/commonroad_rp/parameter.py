@@ -73,7 +73,7 @@ class VelocitySampling(Sampling):
         n = 3
         for i in range(self.no_of_samples()):
             self._db.append(set(np.linspace(self.low, self.up, n)))
-            n = (n*2) - 1
+            n = (n * 2) - 1
 
 
 class PositionSampling(Sampling):
@@ -89,7 +89,7 @@ class PositionSampling(Sampling):
         n = 3
         for i in range(self.no_of_samples()):
             self._db.append(set(np.linspace(self.low, self.up, n)))
-            n = (n*2) - 1
+            n = (n * 2) - 1
             # samp = set(np.linspace(self.low, self.up, i + 4))
             # samp = set(np.arange(self.low, self.up + 1 / (i + 1), 1 / (i + 1)))
             # self._db.append((samp - removal) | {0})
@@ -108,12 +108,12 @@ class TimeSampling(Sampling):
     def _setup(self):
         # self._db.append(np.arange(1, int(self.up) + 1, int(1/self.dT)*self.dT))
         for i in range(self.no_of_samples()):
-            step_size = int((1/(i+1)) / self.dT)
-            samp = set(np.arange(self.low, round(self.up + self.dT, 2),  step_size*self.dT))
+            step_size = int((1 / (i + 1)) / self.dT)
+            samp = set(np.arange(self.low, round(self.up + self.dT, 2), step_size * self.dT))
             samp.discard(round(self.up + self.dT, 2))
             self._db.append(samp)
-        #samp = set(np.arange(self.low, round(self.up + self.dT,2), self.dT))
-        #self._db.append(samp)
+        # samp = set(np.arange(self.low, round(self.up + self.dT,2), self.dT))
+        # self._db.append(samp)
 
 
 class SamplingSet(ABC):
@@ -180,7 +180,7 @@ class DefFailSafeSampling(SamplingSet):
 class DefGymSampling(SamplingSet):
 
     def __init__(self, dt, horizon):
-        sampling_level = 4
+        sampling_level = 5
         t_samples = TimeSampling(2.0, horizon, sampling_level, dt)
         d_samples = PositionSampling(-2.0, 2.0, sampling_level)
         v_samples = VelocitySampling(0., 25.0, sampling_level)
@@ -191,7 +191,8 @@ class VehModelParameters:
     """
     Class that represents the vehicle's constraints and parameters a_max=8, 0.2, 0.2, 10)
     """
-    def __init__(self, a_max=11.5, theta_dot_max=1.0, kappa_max=0.2, kappa_dot_max=5, veh_length=4.508, veh_width=1.61):
+
+    def __init__(self, a_max=8.0, theta_dot_max=1.0, kappa_max=0.2, kappa_dot_max=5, veh_length=4.508, veh_width=1.61):
         self.a_max = a_max
         self.theta_dot_max = theta_dot_max
         self.kappa_max = kappa_max
