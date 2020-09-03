@@ -453,8 +453,8 @@ class ReactivePlanner(object):
         :return: Optimal trajectory as list
         """
         self.x_0 = deepcopy(x_0)
-        planned_states = list()
-        planned_states.append(self.x_0)
+        planned_state_list = []
+        planned_state_list.append(self.x_0)
         cl_states = list()
 
         self.planningProblem.initial_state = deepcopy(self.x_0)
@@ -473,46 +473,63 @@ class ReactivePlanner(object):
 
         road_boundary_sg, road_boundary_obstacle = create_road_boundary(self.scenario, draw=False)
 
-        for i in range(self.planningProblem.goal.state_list[0].time_step.end):
-            cr_scenario = self.scenario
-            planned_scenario_list.append(cr_scenario)
-            collision_checker_scenario = create_collision_checker(cr_scenario)
-            collision_checker_scenario.add_collision_object(road_boundary_sg)
+        # for i in range(self.planningProblem.goal.state_list[0].time_step.end):
+        #     cr_scenario = self.scenario
+        #     planned_scenario_list.append(cr_scenario)
+        #     collision_checker_scenario = create_collision_checker(cr_scenario)
+        #     collision_checker_scenario.add_collision_object(road_boundary_sg)
+        #     optimal = self.plan(self.x_0, collision_checker_scenario)
+        # if optimal:
+        #     planned_state = self.shift_orientation(optimal[0]).state_list[1]
+        #
+        #     planned_state.time_step = i + 1
+        #     planned_states.append(planned_state)
+        #     cl_states.append(optimal[1].state_list[1])
+        #
+        #     ref_lanelet_id = self.check_ref_lanelet_id(planned_states[-1])
+        #
+        #     # Check for every round of planning the lane change signal.
+        #     if self.laneChanging and abs(cl_states[-1].position[1]) < 0.5:
+        #         new_ref = self.ref_route_manager.switch_ref_path(ref_lanelet_id)
+        #         self.set_reference_path(new_ref)
+        #
+        # else:
+        #     # If no feasible sample found, try to switch the reference route
+        #     ref_lanelet_id = self.check_ref_lanelet_id(planned_states[-1])
+        #     new_ref = self.ref_route_manager.switch_ref_path(ref_lanelet_id, cl_state=cl_states[-1])
+        #     self.set_reference_path(new_ref)
+        #     optimal = self.plan(self.x_0, collision_checker_scenario)
+        #     if optimal:
+        #         planned_state = self.shift_orientation(optimal[0]).state_list[1]
+        #
+        #         planned_state.time_step = i + 1
+        #         planned_states.append(planned_state)
+        #         cl_states.append(optimal[1].state_list[1])
+        #         new_ref = self.ref_route_manager.switch_ref_path(ref_lanelet_id, cl_state=cl_states[-1])
+        #         self.set_reference_path(new_ref)
+        #     else:
+        #         break
+        # self.x_0 = deepcopy(planned_states[-1])
+        # for i in range(self.planningProblem.goal.state_list[0].time_step.end):
+        i = 0
+        cr_scenario = self.scenario
+        planned_scenario_list.append(cr_scenario)
+        collision_checker_scenario = create_collision_checker(cr_scenario)
+        collision_checker_scenario.add_collision_object(road_boundary_sg)
+        while i < self.planningProblem.goal.state_list[0].time_step.end:
             optimal = self.plan(self.x_0, collision_checker_scenario)
+            current_count = len(planned_state_list)
             if optimal:
-                planned_state = self.shift_orientation(optimal[0]).state_list[1]
-
-                planned_state.time_step = i + 1
-                planned_states.append(planned_state)
-                cl_states.append(optimal[1].state_list[1])
-
-                ref_lanelet_id = self.check_ref_lanelet_id(planned_states[-1])
-
-                # Check for every round of planning the lane change signal.
-                if self.laneChanging and abs(cl_states[-1].position[1]) < 0.5:
-                    new_ref = self.ref_route_manager.switch_ref_path(ref_lanelet_id)
-                    self.set_reference_path(new_ref)
-
+                new_state_list = self.shift_orientation(optimal[0])
+                for idx, new_state in enumerate(new_state_list.state_list):
+                    new_state.time_step = current_count + idx
+                    planned_state_list.append(new_state)
+                # Shift the initial state of the planning problem to run the next cycle.
+                i = len(planned_state_list)
+                self.x_0 = deepcopy(planned_state_list[-1])
             else:
-                # If no feasible sample found, try to switch the reference route
-                ref_lanelet_id = self.check_ref_lanelet_id(planned_states[-1])
-                new_ref = self.ref_route_manager.switch_ref_path(ref_lanelet_id, cl_state=cl_states[-1])
-                self.set_reference_path(new_ref)
-                optimal = self.plan(self.x_0, collision_checker_scenario)
-                if optimal:
-                    planned_state = self.shift_orientation(optimal[0]).state_list[1]
-
-                    planned_state.time_step = i + 1
-                    planned_states.append(planned_state)
-                    cl_states.append(optimal[1].state_list[1])
-                    new_ref = self.ref_route_manager.switch_ref_path(ref_lanelet_id, cl_state=cl_states[-1])
-                    self.set_reference_path(new_ref)
-                else:
-                    break
-            # Shift the initial state of the planning problem to run the next cycle.
-            self.x_0 = deepcopy(planned_states[-1])
-
-        return planned_states, ref_path, planned_scenario_list
+                break
+        return planned_state_list, ref_path, planned_scenario_list
 
     def check_ref_lanelet_id(self, current_state):
         """
