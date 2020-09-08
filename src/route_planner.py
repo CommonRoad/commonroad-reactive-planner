@@ -1,14 +1,12 @@
 import itertools
 from typing import List, Tuple
 
-import numpy as np
 import networkx as nx
-
+import numpy as np
 from commonroad.planning.planning_problem import PlanningProblem
 from commonroad.scenario.lanelet import LaneletNetwork
 from commonroad_ccosy.geometry.util import resample_polyline
 from networkx import NetworkXNoPath
-
 from scenario_helpers import smooth_reference
 
 
@@ -170,8 +168,9 @@ class RoutePlanner:
                                            ), axis=0)
         return ref_path
 
-    def search_alg(self):
-        problem_init_state = self.planning_problem.initial_state
+    def search_alg(self, current_state):
+        # problem_init_state = self.planning_problem.initial_state
+        problem_init_state = current_state
         initial_lanelet_id_list = self.lanelet_network.find_lanelet_by_position([problem_init_state.position])[0]
         for goal_lanelet_id in self.goal_lanelet_ids:
             for initial_lanelet in initial_lanelet_id_list:

@@ -463,7 +463,7 @@ class ReactivePlanner(object):
         self.ref_route_manager = ReferenceRouteManager(self.route_planner)
 
         ref_path = list()
-        ref_path.append(self.ref_route_manager.get_ref_path())
+        ref_path.append(self.ref_route_manager.get_ref_path(x_0))
         self.set_reference_path(ref_path[0])
         s_0, d_0 = self._co.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
         x_0.position[0] = s_0
@@ -521,12 +521,16 @@ class ReactivePlanner(object):
             current_count = len(planned_state_list)
             if optimal:
                 new_state_list = self.shift_orientation(optimal[0])
-                for idx, new_state in enumerate(new_state_list.state_list):
-                    new_state.time_step = current_count + idx
-                    planned_state_list.append(new_state)
+                # for idx, new_state in enumerate(new_state_list.state_list):
+                new_state = new_state_list.state_list[1]
+                new_state.time_step = current_count + 1
+                planned_state_list.append(new_state)
                 # Shift the initial state of the planning problem to run the next cycle.
                 i = len(planned_state_list)
                 self.x_0 = deepcopy(planned_state_list[-1])
+                ref_path = list()
+                ref_path.append(self.ref_route_manager.get_ref_path(x_0))
+                self.set_reference_path(ref_path[0])
             else:
                 break
         return planned_state_list, ref_path, planned_scenario_list
@@ -920,11 +924,11 @@ class ReferenceRouteManager(object):
         self.predecessor = None
         self.ref_path_id = None
 
-    def get_ref_path(self):
+    def get_ref_path(self, x_0):
         """
         Return the center line of the initial lanelet as the reference route.
         """
-        routes = self.route_planner.search_alg()
+        routes = self.route_planner.search_alg(x_0)
 
         if routes is not None:
             # self.ref_path = ref_path_list[0]
