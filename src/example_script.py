@@ -4,11 +4,15 @@ import time
 import warnings
 from copy import deepcopy
 
-import commonroad_cc
+# import commonroad_cc
+import commonroad_dc.collision.visualization.draw_dispatch
+
 import matplotlib.pyplot as plt
 from commonroad.common.file_reader import CommonRoadFileReader
 from commonroad.visualization.draw_dispatch_cr import draw_object
-from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_checker
+
+# from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_checker
+from commonroad_dc.collision.collision_detection.pycrcc_collision_dispatch import create_collision_checker
 
 from route_planner import RoutePlanner
 from commonroad_rp.reactive_planner import ReactivePlanner
@@ -72,7 +76,9 @@ def plan(scenario, planning_problem, plot_dir):
 
     planner.set_desired_velocity(desired_velocity)
     x_0 = deepcopy(problem_init_state)
-    planned_states, ref_path_list = planner.re_plan(x_0, collision_checker_scenario)
+    # remove the parameter "collision_checker_scenario"
+    # planned_states, ref_path_list = planner.re_plan(x_0, collision_checker_scenario)
+    planned_states, ref_path_list, planned_scenario_list = planner.re_plan(x_0)
     plt.figure(figsize=(20, 10))
     draw_object(scenario, draw_params=DRAW_PARAMS)
     draw_object(planning_problem)
@@ -94,7 +100,7 @@ def plan(scenario, planning_problem, plot_dir):
     for rp in ref_path_list:
         plt.plot(rp[:, 0], rp[:, 1], color='g', marker='*', markersize=1, zorder=19, linewidth=0.5,
                  label='Reference route')
-    commonroad_cc.visualization.draw_dispatch.draw_object(road_boundary_sg,
+    commonroad_dc.collision.visualization.draw_dispatch.draw_object(road_boundary_sg,
                                                           draw_params={'collision': {'facecolor': 'yellow'}})
 
     plt.gca().set_aspect('equal')
@@ -118,7 +124,6 @@ def main(args):
     files = sorted(glob.glob(scenario_path))
 
     for f in files:
-
         crfr = CommonRoadFileReader(f)
         scenario, problem_set = crfr.open()
         planning_problem = list(problem_set.planning_problem_dict.values())[0]

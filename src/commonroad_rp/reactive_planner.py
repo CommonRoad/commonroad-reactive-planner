@@ -14,13 +14,15 @@ from typing import List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pycrcc
+# import pycrcc
+import commonroad_dc.pycrcc as pycrcc
 from commonroad.common.validity import *
 from commonroad.geometry.shape import Rectangle
 from commonroad.prediction.prediction import TrajectoryPrediction
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 from commonroad.scenario.trajectory import Trajectory, State
-from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_checker
+# from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_checker
+from commonroad_dc.collision.collision_detection.pycrcc_collision_dispatch import create_collision_checker
 from commonroad_rp.cost_function import DefaultCostFunction
 # commonroad imports
 from commonroad_rp.parameter import VehModelParameters, DefGymSampling, TimeSampling, \

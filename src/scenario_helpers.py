@@ -3,11 +3,16 @@
 from typing import List
 import copy
 
-from commonroad_cc.road_boundary import construction, triangle_builder
+# how to use them in the commonroad_dc
+# from commonroad_cc.road_boundary import construction, triangle_builder
+from commonroad_dc.boundary import construction, triangle_builder
 from scipy.interpolate import splprep, splev
 
-import pycrcc
-from pycrcc import *
+# import pycrcc
+# from pycrcc import *
+import commonroad_dc.pycrcc as pycrcc
+from commonroad_dc.pycrcc import *
+
 from commonroad.scenario.scenario import Scenario
 from commonroad.scenario.obstacle import StaticObstacle, ObstacleType
 import numpy as np
@@ -23,8 +28,9 @@ from commonroad_rp.utils import compute_pathlength_from_polyline, compute_orient
 from commonroad_rp.parameter import VehModelParameters
 from commonroad_rp.utils import CoordinateSystem
 
-# import spot
-from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_object
+# Recently not use the spot 
+import spot
+from commonroad_dc.collision.collision_detection.pycrcc_collision_dispatch import create_collision_object
 
 draw_parameters_intended = {}
 draw_parameters_fail_safe = {}
@@ -72,7 +78,8 @@ def create_road_boundary(scenario: Scenario, draw=False) -> StaticObstacle:
         draw = ['triangulation']
         boundary = construction.construct(scenario, build, draw)
     else:
-        boundary = construction.construct(scenario, build, [], [])
+        # boundary = construction.construct(scenario, build, [], [])
+        boundary = construction.construct(scenario, build, [])
 
     initial_state = State(position=np.array([0, 0]), orientation=0.0, time_step=0)
 
