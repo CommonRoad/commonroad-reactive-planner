@@ -53,10 +53,10 @@ def plan(scenario, planning_problem, plot_dir):
     collision_checker_scenario.add_collision_object(road_boundary_sg)
 
     # try:
-    road_boundary_sg, road_boundary_obstacle = create_road_boundary(scenario, draw=False)
+    # road_boundary_sg, road_boundary_obstacle = create_road_boundary(scenario, draw=False)
 
-    collision_checker_scenario = create_collision_checker(scenario)
-    collision_checker_scenario.add_collision_object(road_boundary_sg)
+    # collision_checker_scenario = create_collision_checker(scenario)
+    # collision_checker_scenario.add_collision_object(road_boundary_sg)
 
     route_planner = RoutePlanner(scenario.benchmark_id, scenario.lanelet_network, planning_problem)
     # reference_path = route_planner.generate_ref_path()
