@@ -41,7 +41,7 @@ class ReactivePlanner(object):
     Reactive planner class that plans trajectories in a sampling-based fashion
     """
 
-    def __init__(self, scenario, route_planner: RoutePlanner, dt: float, t_h: float, N: int,
+    def __init__(self, route_planner: RoutePlanner, dt: float, t_h: float, N: int,
                  v_desired=14, collision_check_in_cl: bool = False,
                  factor: int = 1):
         """
@@ -107,8 +107,6 @@ class ReactivePlanner(object):
         self._DEBUG = False
 
         # planning problem
-        self.route_planner = route_planner
-        self.ref_route_manager = ReferenceRouteManager(self.route_planner)
         self.laneChanging = False
 
     def set_t_sampling_parameters(self, t_min, dt, horizon):
@@ -443,75 +441,75 @@ class ReactivePlanner(object):
 
         return self._compute_trajectory_pair(optimal_trajectory) if optimal_trajectory is not None else None
 
-    def re_plan(self, x_0: State) -> Tuple:
-        """
-        Re-plans after each given time horizon.
-        :param x_0: Initial state as CR state
-        :param cc:  CollisionChecker object
-        :return: Optimal trajectory as list
-        """
-        self.x_0 = deepcopy(x_0)
-        planned_state_list = []
-        planned_state_list.append(self.x_0)
-        cl_states = list()
+    # def re_plan(self, x_0: State) -> Tuple:
+    #     """
+    #     Re-plans after each given time horizon.
+    #     :param x_0: Initial state as CR state
+    #     :param cc:  CollisionChecker object
+    #     :return: Optimal trajectory as list
+    #     """
+    #     self.x_0 = deepcopy(x_0)
+    #     planned_state_list = []
+    #     planned_state_list.append(self.x_0)
+    #     cl_states = list()
 
-        self.planningProblem.initial_state = deepcopy(self.x_0)
-        self.route_planner = RoutePlanner(self.scenario.benchmark_id, self.scenario.lanelet_network,
-                                          self.planningProblem)
-        self.ref_route_manager = ReferenceRouteManager(self.route_planner)
+    #     self.planningProblem.initial_state = deepcopy(self.x_0)
+    #     self.route_planner = RoutePlanner(self.scenario.benchmark_id, self.scenario.lanelet_network,
+    #                                       self.planningProblem)
+    #     self.ref_route_manager = ReferenceRouteManager(self.route_planner)
 
-        ref_path = list()
-        ref_path.append(self.ref_route_manager.get_ref_path(x_0))
-        self.set_reference_path(ref_path[0])
-        s_0, d_0 = self._co.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
-        x_0.position[0] = s_0
-        x_0.position[1] = d_0
-        cl_states.append(x_0)
-        planned_scenario_list = []
+    #     ref_path = list()
+    #     ref_path.append(self.ref_route_manager.get_ref_path(x_0))
+    #     self.set_reference_path(ref_path[0])
+    #     s_0, d_0 = self._co.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
+    #     x_0.position[0] = s_0
+    #     x_0.position[1] = d_0
+    #     cl_states.append(x_0)
+    #     planned_scenario_list = []
 
-        road_boundary_sg, road_boundary_obstacle = create_road_boundary(self.scenario, draw=False)
+    #     road_boundary_sg, road_boundary_obstacle = create_road_boundary(self.scenario, draw=False)
 
-        i = 0
-        cr_scenario = self.scenario
-        planned_scenario_list.append(cr_scenario)
-        collision_checker_scenario = create_collision_checker(cr_scenario)
-        collision_checker_scenario.add_collision_object(road_boundary_sg)
-        while i < self.planningProblem.goal.state_list[0].time_step.end:
-            optimal = self.plan(self.x_0, collision_checker_scenario)
-            current_count = len(planned_state_list)
-            if optimal:
-                new_state_list = self.shift_orientation(optimal[0])
-                # for idx, new_state in enumerate(new_state_list.state_list):
-                new_state = new_state_list.state_list[1]
-                new_state.time_step = current_count + 1
-                planned_state_list.append(new_state)
-                # Shift the initial state of the planning problem to run the next cycle.
-                i = len(planned_state_list)
-                self.x_0 = deepcopy(planned_state_list[-1])
-                ref_path = list()
-                ref_path.append(self.ref_route_manager.get_ref_path(self.x_0))
-                self.set_reference_path(ref_path[0])
-            else:
-                for r in ref_path:
-                    self.set_reference_path(r)
-                    optimal = self.plan(self.x_0, collision_checker_scenario)
-                    if optimal:
-                        new_state_list = self.shift_orientation(optimal[0])
-                        # for idx, new_state in enumerate(new_state_list.state_list):
-                        new_state = new_state_list.state_list[1]
-                        new_state.time_step = current_count + 1
-                        planned_state_list.append(new_state)
-                        # Shift the initial state of the planning problem to run the next cycle.
-                        i = len(planned_state_list)
-                        self.x_0 = deepcopy(planned_state_list[-1])
-                        ref_path = list()
-                        ref_path.append(self.ref_route_manager.get_ref_path(x_0))
-                        self.set_reference_path(ref_path[0])
-                        break
-                    else:
-                        continue
-                break
-        return planned_state_list, ref_path, planned_scenario_list
+    #     i = 0
+    #     cr_scenario = self.scenario
+    #     planned_scenario_list.append(cr_scenario)
+    #     collision_checker_scenario = create_collision_checker(cr_scenario)
+    #     collision_checker_scenario.add_collision_object(road_boundary_sg)
+    #     while i < self.planningProblem.goal.state_list[0].time_step.end:
+    #         optimal = self.plan(self.x_0, collision_checker_scenario)
+    #         current_count = len(planned_state_list)
+    #         if optimal:
+    #             new_state_list = self.shift_orientation(optimal[0])
+    #             # for idx, new_state in enumerate(new_state_list.state_list):
+    #             new_state = new_state_list.state_list[1]
+    #             new_state.time_step = current_count + 1
+    #             planned_state_list.append(new_state)
+    #             # Shift the initial state of the planning problem to run the next cycle.
+    #             i = len(planned_state_list)
+    #             self.x_0 = deepcopy(planned_state_list[-1])
+    #             ref_path = list()
+    #             ref_path.append(self.ref_route_manager.get_ref_path(self.x_0))
+    #             self.set_reference_path(ref_path[0])
+    #         else:
+    #             for r in ref_path:
+    #                 self.set_reference_path(r)
+    #                 optimal = self.plan(self.x_0, collision_checker_scenario)
+    #                 if optimal:
+    #                     new_state_list = self.shift_orientation(optimal[0])
+    #                     # for idx, new_state in enumerate(new_state_list.state_list):
+    #                     new_state = new_state_list.state_list[1]
+    #                     new_state.time_step = current_count + 1
+    #                     planned_state_list.append(new_state)
+    #                     # Shift the initial state of the planning problem to run the next cycle.
+    #                     i = len(planned_state_list)
+    #                     self.x_0 = deepcopy(planned_state_list[-1])
+    #                     ref_path = list()
+    #                     ref_path.append(self.ref_route_manager.get_ref_path(x_0))
+    #                     self.set_reference_path(ref_path[0])
+    #                     break
+    #                 else:
+    #                     continue
+    #             break
+    #     return planned_state_list, ref_path, planned_scenario_list
 
     def check_ref_lanelet_id(self, current_state):
         """
