@@ -175,7 +175,7 @@ class RoutePlanner:
         for goal_lanelet_id in self.goal_lanelet_ids:
             for initial_lanelet in initial_lanelet_id_list:
                 try:
-                    all_route = self.find_all_shortest_paths(initial_lanelet, goal_lanelet_id)
+                    all_route = self.find_all_shortest_paths(initial_lanelet, goal_lanelet_id[0])
                     return all_route
                 except NetworkXNoPath:
                     pass

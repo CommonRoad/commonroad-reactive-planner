@@ -41,7 +41,7 @@ class ReactivePlanner(object):
     Reactive planner class that plans trajectories in a sampling-based fashion
     """
 
-    def __init__(self, scenario, planning_problem, route_planner: RoutePlanner, dt: float, t_h: float, N: int,
+    def __init__(self, scenario, route_planner: RoutePlanner, dt: float, t_h: float, N: int,
                  v_desired=14, collision_check_in_cl: bool = False,
                  factor: int = 1):
         """
@@ -107,8 +107,6 @@ class ReactivePlanner(object):
         self._DEBUG = False
 
         # planning problem
-        self.planningProblem = planning_problem
-        self.scenario = scenario
         self.route_planner = route_planner
         self.ref_route_manager = ReferenceRouteManager(self.route_planner)
         self.laneChanging = False
@@ -257,7 +255,6 @@ class ReactivePlanner(object):
             print('<Reactive_planner>: Value Error for curvilinear transformation')
             tmp = np.array([x_0.position])
             print(x_0.position)
-            print(self.scenario.benchmark_id)
             # print(self._co._reference[0])
             # print(self._co._reference[-1])
             if self._co._reference[0][0] > x_0.position[0]:
@@ -291,7 +288,6 @@ class ReactivePlanner(object):
             # print(self._co.ref_theta())
             # print(self._co.ref_curv())
             # print(self._co._reference)
-            print(self.scenario.benchmark_id)
             # print(theta_cl)
             # print(kr)
             # print(d)
@@ -426,7 +422,7 @@ class ReactivePlanner(object):
         if optimal_trajectory is None and x_0.velocity <= 0.1:
             # for x_i in x_0_lon:
             #     print('<ReactivePlanner>: x_lon list for planning standstill with x_i type {}'.format(type(x_i)))
-            print('<ReactivePlanner>: planning standstill for scenario {}'.format(self.scenario.benchmark_id))
+            print('<ReactivePlanner>: planning standstill for the current scenario')
             optimal_trajectory = self._compute_standstill_trajectory(x_0, x_0_lon, x_0_lat)
 
         # check if feasible trajectory exists -> emergency mode
@@ -493,7 +489,7 @@ class ReactivePlanner(object):
                 i = len(planned_state_list)
                 self.x_0 = deepcopy(planned_state_list[-1])
                 ref_path = list()
-                ref_path.append(self.ref_route_manager.get_ref_path(x_0))
+                ref_path.append(self.ref_route_manager.get_ref_path(self.x_0))
                 self.set_reference_path(ref_path[0])
             else:
                 for r in ref_path:
