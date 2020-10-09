@@ -104,6 +104,8 @@ class ReactivePlanner(object):
 
         # DEBUG Mode
         self._DEBUG = False
+        # trajectory bundle 
+        self.bundle = None
 
     def set_t_sampling_parameters(self, t_min, dt, horizon):
         self._sampling_t = TimeSampling(t_min, horizon, self._sampling_level, dt)
@@ -193,34 +195,34 @@ class ReactivePlanner(object):
         self._max_cost = 0
 
         trajectories = list()
-        # for t in self._sampling_t.to_range(samp_level):
-        t = self.horizon
-        # Longitudinal sampling for all possible velocities
-        for v in self._sampling_v.to_range(samp_level):
-            # end_state_lon = np.array([t * v + x_0_lon[0], v, 0.0])
-            # trajectory_long = QuinticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lon), x_d=end_state_lon)
-            trajectory_long = QuarticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lon), x_d=np.array([v, 0]))
+        for t in self._sampling_t.to_range(samp_level):
+        #t = self.horizon
+            # Longitudinal sampling for all possible velocities
+            for v in self._sampling_v.to_range(samp_level):
+                # end_state_lon = np.array([t * v + x_0_lon[0], v, 0.0])
+                # trajectory_long = QuinticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lon), x_d=end_state_lon)
+                trajectory_long = QuarticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lon), x_d=np.array([v, 0]))
 
-            # Sample lateral end states (add x_0_lat to sampled states)
-            if trajectory_long.coeffs is not None:
-                for d in self._sampling_d.to_range(samp_level).union({x_0_lat[0]}):
+                # Sample lateral end states (add x_0_lat to sampled states)
+                if trajectory_long.coeffs is not None:
+                    for d in self._sampling_d.to_range(samp_level).union({x_0_lat[0]}):
 
-                    end_state_lat = np.array([d, 0.0, 0.0])
-                    # SWITCHING TO POSITION DOMAIN FOR LATERAL TRAJECTORY PLANNING
-                    if _LOW_VEL_MODE:
-                        s_lon_goal = trajectory_long.evaluate_state_at_tau(t)[0] - x_0_lon[0]
-                        if s_lon_goal <= 0:
-                            s_lon_goal = t
-                        trajectory_lat = QuinticTrajectory(tau_0=0, delta_tau=s_lon_goal, x_0=np.array(x_0_lat),
-                                                           x_d=end_state_lat)
+                        end_state_lat = np.array([d, 0.0, 0.0])
+                        # SWITCHING TO POSITION DOMAIN FOR LATERAL TRAJECTORY PLANNING
+                        if _LOW_VEL_MODE:
+                            s_lon_goal = trajectory_long.evaluate_state_at_tau(t)[0] - x_0_lon[0]
+                            if s_lon_goal <= 0:
+                                s_lon_goal = t
+                            trajectory_lat = QuinticTrajectory(tau_0=0, delta_tau=s_lon_goal, x_0=np.array(x_0_lat),
+                                                            x_d=end_state_lat)
 
-                    # Switch to sampling over t for high velocities
-                    else:
-                        trajectory_lat = QuinticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lat),
-                                                           x_d=end_state_lat)
-                    if trajectory_lat.coeffs is not None:
-                        trajectory_sample = TrajectorySample(self.horizon, self.dT, trajectory_long, trajectory_lat)
-                        trajectories.append(trajectory_sample)
+                        # Switch to sampling over t for high velocities
+                        else:
+                            trajectory_lat = QuinticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lat),
+                                                            x_d=end_state_lat)
+                        if trajectory_lat.coeffs is not None:
+                            trajectory_sample = TrajectorySample(self.horizon, self.dT, trajectory_long, trajectory_lat)
+                            trajectories.append(trajectory_sample)
 
         # perform pre check and order trajectories according their cost
         trajectory_bundle = TrajectoryBundle(trajectories, cost_function=DefaultCostFunction(self._desired_speed))
@@ -235,10 +237,10 @@ class ReactivePlanner(object):
         """
         if trajectory_bundle is not None:
             for i in range(0, len(trajectory_bundle), step):
-                color = 'gray'
+                color = 'blue'
                 plt.plot(trajectory_bundle[i].cartesian.x, trajectory_bundle[i].cartesian.y,
-                         color=color)
-        plt.savefig("./test.png", format='png', dpi=300, bbox_inches='tight')
+                         color=color, zorder=21, linewidth=0.1)
+        # plt.savefig("./test.png", format='png', dpi=300, bbox_inches='tight')
 
     def _compute_initial_states(self, x_0: State) -> (np.ndarray, np.ndarray):
         """
@@ -338,7 +340,7 @@ class ReactivePlanner(object):
             cart_states['acceleration'] = trajectory.cartesian.a[i]
             cart_states['orientation'] = trajectory.cartesian.theta[i]
             cart_states['yaw_rate'] = trajectory.cartesian.kappa[i]
-            cart_states['slip_angle'] = self.x_0.slip_angle
+            # cart_states['slip_angle'] = self.x_0.slip_angle
             cart_list.append(State(**cart_states))
 
             # create curvilinear state
@@ -398,7 +400,8 @@ class ReactivePlanner(object):
 
             # plan trajectory bundle
             bundle = self._create_trajectory_bundle(self._desired_speed, x_0_lon, x_0_lat, samp_level=i)
-
+            
+            self.bundle = bundle
             # get optimal trajectory
             t0 = time.time()
             # profiler = cProfile.Profile()
@@ -441,104 +444,6 @@ class ReactivePlanner(object):
                                 bundle.max_costs().cost - bundle.min_costs().cost))))
 
         return self._compute_trajectory_pair(optimal_trajectory) if optimal_trajectory is not None else None
-
-    # def re_plan(self, x_0: State) -> Tuple:
-    #     """
-    #     Re-plans after each given time horizon.
-    #     :param x_0: Initial state as CR state
-    #     :param cc:  CollisionChecker object
-    #     :return: Optimal trajectory as list
-    #     """
-    #     self.x_0 = deepcopy(x_0)
-    #     planned_state_list = []
-    #     planned_state_list.append(self.x_0)
-    #     cl_states = list()
-
-    #     self.planningProblem.initial_state = deepcopy(self.x_0)
-    #     self.route_planner = RoutePlanner(self.scenario.benchmark_id, self.scenario.lanelet_network,
-    #                                       self.planningProblem)
-    #     self.ref_route_manager = ReferenceRouteManager(self.route_planner)
-
-    #     ref_path = list()
-    #     ref_path.append(self.ref_route_manager.get_ref_path(x_0))
-    #     self.set_reference_path(ref_path[0])
-    #     s_0, d_0 = self._co.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
-    #     x_0.position[0] = s_0
-    #     x_0.position[1] = d_0
-    #     cl_states.append(x_0)
-    #     planned_scenario_list = []
-
-    #     road_boundary_sg, road_boundary_obstacle = create_road_boundary(self.scenario, draw=False)
-
-    #     i = 0
-    #     cr_scenario = self.scenario
-    #     planned_scenario_list.append(cr_scenario)
-    #     collision_checker_scenario = create_collision_checker(cr_scenario)
-    #     collision_checker_scenario.add_collision_object(road_boundary_sg)
-    #     while i < self.planningProblem.goal.state_list[0].time_step.end:
-    #         optimal = self.plan(self.x_0, collision_checker_scenario)
-    #         current_count = len(planned_state_list)
-    #         if optimal:
-    #             new_state_list = self.shift_orientation(optimal[0])
-    #             # for idx, new_state in enumerate(new_state_list.state_list):
-    #             new_state = new_state_list.state_list[1]
-    #             new_state.time_step = current_count + 1
-    #             planned_state_list.append(new_state)
-    #             # Shift the initial state of the planning problem to run the next cycle.
-    #             i = len(planned_state_list)
-    #             self.x_0 = deepcopy(planned_state_list[-1])
-    #             ref_path = list()
-    #             ref_path.append(self.ref_route_manager.get_ref_path(self.x_0))
-    #             self.set_reference_path(ref_path[0])
-    #         else:
-    #             for r in ref_path:
-    #                 self.set_reference_path(r)
-    #                 optimal = self.plan(self.x_0, collision_checker_scenario)
-    #                 if optimal:
-    #                     new_state_list = self.shift_orientation(optimal[0])
-    #                     # for idx, new_state in enumerate(new_state_list.state_list):
-    #                     new_state = new_state_list.state_list[1]
-    #                     new_state.time_step = current_count + 1
-    #                     planned_state_list.append(new_state)
-    #                     # Shift the initial state of the planning problem to run the next cycle.
-    #                     i = len(planned_state_list)
-    #                     self.x_0 = deepcopy(planned_state_list[-1])
-    #                     ref_path = list()
-    #                     ref_path.append(self.ref_route_manager.get_ref_path(x_0))
-    #                     self.set_reference_path(ref_path[0])
-    #                     break
-    #                 else:
-    #                     continue
-    #             break
-    #     return planned_state_list, ref_path, planned_scenario_list
-
-    # def check_ref_lanelet_id(self, current_state):
-    #     """
-    #     Check the reference lanelet id for reference route switching.
-    #     This id will be used to identify next reference route
-    #     """
-    #     current_lanelet_id_list = self.route_planner.lanelet_network.find_lanelet_by_position(
-    #         list([current_state.position]))[0]
-    #     current_lanelet_id = current_lanelet_id_list[0]
-    #     if len(current_lanelet_id_list) > 1:
-    #         for lanelet_id in current_lanelet_id_list:
-    #             if lanelet_id in self.ref_route_manager.route:
-    #                 current_lanelet_id = lanelet_id
-    #                 break
-
-    #     ref_lanelet_id = current_lanelet_id
-    #     if current_lanelet_id in self.ref_route_manager.route:
-    #         self.laneChanging = self.ref_route_manager.lane_change_request[current_lanelet_id]
-    #     else:
-    #         current_lanelet = self.route_planner.lanelet_network.find_lanelet_by_id(current_lanelet_id)
-    #         if current_lanelet.adj_left is not None and current_lanelet.adj_left in self.ref_route_manager.route:
-    #             self.laneChanging = self.ref_route_manager.lane_change_request[current_lanelet.adj_left]
-    #             ref_lanelet_id = current_lanelet.adj_left
-    #         else:
-    #             self.laneChanging = self.ref_route_manager.lane_change_request[current_lanelet.adj_right]
-    #             ref_lanelet_id = current_lanelet.adj_right
-
-    #     return ref_lanelet_id
 
     def _compute_standstill_trajectory(self, x_0, x_0_lon, x_0_lat) -> TrajectorySample:
         """
@@ -725,33 +630,33 @@ class ReactivePlanner(object):
                         oneKrD * tanTheta * (kappa_gl[i] * oneKrD / cosTheta - k_r) - (
                         k_r_d * d[i] + k_r * d_velocity[i]))
 
-                DEBUG = False
+                DEBUG = True
 
                 # check kinematics to already discard infeasible trajectories
                 if abs(kappa_gl[i] > self.constraints.kappa_max):
                     if DEBUG:
-                        print(f"Kappa {kappa_gl[i]}")
+                        print(f"Kappa {kappa_gl[i]} at step {i}")
                     feasible = False
                     break
                 if abs((kappa_gl[i] - kappa_gl[i - 1]) / self.dT if i > 0 else 0.) > self.constraints.kappa_dot_max:
                     if DEBUG:
-                        print(f"KappaDOT {abs((kappa_gl[i] - kappa_gl[i - 1]) / self.dT if i > 0 else 0.)}")
+                        print(f"KappaDOT {abs((kappa_gl[i] - kappa_gl[i - 1]) / self.dT if i > 0 else 0.)} between step {i-1} and {i}")
                     feasible = False
                     break
                 if abs(a[i]) > self.constraints.a_max:
                     if DEBUG:
-                        print(f"Acceleration {a[i]}")
+                        print(f"Acceleration {a[i]} at step {i}")
                     feasible = False
                     break
                 if abs(v[i]) < -0.1:
                     if DEBUG:
-                        print(f"Velocity {v[i]}")
+                        print(f"Velocity {v[i]} at step {i}")
                     feasible = False
                     break
 
                 if abs((theta_gl[i - 1] - theta_gl[i]) / self.dT if i > 0 else 0.) > self.constraints.theta_dot_max:
                     if DEBUG:
-                        print(f"Theta_dot {(theta_gl[i - 1] - theta_gl[i]) / self.dT if i > 0 else 0.}")
+                        print(f"Theta_dot {(theta_gl[i - 1] - theta_gl[i]) / self.dT if i > 0 else 0.} between step {i-1} and {i}")
                     feasible = False
                     break
 

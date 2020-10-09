@@ -177,6 +177,9 @@ class RoutePlanner:
                 try:
                     all_route = self.find_all_shortest_paths(initial_lanelet, goal_lanelet_id)
                     return all_route
+                except TypeError:
+                    all_route = self.find_all_shortest_paths(initial_lanelet, goal_lanelet_id[0])
+                    return all_route
                 except NetworkXNoPath:
                     pass
 
