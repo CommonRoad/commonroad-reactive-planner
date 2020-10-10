@@ -6,31 +6,30 @@ __maintainer__ = "Christian Pek"
 __email__ = "Christian.Pek@tum.de"
 __status__ = "Beta"
 
-import cProfile
-import time
-from copy import deepcopy
 # python packages
-from typing import List, Tuple
-
-import matplotlib.pyplot as plt
+import time
+import cProfile
 import numpy as np
-# import pycrcc
-import commonroad_dc.pycrcc as pycrcc
+from copy import deepcopy
+from typing import List, Tuple
+import matplotlib.pyplot as plt
+
 from commonroad.common.validity import *
 from commonroad.geometry.shape import Rectangle
 from commonroad.prediction.prediction import TrajectoryPrediction
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 from commonroad.scenario.trajectory import Trajectory, State
-# from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_checker
+
+import commonroad_dc.pycrcc as pycrcc
 from commonroad_dc.collision.collision_detection.pycrcc_collision_dispatch import create_collision_checker
+
+# commonroad imports 
 from commonroad_rp.cost_function import DefaultCostFunction
-# commonroad imports
-from commonroad_rp.parameter import VehModelParameters, DefGymSampling, TimeSampling, \
-    VelocitySampling, PositionSampling
+from commonroad_rp.parameter import VehModelParameters, DefGymSampling, TimeSampling, VelocitySampling, PositionSampling
 from commonroad_rp.polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
 from commonroad_rp.trajectories import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample
 from commonroad_rp.utils import CoordinateSystem, interpolate_angle
-# from route_planner import RoutePlanner, ReferenceRouteManager
+
 from scenario_helpers import create_road_boundary
 
 _LOW_VEL_MODE = False
