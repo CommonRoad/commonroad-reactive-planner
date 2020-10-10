@@ -26,7 +26,7 @@ from commonroad_dc.collision.collision_detection.pycrcc_collision_dispatch impor
 from commonroad_rp.cost_function import DefaultCostFunction
 # commonroad imports
 from commonroad_rp.parameter import VehModelParameters, DefGymSampling, TimeSampling, \
-    VelocitySampling
+    VelocitySampling, PositionSampling
 from commonroad_rp.polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
 from commonroad_rp.trajectories import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample
 from commonroad_rp.utils import CoordinateSystem, interpolate_angle
@@ -53,7 +53,6 @@ class ReactivePlanner(object):
         coordinates (default=False)
         :param factor: Factor when performing collision checks and the scenario is given in a different time
         step, e.g., 0.02 for scenario and 0.2 for planner results in a factor of 10.
-        :param replanning_cycle_steps: replanning should be done every this number of time steps.
         """
 
         assert is_positive(dt), '<ReactivePlanner>: provided dt is not correct! dt = {}'.format(dt)
@@ -76,7 +75,7 @@ class ReactivePlanner(object):
         self._length = self.constraints.veh_length
 
         # Current State
-        self.x_0 = None
+        self.x_0: State = None
 
         # store feasible trajectories of last run
         self._infeasible_count_collision = 0
@@ -104,13 +103,29 @@ class ReactivePlanner(object):
 
         # DEBUG Mode
         self._DEBUG = False
-        # trajectory bundle 
+        #ZYQ: trajectory bundle 
         self.bundle = None
 
     def set_t_sampling_parameters(self, t_min, dt, horizon):
+        """
+        Sets sample parameters of time horizon
+        :param t_min: minimum of sampled time horizon
+        :param dt: length of each sampled step
+        :param horizon: sampled time horizon
+        """
         self._sampling_t = TimeSampling(t_min, horizon, self._sampling_level, dt)
         self.N = int(round(horizon / dt))
         self.horizon = horizon
+    
+    def set_d_sampling_parameters(self, delta_d_min, delta_d_max):
+        """
+        Sets sample parameters of lateral offset
+        :param delta_d_min: lateral distance lower than reference
+        :param delta_d_max: lateral distance higher than reference
+        """
+        assert delta_d_min <= 0, "<Reactive_planner>: delta_d_min must be not positive"
+        assert delta_d_max >= 0, "<Reactive_planner>: delta_d_max must be not negative"
+        self._sampling_d = PositionSampling(delta_d_min, delta_d_max, self._sampling_level)
 
     def set_reference_path(self, reference_path: np.ndarray):
         """
@@ -141,8 +156,6 @@ class ReactivePlanner(object):
         
         if self._DEBUG:
             print('<Reactive_planner>: Sampled interval of velocity: {} m/s - {} m/s'.format(min_v, max_v))    
-        
-        return self._sampling_v
 
     def coordinate_system(self) -> CoordinateSystem:
         """
@@ -196,7 +209,7 @@ class ReactivePlanner(object):
 
         trajectories = list()
         for t in self._sampling_t.to_range(samp_level):
-        #t = self.horizon
+        
             # Longitudinal sampling for all possible velocities
             for v in self._sampling_v.to_range(samp_level):
                 # end_state_lon = np.array([t * v + x_0_lon[0], v, 0.0])
@@ -237,9 +250,9 @@ class ReactivePlanner(object):
         """
         if trajectory_bundle is not None:
             for i in range(0, len(trajectory_bundle), step):
-                color = 'blue'
+                color = 'gray'
                 plt.plot(trajectory_bundle[i].cartesian.x, trajectory_bundle[i].cartesian.y,
-                         color=color, zorder=21, linewidth=0.1)
+                         color=color)
         # plt.savefig("./test.png", format='png', dpi=300, bbox_inches='tight')
 
     def _compute_initial_states(self, x_0: State) -> (np.ndarray, np.ndarray):
@@ -630,7 +643,7 @@ class ReactivePlanner(object):
                         oneKrD * tanTheta * (kappa_gl[i] * oneKrD / cosTheta - k_r) - (
                         k_r_d * d[i] + k_r * d_velocity[i]))
 
-                DEBUG = True
+                DEBUG = False
 
                 # check kinematics to already discard infeasible trajectories
                 if abs(kappa_gl[i] > self.constraints.kappa_max):
