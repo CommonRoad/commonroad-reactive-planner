@@ -103,8 +103,6 @@ class ReactivePlanner(object):
 
         # DEBUG Mode
         self._DEBUG = False
-        #ZYQ: trajectory bundle 
-        self.bundle = None
 
     def set_t_sampling_parameters(self, t_min, dt, horizon):
         """
