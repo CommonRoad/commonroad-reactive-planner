@@ -23,7 +23,8 @@ from commonroad.visualization.draw_dispatch_cr import default_draw_params
 
 from commonroad.planning.planning_problem import PlanningProblem
 from commonroad.scenario.lanelet import Lanelet, LaneletNetwork
-from commonroad_ccosy.geometry.trapezoid_coordinate_system import create_coordinate_system_from_polyline
+# from commonroad_ccosy.geometry.trapezoid_coordinate_system import create_coordinate_system_from_polyline
+from pycrccosy import CurvilinearCoordinateSystem
 from commonroad_rp.utils import compute_pathlength_from_polyline, compute_orientation_from_polyline
 from commonroad_rp.parameter import VehModelParameters
 from commonroad_rp.utils import CoordinateSystem
@@ -110,7 +111,8 @@ def _obtain_correct_lanelet_for_pose(state: State, lanelet_network: LaneletNetwo
         lane = lanelet_network.find_lanelet_by_id(lane_id)
         pos = compute_pathlength_from_polyline(lane.center_vertices)
         orientation = compute_orientation_from_polyline(lane.center_vertices)
-        cosys = create_coordinate_system_from_polyline(lane.center_vertices)
+        # cosys = create_coordinate_system_from_polyline(lane.center_vertices)
+        cosys = CurvilinearCoordinateSystem(lane.center_vertices)
         s,d = cosys.convert_to_curvilinear_coords(state.position[0],state.position[1])
         theta = np.interp(s,pos,orientation)
         diff = abs(state.orientation - theta)

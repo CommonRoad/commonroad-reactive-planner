@@ -8,8 +8,10 @@ __status__ = "Alpha"
 
 import numpy as np
 
-from pycrccosy import TrapezoidCoordinateSystem
-from commonroad_ccosy.geometry.trapezoid_coordinate_system import create_coordinate_system_from_polyline
+#from pycrccosy import TrapezoidCoordinateSystem
+from pycrccosy import CurvilinearCoordinateSystem
+
+# from commonroad_ccosy.geometry.trapezoid_coordinate_system import create_coordinate_system_from_polyline
 
 from commonroad.common.util import make_valid_orientation
 
@@ -120,7 +122,8 @@ class CoordinateSystem():
 
     def __init__(self, reference: np.ndarray):
         self._reference = reference
-        self._ccosy = create_coordinate_system_from_polyline(reference)
+        # self._ccosy = create_coordinate_system_from_polyline(reference)
+        self._ccosy = CurvilinearCoordinateSystem(reference)
         self._ref_pos = compute_pathlength_from_polyline(reference)
         self._ref_curv = compute_curvature_from_polyline(reference)
         self._ref_theta = compute_orientation_from_polyline(reference)
@@ -129,7 +132,7 @@ class CoordinateSystem():
     def reference(self) -> np.ndarray:
         return self._reference
 
-    def ccosy(self) -> TrapezoidCoordinateSystem:
+    def ccosy(self) -> CurvilinearCoordinateSystem: #TrapezoidCoordinateSystem:
         return self._ccosy
 
     def ref_pos(self) -> np.ndarray:
