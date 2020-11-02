@@ -124,45 +124,6 @@ class ReactivePlanner(object):
         assert delta_d_max >= 0, "<Reactive_planner>: delta_d_max must be not negative"
         self._sampling_d = PositionSampling(delta_d_min, delta_d_max, self._sampling_level)
 
-    def create_acceleration_based_trajectory_bundle(self, x_0_lon: np.array,
-                                  x_0_lat: np.array, accelerations, samp_level):
-        """
-        creates a trajectory bundle based on different acceleration values
-        """
-        # all acceleration discrete values
-        trajectory_bundles = dict()
-        # relation between v and t, v = a * t
-        for a in accelerations:
-            trajectories = list()
-            for t in self._sampling_t.to_range(samp_level):
-                # TODO:get target velocity 
-                v = a * t + self._desired_speed
-                # longitudinal trajectories
-                trajectory_long = QuarticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lon), x_d=np.array([v, 0]))
-                if trajectory_long.coeffs is not None:
-                    for d in self._sampling_d.to_range(samp_level).union({x_0_lat[0]}):
-
-                        end_state_lat = np.array([d, 0.0, 0.0])
-                        # SWITCHING TO POSITION DOMAIN FOR LATERAL TRAJECTORY PLANNING
-                        if _LOW_VEL_MODE:
-                            s_lon_goal = trajectory_long.evaluate_state_at_tau(t)[0] - x_0_lon[0]
-                            if s_lon_goal <= 0:
-                                s_lon_goal = t
-                            trajectory_lat = QuinticTrajectory(tau_0=0, delta_tau=s_lon_goal, x_0=np.array(x_0_lat),
-                                                            x_d=end_state_lat)
-
-                        # Switch to sampling over t for high velocities
-                        else:
-                            trajectory_lat = QuinticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lat),
-                                                            x_d=end_state_lat)
-                        if trajectory_lat.coeffs is not None:
-                            trajectory_sample = TrajectorySample(self.horizon, self.dT, trajectory_long, trajectory_lat)
-                            trajectories.append(trajectory_sample)
-            # generate trajectory bundle
-            trajectory_bundle = TrajectoryBundle(trajectories, cost_function=DefaultCostFunction(self._desired_speed))
-            trajectory_bundles[a] = trajectory_bundle 
-        return trajectory_bundles
-
     def set_reference_path(self, reference_path: np.ndarray):
         """
         Sets the reference path and automatically creates a coordinate system
