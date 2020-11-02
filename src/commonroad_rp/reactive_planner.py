@@ -342,7 +342,8 @@ class ReactivePlanner(object):
         for i in range(len(trajectory.cartesian.x)):
             # create Cartesian state
             cart_states = dict()
-            cart_states['time_step'] = self.x_0.time_step+self._factor*i
+            # cart_states['time_step'] = self.x_0.time_step+self._factor*i
+            cart_states['time_step'] = self._factor * i
             cart_states['position'] = np.array([trajectory.cartesian.x[i], trajectory.cartesian.y[i]])
             cart_states['velocity'] = trajectory.cartesian.v[i]
             cart_states['acceleration'] = trajectory.cartesian.a[i]
@@ -353,7 +354,8 @@ class ReactivePlanner(object):
 
             # create curvilinear state
             cl_states = dict()
-            cl_states['time_step'] = self.x_0.time_step+self._factor*i
+            # cl_states['time_step'] = self.x_0.time_step+self._factor*i
+            cl_states['time_step'] = self._factor * i
             cl_states['position'] = np.array([trajectory.curvilinear.s[i], trajectory.curvilinear.d[i]])
             cl_states['velocity'] = trajectory.cartesian.v[i]
             cl_states['acceleration'] = trajectory.cartesian.a[i]
@@ -366,8 +368,10 @@ class ReactivePlanner(object):
             lat_list.append(
                 [trajectory.curvilinear.d[i], trajectory.curvilinear.d_dot[i], trajectory.curvilinear.d_ddot[i]])
 
-        cartTraj = Trajectory(self.x_0.time_step, cart_list)
-        freTraj = Trajectory(self.x_0.time_step, cl_list)
+        # cartTraj = Trajectory(self.x_0.time_step, cart_list)
+        # freTraj = Trajectory(self.x_0.time_step, cl_list)
+        cartTraj = Trajectory(0, cart_list)
+        freTraj = Trajectory(0, cl_list)
 
         return (cartTraj, freTraj, lon_list, lat_list)
 
@@ -406,7 +410,6 @@ class ReactivePlanner(object):
             # plan trajectory bundle
             # TODO: the difference between current and desired velocity
             bundle = self._create_trajectory_bundle(self._desired_speed, x_0_lon, x_0_lat, samp_level=i)
-            bundles = self.create_acceleration_based_trajectory_bundle(x_0_lon, x_0_lat, np.array([-4.0, -2.0, -1.0, 0, 1.0, 2.0, 4.0]), samp_level=i)
             
             self.bundle = bundle
             # get optimal trajectory
