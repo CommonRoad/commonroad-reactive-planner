@@ -11,9 +11,10 @@ from commonroad.visualization.draw_dispatch_cr import draw_object
 from commonroad_rp.reactive_planner import ReactivePlanner
 from commonroad_rp.utils import compute_curvature_from_polyline
 from scenario_helpers import *
-import commonroad_cc.visualization.draw_dispatch as crd
-from commonroad_cc.collision_detection.pycrcc_collision_dispatch import create_collision_checker
+import commonroad_dc.collision.visualization.draw_dispatch as crd
+from commonroad_dc.collision.collision_detection.pycrcc_collision_dispatch import create_collision_checker
 import matplotlib.pyplot as plt
+
 from commonroad_ccosy.geometry.util import resample_polyline
 
 
@@ -31,9 +32,10 @@ import os
 
 if __name__ == '__main__':
 
-    scenario = 'scenarios_lg_single_lane_23.xml'
+    # scenario = '/home/xiao/projects/lg_simulator/apollo/apollo.xml'
     # scenario = 'scenarios_lg_borregas_ave_59.xml'
     # scenario = 'scenarios_borregas_ave_traffic_routing_3_v2_scenario_borregas_ave_844.xml'
+    scenario = "/home/xiao/projects/lg_simulator/apollo/modules/planning/planner/commonroad/cr_scens/borregas_ave_new/scenario_borregas_ave_79.xml"
 
     print('Loading scenario {}'.format(scenario))
 
@@ -109,7 +111,7 @@ if __name__ == '__main__':
     # create new instance of reactive planner
     t_h = 3.0 # planning horizon
     desired_speed = 1.5 + ego_original.prediction.trajectory.state_list[0].velocity
-    planner: ReactivePlanner = ReactivePlanner(scenario.dt, t_h, int(t_h / scenario.dt), scenario_id=scenario.benchmark_id)
+    planner: ReactivePlanner = ReactivePlanner(0.2, t_fs, N_fs, factor=1)
     planner.set_reference_path(reference_path)
     planner.set_desired_velocity(desired_speed)
 

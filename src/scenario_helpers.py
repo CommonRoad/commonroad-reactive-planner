@@ -30,7 +30,7 @@ from commonroad_rp.parameter import VehModelParameters
 from commonroad_rp.utils import CoordinateSystem
 
 # Recently not use the spot 
-import spot
+# import spot
 from commonroad_dc.collision.collision_detection.pycrcc_collision_dispatch import create_collision_object
 
 draw_parameters_intended = {}
