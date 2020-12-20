@@ -123,6 +123,14 @@ class ReactivePlanner(object):
         assert delta_d_min <= 0, "<Reactive_planner>: delta_d_min must be not positive"
         assert delta_d_max >= 0, "<Reactive_planner>: delta_d_max must be not negative"
         self._sampling_d = PositionSampling(delta_d_min, delta_d_max, self._sampling_level)
+    
+    def set_v_sampling_parameters(self, v_min, v_max):
+        """
+        Sets sample parameters of sampled velocity interval
+        :param v_min: minimal velocity sample bound
+        :param v_max: maximal velocity sample bound
+        """
+        self._sampling_v = VelocitySampling(v_min, v_max, self._sampling_level)
 
     def set_reference_path(self, reference_path: np.ndarray):
         """
