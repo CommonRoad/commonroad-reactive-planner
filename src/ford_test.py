@@ -17,8 +17,6 @@ import matplotlib.pyplot as plt
 
 from commonroad_ccosy.geometry.util import resample_polyline
 
-
-
 from scipy import spatial
 from scipy.interpolate import splprep, splev
 
@@ -26,12 +24,7 @@ import spot
 import os
 
 
-
-
-
-
 if __name__ == '__main__':
-
     # scenario = '/home/xiao/projects/lg_simulator/apollo/apollo.xml'
     # scenario = 'scenarios_lg_borregas_ave_59.xml'
     # scenario = 'scenarios_borregas_ave_traffic_routing_3_v2_scenario_borregas_ave_844.xml'

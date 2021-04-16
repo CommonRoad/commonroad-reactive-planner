@@ -51,11 +51,10 @@ For the development IDE we suggest [PyCharm](http://www.jetbrains.com/pycharm/)
 
 ### Example script
 
-An example can be executed by
+Two example scripts are provided:
 
-```shell
-python run_combined_planner.py
-```
+* `run_combined_planner.py`: plan intended trajectories for motion planning
+* `ford_test.py`: use reactive planner as fail-safe planner (in combination with spot)
 
 
 ## Literature
