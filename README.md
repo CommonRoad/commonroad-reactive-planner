@@ -15,7 +15,7 @@ For the python installation, we suggest the usage of [Anaconda](http://www.anaco
 For the development IDE we suggest [PyCharm](http://www.jetbrains.com/pycharm/)
 
 ### Prerequisites
-1. add the folder `reactive-planner/src` to your python path
+1. add the folder `reactive-planner` to your python path
 
 2. this project uses three other framworks:
 
