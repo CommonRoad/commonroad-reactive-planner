@@ -27,7 +27,7 @@ from scenario_helpers import extrapolate_ref_path, shift_ref_path
 # *************************
 # Open CommonRoad scenario
 # *************************
-base_dir = "./unit_tests/scenarios"
+base_dir = "./example_scenarios"
 filename = "ZAM_Over-1_1.xml"
 
 scenario_path = os.path.join(base_dir, filename)

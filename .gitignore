@@ -7,7 +7,7 @@
 .pyc
 __pycache__
 
-src/scenarios
-src/plots
-src/unit_tests/img/
-src/evals
+scenarios/
+plots/
+unit_tests/img/
+evals/
