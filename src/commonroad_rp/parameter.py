@@ -85,15 +85,10 @@ class PositionSampling(Sampling):
         super(PositionSampling, self).__init__(low, up, n_samples)
 
     def _setup(self):
-        # removal = set()
         n = 3
         for i in range(self.no_of_samples()):
             self._db.append(set(np.linspace(self.low, self.up, n)))
             n = (n * 2) - 1
-            # samp = set(np.linspace(self.low, self.up, i + 4))
-            # samp = set(np.arange(self.low, self.up + 1 / (i + 1), 1 / (i + 1)))
-            # self._db.append((samp - removal) | {0})
-            # removal |= samp
 
 
 class TimeSampling(Sampling):
@@ -123,8 +118,6 @@ class SamplingSet(ABC):
 
     def __init__(self, t_samples: TimeSampling, d_samples: PositionSampling, v_samples: VelocitySampling):
         assert isinstance(t_samples, TimeSampling)
-        # assert isinstance(d_samples, PositionSampling)
-        # assert isinstance(v_samples, VelocitySampling)
         assert isinstance(d_samples, PositionSampling) and t_samples.no_of_samples() == d_samples.no_of_samples()
         assert isinstance(v_samples, VelocitySampling) and t_samples.no_of_samples() == v_samples.no_of_samples()
 
@@ -178,6 +171,9 @@ class DefFailSafeSampling(SamplingSet):
 
 
 class DefGymSampling(SamplingSet):
+    """
+    Class representing the default Sampling steps
+    """
 
     def __init__(self, dt, horizon):
         sampling_level = 4

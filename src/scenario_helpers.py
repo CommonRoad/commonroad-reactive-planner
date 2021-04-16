@@ -3,40 +3,42 @@
 from typing import List
 import copy
 
-# how to use them in the commonroad_dc
-# from commonroad_cc.road_boundary import construction, triangle_builder
-from commonroad_dc.boundary import construction, triangle_builder
+import numpy as np
 from scipy.interpolate import splprep, splev
 
-# import pycrcc
-# from pycrcc import *
+# commonroad_dc
+from commonroad_dc.boundary import construction, triangle_builder
 import commonroad_dc.pycrcc as pycrcc
 from commonroad_dc.pycrcc import *
+from commonroad_dc.collision.collision_detection.pycrcc_collision_dispatch import create_collision_object
 
+# commonroad-io
 from commonroad.scenario.scenario import Scenario
 from commonroad.scenario.obstacle import StaticObstacle, ObstacleType
-import numpy as np
 import commonroad.geometry.shape as shp
 from commonroad.scenario.trajectory import State, Trajectory
 from commonroad.prediction.prediction import Occupancy, SetBasedPrediction
 from commonroad.visualization.draw_dispatch_cr import default_draw_params
-
 from commonroad.planning.planning_problem import PlanningProblem
 from commonroad.scenario.lanelet import Lanelet, LaneletNetwork
-# from commonroad_ccosy.geometry.trapezoid_coordinate_system import create_coordinate_system_from_polyline
+
+# commonroad-ccosy
 from pycrccosy import CurvilinearCoordinateSystem
+from commonroad_ccosy.geometry.util import resample_polyline
+
+# commonroad_rp
 from commonroad_rp.utils import compute_pathlength_from_polyline, compute_orientation_from_polyline
 from commonroad_rp.parameter import VehModelParameters
 from commonroad_rp.utils import CoordinateSystem
 
 # Recently not use the spot 
 # import spot
-from commonroad_dc.collision.collision_detection.pycrcc_collision_dispatch import create_collision_object
 
 draw_parameters_intended = {}
 draw_parameters_fail_safe = {}
 draw_parameters_ego = copy.deepcopy(default_draw_params)
 draw_parameters_scenario = {}
+
 
 def update_draw_params():
     # intended
@@ -62,13 +64,13 @@ def update_draw_params():
     # draw_parameters_intended['scenario']['static_obstacle']['shape']['rectangle']['facecolor'] = '#1d7eea'
     # draw_parameters_intended['scenario']['static_obstacle']['shape']['rectangle']['edgecolor'] = '#0066cc'
 
-
     # ego initial shape
     draw_parameters_ego['shape']['rectangle']['facecolor'] = '#000000'
     draw_parameters_ego['shape']['rectangle']['edgecolor'] = '#000000'
 
 
 update_draw_params()
+
 
 def create_road_boundary(scenario: Scenario, draw=False) -> StaticObstacle:
     #method =('triangulation', {'call_options': 'a100q'}) # 'shell' # 'triangulation'
@@ -93,6 +95,7 @@ def create_road_boundary(scenario: Scenario, draw=False) -> StaticObstacle:
                                    obstacle_shape=shp.ShapeGroup(road_boundary_shape_list), initial_state=initial_state)
     return boundary[method], road_boundary_obstacle
 
+
 def lanelet_rep_setup(lanelets):
     lanelet_rep = []
     for lanelet in lanelets:
@@ -102,6 +105,7 @@ def lanelet_rep_setup(lanelets):
         polygon = Polygon(polyline)
         lanelet_rep.append((polygon, triangles))
     return lanelet_rep
+
 
 def _obtain_correct_lanelet_for_pose(state: State, lanelet_network: LaneletNetwork, lanes: List[int]):
 
@@ -119,8 +123,8 @@ def _obtain_correct_lanelet_for_pose(state: State, lanelet_network: LaneletNetwo
         if diff < best:
             best = diff
             best_lane = lane
-
     return best_lane
+
 
 def obtain_reference_path(trajectory: Trajectory, scenario: Scenario) -> np.ndarray:
     # create coordinate system
@@ -133,7 +137,6 @@ def obtain_reference_path(trajectory: Trajectory, scenario: Scenario) -> np.ndar
         ego_lanelet_id = ego_lanelet_id[0]
         ego_lanelet = scenario.lanelet_network.find_lanelet_by_id(ego_lanelet_id)
     print('Ego vehice is located in lanelet id={}'.format(ego_lanelet_id))
-
 
     # check if reference path is long enough
     new_lanelet = ego_lanelet
@@ -159,9 +162,7 @@ def obtain_reference_path(trajectory: Trajectory, scenario: Scenario) -> np.ndar
         temp = candidate
         visited.add(temp.lanelet_id)
         new_lanelet = Lanelet.merge_lanelets(new_lanelet,temp)
-
     return new_lanelet.center_vertices
-
 
 
 def spot_setup(scenario: Scenario, planning_problem: PlanningProblem, update_dict: dict):
@@ -169,6 +170,7 @@ def spot_setup(scenario: Scenario, planning_problem: PlanningProblem, update_dic
     spot.registerScenario(1, scenario.lanelet_network.lanelets, scenario.dynamic_obstacles, [planning_problem],np.empty([0, 2], float))
 
     spot.updateProperties(1, update_dict)
+
 
 def compute_lanelet_polygons(lanelets) -> pycrcc.ShapeGroup:
     def lanelet_rep_setup(lanelets):
@@ -181,12 +183,12 @@ def compute_lanelet_polygons(lanelets) -> pycrcc.ShapeGroup:
             lanelet_rep.append((polygon, triangles))
         return lanelet_rep
 
-
     lanelet_rep = lanelet_rep_setup(lanelets)
     lanelet_polygons = pycrcc.ShapeGroup()
     for poly, tri in lanelet_rep:
         lanelet_polygons.add_shape(create_collision_object(poly))
     return lanelet_polygons
+
 
 def set_obstacle_occupancy_prediction(scenario: Scenario, update_dict=None, end_time=10.0, num_threads=2):
     """
@@ -247,7 +249,6 @@ def remove_scenario_from_spot():
 
 
 def _compute_braking_maneuver(x0: State, cosys: CoordinateSystem, dT: float, params: VehModelParameters, t_react=0.3):
-
     # transform into curvilinear coordinate system
     s0, d0 = cosys.convert_to_curvilinear_coords(x0.position[0],x0.position[1])
 
@@ -263,9 +264,10 @@ def _compute_braking_maneuver(x0: State, cosys: CoordinateSystem, dT: float, par
     x_brake = list()
     y_brake = list()
     for s in s_brake:
-        x,y, = cosys.convert_to_cartesian_coords(s,0)
-        x_brake.append(x)
-        y_brake.append(y)
+        res = cosys.convert_to_cartesian_coords(s, 0)
+        if res is not None:
+            x_brake.append(res[0])
+            y_brake.append(res[1])
 
     # compute orientation
     theta_brake = np.interp(s_brake,cosys.ref_pos(),cosys.ref_theta())
@@ -276,14 +278,10 @@ def _compute_braking_maneuver(x0: State, cosys: CoordinateSystem, dT: float, par
         ego = pycrcc.TimeVariantCollisionObject(x0.time_step + i)
         ego.append_obstacle(pycrcc.RectOBB(0.5 * params.veh_length, 0.5 * params.veh_width, theta_brake[i], x_brake[i], y_brake[i]))
         shapes.append(ego)
-
     return shapes
 
 
-
-
 def compute_simplified_ttr(intended: Trajectory, cc, cosys: CoordinateSystem, dT: float, params: VehModelParameters) -> int:
-
     # initial ttr
     ttr = -1
     # go through states
@@ -304,18 +302,19 @@ def compute_simplified_ttr(intended: Trajectory, cc, cosys: CoordinateSystem, dT
 
     return ttr if ttr >= 0 else 0
 
+
 def smooth_reference(reference: np.ndarray) -> np.ndarray:
     """
     Smooths a given reference polyline for lower curvature rates. The smoothing is done using splines from scipy.
     :param reference: The reference to smooth
     :return: The smoothed reference
     """
-
     tck, u = splprep(reference.T, u=None, s=0.0)  # , per=1)
     u_new = np.linspace(u.min(), u.max(), 1000)
     x_new, y_new = splev(u_new, tck, der=0)
 
     return np.array([x_new, y_new]).transpose()
+
 
 def smoothing_reference_path(reference_path):
     """
@@ -335,8 +334,26 @@ def smoothing_reference_path(reference_path):
     return np.array([x_new, y_new]).transpose()
 
 
+def extrapolate_ref_path(reference_path: np.ndarray, resample_step: float = 2.0) -> np.ndarray:
+    """
+    Function to extrapolate the end of the reference path in order to avoid CCosy errors and/or invalid trajectory
+    samples when the reference path is too short.
+    :param reference_path: original reference path
+    :param resample_step: interval for resampling
+    :return extrapolated reference path
+    """
+    p = np.poly1d(np.polyfit(reference_path[-2:, 0], reference_path[-2:, 1], 1))
+    x = 2.3*reference_path[-1, 0] - reference_path[-2, 0]
+    new_polyline = np.concatenate((reference_path, np.array([[x, p(x)]])), axis=0)
+    return resample_polyline(new_polyline, step=resample_step)
 
 
+def shift_ref_path(reference_path: np.ndarray, shift: np.ndarray, scale: float) -> np.ndarray:
+    """
+    Function to shift ref path along a given slope specified by shift
+    """
+    ref_path_shifted = reference_path - scale*shift
+    return ref_path_shifted
 
 
 

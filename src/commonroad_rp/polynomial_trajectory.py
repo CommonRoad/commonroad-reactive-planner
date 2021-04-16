@@ -12,6 +12,7 @@ from abc import ABC, abstractmethod
 
 import commonroad.common.validity as val
 
+
 class PolynomialTrajectory(ABC):
     """
     Abstract class representing a polynomial trajectory

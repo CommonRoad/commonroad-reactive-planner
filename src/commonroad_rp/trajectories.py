@@ -197,7 +197,7 @@ class CartesianSample(Sample):
 
 class CurviLinearSample(Sample):
     """
-        Class representing the curvilinear trajectory of a given trajectory sample
+    Class representing the curvilinear trajectory of a given trajectory sample
     """
 
     def __init__(self, s: np.ndarray, d: np.ndarray, theta: np.ndarray, dd=None, ddd=None, ss=None, sss=None):

@@ -1,7 +1,7 @@
 # Reactive Planner
 
 Currently, this project generates solutions to trajectory planning problems given in the [commonroad](https://commonroad.gitlab.io) .xml format.
-The trajectories are determined according to the sampling-based approach in [2]. 
+The trajectories are determined according to the sampling-based approach in [1]. 
 
 ## Getting Started
 These instructions should help you to install the trajectory planner and use it for development and testing purposes. See development to get further information about the functionality of the modules.
@@ -59,6 +59,4 @@ python run_combined_planner.py
 
 
 ## Literature
-[1] Magdici, S. and Althoff, M. *Fail-Safe Motion Planning of Autonomous Vehicles*. Proc. of the 19th International IEEE Conference on Intelligent Transportation Systems, 2016.
-
-[2] Werling M., et al. *Optimal trajectory generation for dynamic street scenarios in a frenet frame*. In: IEEE International Conference on Robotics and Automation, Anchorage, Alaska, 987–993.
+[1] Werling M., et al. *Optimal trajectory generation for dynamic street scenarios in a frenet frame*. In: IEEE International Conference on Robotics and Automation, Anchorage, Alaska, 987–993.

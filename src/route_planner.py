@@ -194,7 +194,7 @@ class RoutePlanner:
         Calculates a reference path for a given lanelet network
         :return:
         """
-        goal_lanelet_id_list = self.get_goal_lanelet()
+        goal_lanelet_id_list = self.goal_lanelet_ids
 
         problem_init_state = self.planning_problem.initial_state
         initial_lanelet_id_list = self.lanelet_network.find_lanelet_by_position([problem_init_state.position])[0]
@@ -204,15 +204,18 @@ class RoutePlanner:
             for initial_lanelet in initial_lanelet_id_list:
                 try:
                     all_route = self.find_all_shortest_paths(initial_lanelet, goal_lanelet_id)
-                    route = all_route[0]
-                    ref_path = self.get_ref_path_from_route(route)
-                    if ref_path.shape[0] < 5:
-                        ref_path = resample_polyline(ref_path)
-                    ref_path = smooth_reference(ref_path)
-                    ref_path_list.append(ref_path)
+                    # TODO: return all routes that were found
+                    # route = all_route[0]
+                    for route in all_route:
+                        ref_path = self.get_ref_path_from_route(route)
+                        if ref_path.shape[0] < 5:
+                            ref_path = resample_polyline(ref_path)
+                        ref_path = smooth_reference(ref_path)
+                        ref_path_list.append(ref_path)
                 except NetworkXNoPath:
                     pass
         return ref_path_list
+
 
 class ReferenceRouteManager(object):
     """

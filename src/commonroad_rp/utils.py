@@ -8,12 +8,10 @@ __status__ = "Alpha"
 
 import numpy as np
 
-#from pycrccosy import TrapezoidCoordinateSystem
 from pycrccosy import CurvilinearCoordinateSystem
 
-# from commonroad_ccosy.geometry.trapezoid_coordinate_system import create_coordinate_system_from_polyline
-
 from commonroad.common.util import make_valid_orientation
+
 
 def compute_orientation_from_polyline(polyline: np.ndarray) -> np.ndarray:
     """
@@ -75,6 +73,7 @@ def compute_pathlength_from_polyline(polyline: np.ndarray) -> np.ndarray:
 
     return np.array(distance)
 
+
 def extend_trajectory(s, d, s_dot, theta, v, a, duration, dT) -> tuple:
     """
     Extends a trajectory assuming constant motion
@@ -98,6 +97,7 @@ def extend_trajectory(s, d, s_dot, theta, v, a, duration, dT) -> tuple:
 
     return (s_n, d_n, theta_n, v_n, a_n)
 
+
 def interpolate_angle(x: float, x1: float, x2: float, y1: float, y2:float) -> float:
     """
     Interpolates an angle value between two angles according to the miminal value of the absolute difference
@@ -118,11 +118,11 @@ def interpolate_angle(x: float, x1: float, x2: float, y1: float, y2:float) -> fl
 
     return make_valid_orientation(delta * (x - x1) / (x2 - x1) + y1)
 
+
 class CoordinateSystem():
 
     def __init__(self, reference: np.ndarray):
         self._reference = reference
-        # self._ccosy = create_coordinate_system_from_polyline(reference)
         self._ccosy = CurvilinearCoordinateSystem(reference)
         self._ref_pos = compute_pathlength_from_polyline(reference)
         self._ref_curv = compute_curvature_from_polyline(reference)
@@ -132,7 +132,7 @@ class CoordinateSystem():
     def reference(self) -> np.ndarray:
         return self._reference
 
-    def ccosy(self) -> CurvilinearCoordinateSystem: #TrapezoidCoordinateSystem:
+    def ccosy(self) -> CurvilinearCoordinateSystem:
         return self._ccosy
 
     def ref_pos(self) -> np.ndarray:
