@@ -8,7 +8,7 @@ __status__ = "Alpha"
 
 import numpy as np
 
-from pycrccosy import CurvilinearCoordinateSystem
+from commonroad_dc.pycrccosy import CurvilinearCoordinateSystem
 
 from commonroad.common.util import make_valid_orientation
 

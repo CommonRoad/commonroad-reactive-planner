@@ -14,7 +14,7 @@ from commonroad.common.file_reader import CommonRoadFileReader
 # from commonroad.visualization.draw_dispatch_cr import draw_object
 
 # commonroad_dc
-from commonroad_dc.collision.visualization.draw_dispatch import draw_object
+from commonroad.visualization.mp_renderer import MPRenderer
 from commonroad_dc.boundary.boundary import create_road_boundary_obstacle
 from commonroad_dc.collision.collision_detection.pycrcc_collision_dispatch import create_collision_checker
 
@@ -108,7 +108,7 @@ if plot:
 # planning
 while not goal.is_reached(x_0):
     if plot:
-        plt.figure(figsize=(20, 10))
+        rnd = MPRenderer()
     current_count = len(record_state_list) - 1
     if current_count % replanning_frequency == 0:
         # new planning cycle -> new optimal trajectory
@@ -144,7 +144,7 @@ while not goal.is_reached(x_0):
 
         if plot:
             ego_vehicle = planner.convert_cr_trajectory_to_object(optimal[0])
-            draw_object(ego_vehicle, draw_params={'time_begin': current_count,
+            ego_vehicle.draw(rnd, draw_params={'time_begin': current_count,
                                                   "dynamic_obstacle": {"facecolor": "#E37222", 'edgecolor': '#E37222',
                                                                        "zorder": 30, 'opacity': 0.7}})
     else:
@@ -159,14 +159,15 @@ while not goal.is_reached(x_0):
         x_cl = (optimal[2][1 + temp], optimal[3][1 + temp])
 
         if plot:
-            draw_object(ego_vehicle, draw_params={'time_begin': current_count,
+            ego_vehicle.draw(rnd, draw_params={'time_begin': current_count,
                                                   "dynamic_obstacle": {"facecolor": "#E37222", 'edgecolor': '#E37222',
                                                                        "zorder": 30, 'opacity': 0.7}})
 
     print(f"current time step: {current_count}")
     # draw scenario + planning solution
     if plot:
-        draw_object(scenario, draw_params={'time_begin': current_count})
+        scenario.draw(rnd, draw_params={'time_begin': current_count})
+        rnd.render(show=True)
         # draw_object(planning_problem)
         plt.plot(np.array(planned_x), np.array(planned_y), color='k', marker='o', markersize=1, zorder=30,
                  linewidth=1.0, label='planned trajectories')

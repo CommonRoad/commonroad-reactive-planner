@@ -18,13 +18,12 @@ from commonroad.scenario.obstacle import StaticObstacle, ObstacleType
 import commonroad.geometry.shape as shp
 from commonroad.scenario.trajectory import State, Trajectory
 from commonroad.prediction.prediction import Occupancy, SetBasedPrediction
-from commonroad.visualization.draw_dispatch_cr import default_draw_params
 from commonroad.planning.planning_problem import PlanningProblem
 from commonroad.scenario.lanelet import Lanelet, LaneletNetwork
 
 # commonroad-ccosy
-from pycrccosy import CurvilinearCoordinateSystem
-from commonroad_ccosy.geometry.util import resample_polyline
+from commonroad_dc.pycrccosy import CurvilinearCoordinateSystem
+from commonroad_dc.geometry.util import resample_polyline
 
 # commonroad_rp
 from commonroad_rp.utils import compute_pathlength_from_polyline, compute_orientation_from_polyline
@@ -36,7 +35,7 @@ from commonroad_rp.utils import CoordinateSystem
 
 draw_parameters_intended = {}
 draw_parameters_fail_safe = {}
-draw_parameters_ego = copy.deepcopy(default_draw_params)
+draw_parameters_ego = {}
 draw_parameters_scenario = {}
 
 
@@ -64,9 +63,9 @@ def update_draw_params():
     # draw_parameters_intended['scenario']['static_obstacle']['shape']['rectangle']['facecolor'] = '#1d7eea'
     # draw_parameters_intended['scenario']['static_obstacle']['shape']['rectangle']['edgecolor'] = '#0066cc'
 
-    # ego initial shape
-    draw_parameters_ego['shape']['rectangle']['facecolor'] = '#000000'
-    draw_parameters_ego['shape']['rectangle']['edgecolor'] = '#000000'
+    # # ego initial shape
+    # draw_parameters_ego['shape']['rectangle']['facecolor'] = '#000000'
+    # draw_parameters_ego['shape']['rectangle']['edgecolor'] = '#000000'
 
 
 update_draw_params()
