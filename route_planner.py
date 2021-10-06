@@ -5,7 +5,7 @@ import networkx as nx
 import numpy as np
 from commonroad.planning.planning_problem import PlanningProblem
 from commonroad.scenario.lanelet import LaneletNetwork
-from commonroad_ccosy.geometry.util import resample_polyline
+from commonroad_dc.geometry.util import resample_polyline
 from networkx import NetworkXNoPath
 from scenario_helpers import smooth_reference
 
