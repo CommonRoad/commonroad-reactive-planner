@@ -31,9 +31,11 @@ For the development IDE we suggest [PyCharm](http://www.jetbrains.com/pycharm/)
 
   * **commonroad-route-planner**:
 
-    This tool is used to create a polynomial reference path from an initial point to a goal region for a CommonRoad scenario. Please clone the `develop` branch of the [repository](https://gitlab.lrz.de/cps/commonroad-route-planner.git) and follow the installation instructions in the readme:
+    This tool is used to create a polynomial reference path from an initial point to a goal region for a CommonRoad scenario. Please clone this [repository](https://gitlab.lrz.de/tum-cps/commonroad-route-planner) and install it using the following command in the root folder:
 
-    `git clone -b develop https://gitlab.lrz.de/cps/commonroad-route-planner.git`
+    `git clone https://gitlab.lrz.de/tum-cps/commonroad-route-planner.git`
+    
+    `pip install .`
 
   * (Optional, only for using reactive planner as fail-safe planner) **spot**:
 
