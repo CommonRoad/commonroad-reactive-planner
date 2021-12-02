@@ -15,27 +15,21 @@ For the python installation, we suggest the usage of [Anaconda](http://www.anaco
 For the development IDE we suggest [PyCharm](http://www.jetbrains.com/pycharm/)
 
 ### Prerequisites
-1. add the folder `reactive-planner` to your python path
+1. Clone this repository and add the folder `reactive-planner` to your python path
 
 2. this project uses three other framworks:
-
-  * **commonroad-drivability-checker**:
-
-      This is an open-sourced tool to check collision and road compliance between objects. Please clone it from [here](https://gitlab.lrz.de/tum-cps/commonroad-drivability-checker) and follow the installation instructions in the readme.
 
   * **commonroad-io**:
 
       The commonroad_io package provides methods to read, write, and visualize CommonRoad scenarios and planning problems. The package can be installed via pip:
 
       `pip install commonroad-io`
+    
+  * **commonroad-drivability-checker**:
 
-  * **commonroad-curvilinear-coordinate-system**:
+      This is an open-sourced tool to check collision and road compliance between objects. Please clone it from [here](https://gitlab.lrz.de/tum-cps/commonroad-drivability-checker) and follow the installation instructions in the readme.
 
-      This tool is used to create a Frenet frame. Currently, there is no public access. Please clone the `develop` branch of the [repository](https://gitlab.lrz.de/cps/commonroad-curvilinear-coordinate-system.git) and follow the installation instructions in the readme:
-
-      `git clone -b development https://gitlab.lrz.de/cps/commonroad-curvilinear-coordinate-system.git`
-
-  * (Optional) **commonroad-route-planner**:
+  * **commonroad-route-planner**:
 
     This tool is used to create a polynomial reference path from an initial point to a goal region for a CommonRoad scenario. Please clone the `develop` branch of the [repository](https://gitlab.lrz.de/cps/commonroad-route-planner.git) and follow the installation instructions in the readme:
 
