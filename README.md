@@ -27,7 +27,9 @@ For the development IDE we suggest [PyCharm](http://www.jetbrains.com/pycharm/)
     
   * **commonroad-drivability-checker**:
 
-      This is an open-sourced tool to check collision and road compliance between objects. Please clone it from [here](https://gitlab.lrz.de/tum-cps/commonroad-drivability-checker) and follow the installation instructions in the readme.
+      This is an open-sourced tool to check collision and road compliance between objects. Please clone it from [here](https://gitlab.lrz.de/tum-cps/commonroad-drivability-checker) and follow the installation instructions [here](https://gitlab.lrz.de/tum-cps/commonroad-drivability-checker/-/blob/master/doc/installation.rst).
+
+     `git clone https://gitlab.lrz.de/tum-cps/commonroad-drivability-checker.git`
 
   * **commonroad-route-planner**:
 
