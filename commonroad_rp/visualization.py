@@ -19,8 +19,23 @@ from commonroad.scenario.obstacle import DynamicObstacle
 from commonroad.planning.planning_problem import PlanningProblem
 from commonroad.visualization.mp_renderer import MPRenderer
 
+# commonroad_dc
+from commonroad_dc import pycrcc
+
 # commonroad-rp
 from commonroad_rp.trajectories import TrajectorySample
+
+
+def visualize_collision_checker(scenario: Scenario, cc: pycrcc.CollisionChecker):
+    """
+    Visualizes the collision checker, i.e., all collision objects and, if applicable, the road boundary.
+    :param scenario CommonRoad scenario object
+    :param cc pycrcc.CollisionChecker object
+    """
+    rnd = MPRenderer(figsize=(20, 10))
+    scenario.lanelet_network.draw(rnd)
+    cc.draw(rnd)
+    rnd.render(show=True)
 
 
 def visualize_planning_result(scenario: Scenario, planning_problem: PlanningProblem, ego: DynamicObstacle,

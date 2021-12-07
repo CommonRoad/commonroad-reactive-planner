@@ -6,12 +6,9 @@ from copy import deepcopy
 
 # third party
 import numpy as np
-import matplotlib.pyplot as plt
-import pickle
 
 # commonroad-io
 from commonroad.common.file_reader import CommonRoadFileReader
-from commonroad.visualization.mp_renderer import MPRenderer
 
 # commonroad_dc
 from commonroad_dc.boundary.boundary import create_road_boundary_obstacle
@@ -22,9 +19,7 @@ from commonroad_route_planner.route_planner import RoutePlanner
 
 # reactive planner
 from commonroad_rp.reactive_planner import ReactivePlanner
-# from route_planner import RoutePlanner, ReferenceRouteManager
-from scenario_helpers import extrapolate_ref_path, shift_ref_path
-from commonroad_rp.visualization import visualize_planning_result
+from commonroad_rp.visualization import visualize_planning_result, visualize_collision_checker
 
 
 # *************************************
