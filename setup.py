@@ -25,8 +25,8 @@ setup(
         'scipy>=1.7.3',
         'setuptools>=58.0.4',
         'Shapely>=1.8.0',
-        'commonroad-route-planner @ git+https://gitlab.lrz.de/tum-cps/commonroad-route-planner.git@main#egg=commonroad-route-planner',
-        'commonroad-io @ git+https://gitlab.lrz.de/cps/commonroad-io.git@develop#egg=commonroad-io'
+        'commonroad-route-planner @ git+ssh://git@gitlab.lrz.de/tum-cps/commonroad-route-planner.git@main#egg=commonroad-route-planner',
+        'commonroad-io @ git+ssh://git@gitlab.lrz.de/cps/commonroad-io.git@develop#egg=commonroad-io'
         ],
     classifiers=[
         "Programming Language :: Python :: 3.8",
