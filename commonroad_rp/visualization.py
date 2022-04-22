@@ -40,7 +40,7 @@ def visualize_collision_checker(scenario: Scenario, cc: pycrcc.CollisionChecker)
 
 def visualize_planning_result(scenario: Scenario, planning_problem: PlanningProblem, ego: DynamicObstacle,
                               pos: np.ndarray, timestep: int, traj_set: List[TrajectorySample] = None,
-                              ref_path: np.ndarray = None, save_path: str = None):
+                              ref_path: np.ndarray = None, rnd: MPRenderer = None, save_path: str = None):
     """
     Function to visualize complete planning result from the reactive planner for a given time step
     :param scenario: CommonRoad scenario object
@@ -50,10 +50,13 @@ def visualize_planning_result(scenario: Scenario, planning_problem: PlanningProb
     :param timestep: current time step of scenario to plot
     :param traj_set: List of sampled trajectories (optional)
     :param ref_path: Reference path for planner as polyline [(nx2) np.ndarray] (optional)
+    :param rnd: MPRenderer object (optional: if none is passed, the function creates a new renderer object; otherwise it
+    will visualize on the existing object)
     :param save_path: Path to save plot as .png (optional)
     """
-    # create renderer object
-    rnd = MPRenderer(figsize=(20, 10))
+    # create renderer object (if no existing renderer is passed)
+    if rnd is None:
+        rnd = MPRenderer(figsize=(20, 10))
     # visualize scenario
     scenario.draw(rnd, draw_params={'time_begin': timestep})
     # visualize planning problem

@@ -69,9 +69,9 @@ else:
 
 
 # initialize collision checker and road boundary
-road_boundary_obstacle, road_boundary_sg_triangles = create_road_boundary_obstacle(scenario)
+_, road_boundary_sg_obb = create_road_boundary_obstacle(scenario)
 collision_checker_scenario = create_collision_checker(scenario)
-collision_checker_scenario.add_collision_object(road_boundary_sg_triangles)
+collision_checker_scenario.add_collision_object(road_boundary_sg_obb)
 
 
 # initialize reactive planner

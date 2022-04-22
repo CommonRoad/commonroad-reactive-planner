@@ -16,17 +16,8 @@ For the development IDE we suggest [PyCharm](http://www.jetbrains.com/pycharm/)
 1. Clone this repository & create a new conda environment `conda create -n commonroad-py37 python=3.7`
 
 
-2. Manually install dependency **commonroad-drivability-checker**:
-    
-    * This is an open-source tool to check collision and road compliance between objects. 
-  
-    * Please clone it from [here](https://gitlab.lrz.de/tum-cps/commonroad-drivability-checker) and follow the installation instructions [here](https://gitlab.lrz.de/tum-cps/commonroad-drivability-checker/-/blob/master/doc/installation.rst).
-
-     `git clone https://gitlab.lrz.de/tum-cps/commonroad-drivability-checker.git`
-
-
-3. Install the package:
-    * Run the pip setup in the root folder: `pip install .`
+2. Install the package:
+    * Install the package via pip: `pip install .`
     * **Or** install the dependencies with `pip install -r requirements.txt` and add the root folder to the python path of your interpreter
 
 

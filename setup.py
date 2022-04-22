@@ -20,8 +20,9 @@ setup(
         'omegaconf>=2.1.1',
         'pytest>=6.2.5',
         'scipy>=1.5.2',
-        'commonroad-route-planner @ git+ssh://git@gitlab.lrz.de/tum-cps/commonroad-route-planner.git@main#egg=commonroad-route-planner',
-        'commonroad-io @ git+ssh://git@gitlab.lrz.de/cps/commonroad-io.git@develop#egg=commonroad-io'
+        'commonroad-route-planner>=2022.1',
+        'commonroad-io>=2021.4',
+        'commonroad-drivability-checker>=2021.4',
         ],
     classifiers=[
         "Programming Language :: Python :: 3.8",
