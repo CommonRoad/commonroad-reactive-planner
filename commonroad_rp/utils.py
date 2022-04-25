@@ -112,14 +112,14 @@ def interpolate_angle(x: float, x1: float, x2: float, y1: float, y2:float) -> fl
         return x[np.argmin(np.abs(x))]
 
     delta = y2 - y1
-    delta_2pi_minus = delta - 2 * np.pi
-    delta_2pi_plus = delta + 2 * np.pi
-    delta = absmin(np.array([delta, delta_2pi_minus, delta_2pi_plus]))
+    # delta_2pi_minus = delta - 2 * np.pi
+    # delta_2pi_plus = delta + 2 * np.pi
+    # delta = absmin(np.array([delta, delta_2pi_minus, delta_2pi_plus]))
 
     return make_valid_orientation(delta * (x - x1) / (x2 - x1) + y1)
 
 
-class CoordinateSystem():
+class CoordinateSystem:
 
     def __init__(self, reference: np.ndarray):
         self._reference = reference
@@ -129,21 +129,27 @@ class CoordinateSystem():
         self._ref_theta = compute_orientation_from_polyline(reference)
         self._ref_curv_d = np.gradient(self._ref_curv, self._ref_pos)
 
+    @property
     def reference(self) -> np.ndarray:
         return self._reference
 
+    @property
     def ccosy(self) -> CurvilinearCoordinateSystem:
         return self._ccosy
 
+    @property
     def ref_pos(self) -> np.ndarray:
         return self._ref_pos
 
+    @property
     def ref_curv(self) -> np.ndarray:
         return self._ref_curv
 
+    @property
     def ref_curv_d(self) -> np.ndarray:
         return self._ref_curv_d
 
+    @property
     def ref_theta(self) -> np.ndarray:
         return self._ref_theta
 

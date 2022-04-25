@@ -11,12 +11,11 @@ import numpy as np
 from abc import ABC, abstractmethod
 
 from commonroad_rp.polynomial_trajectory import PolynomialTrajectory
-import commonroad.common.validity as val
 
 
 class Sample(ABC):
     """
-    Abstract class representing a trajectory ssample in a certain coordinate system
+    Abstract class representing a trajectory sample in a certain coordinate system
     """
 
     @abstractmethod

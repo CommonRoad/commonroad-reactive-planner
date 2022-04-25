@@ -19,12 +19,8 @@ class Sampling(ABC):
 
     def __init__(self, low: float, up: float, n_samples: int):
         # Check validity of input
-        # assert is_real_number(low), '<SamplingParameters>: Lower sampling bound not valid! low = {}'.format(low)
-        # assert is_real_number(up), '<SamplingParameters>: Upper sampling bound not valid! up = {}'.format(up)
-        assert np.greater_equal(up,
-                                low), '<SamplingParameters>: Upper sampling bound is not greater than ' \
+        assert np.greater_equal(up, low), '<SamplingParameters>: Upper sampling bound is not greater than ' \
                                       'lower bound! up = {} , low = {}'.format(up, low)
-        # assert is_positive(n_samples), '<SamplingParameters>: Step size is not valid! step size = {}'.format(n_samples)
         assert isinstance(n_samples, int)
         assert n_samples > 0
 
@@ -48,11 +44,11 @@ class Sampling(ABC):
         :param sampling_stage: The sampling stage to receive (>=0)
         :return: The set of sampling steps for the queried sampling stage
         """
-        assert 0 <= sampling_stage < self.no_of_samples(), '<Sampling/to_range>: Provided sampling stage is' \
-                                                           ' incorrect! stage = {}'.format(
-            sampling_stage)
+        assert 0 <= sampling_stage < self.no_of_samples, '<Sampling/to_range>: Provided sampling stage is' \
+                                                           ' incorrect! stage = {}'.format(sampling_stage)
         return self._db[sampling_stage]
 
+    @property
     def no_of_samples(self) -> int:
         """
         Returns the maximum number of sampling stages
@@ -71,7 +67,7 @@ class VelocitySampling(Sampling):
 
     def _setup(self):
         n = 3
-        for i in range(self.no_of_samples()):
+        for i in range(self.no_of_samples):
             self._db.append(set(np.linspace(self.low, self.up, n)))
             n = (n * 2) - 1
 
@@ -86,7 +82,7 @@ class PositionSampling(Sampling):
 
     def _setup(self):
         n = 3
-        for i in range(self.no_of_samples()):
+        for i in range(self.no_of_samples):
             self._db.append(set(np.linspace(self.low, self.up, n)))
             n = (n * 2) - 1
 
@@ -102,7 +98,7 @@ class TimeSampling(Sampling):
 
     def _setup(self):
         # self._db.append(np.arange(1, int(self.up) + 1, int(1/self.dT)*self.dT))
-        for i in range(self.no_of_samples()):
+        for i in range(self.no_of_samples):
             step_size = int((1 / (i + 1)) / self.dT)
             samp = set(np.arange(self.low, round(self.up + self.dT, 2), step_size * self.dT))
             samp.discard(round(self.up + self.dT, 2))
@@ -118,8 +114,8 @@ class SamplingSet(ABC):
 
     def __init__(self, t_samples: TimeSampling, d_samples: PositionSampling, v_samples: VelocitySampling):
         assert isinstance(t_samples, TimeSampling)
-        assert isinstance(d_samples, PositionSampling) and t_samples.no_of_samples() == d_samples.no_of_samples()
-        assert isinstance(v_samples, VelocitySampling) and t_samples.no_of_samples() == v_samples.no_of_samples()
+        assert isinstance(d_samples, PositionSampling) and t_samples.no_of_samples == d_samples.no_of_samples
+        assert isinstance(v_samples, VelocitySampling) and t_samples.no_of_samples == v_samples.no_of_samples
 
         self._t_samples = t_samples
         self._d_samples = d_samples
@@ -155,7 +151,7 @@ class SamplingSet(ABC):
         Returns the maximum number of sampling stages
         :return:
         """
-        return self._t_samples.no_of_samples()
+        return self._t_samples.no_of_samples
 
 
 class DefFailSafeSampling(SamplingSet):

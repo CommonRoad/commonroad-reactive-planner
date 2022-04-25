@@ -8,7 +8,6 @@ __status__ = "Beta"
 
 # python packages
 import time
-import cProfile
 import numpy as np
 from copy import deepcopy
 from typing import List, Tuple
@@ -56,7 +55,7 @@ class ReactivePlanner(object):
         :param collision_check_in_cl: Boolean if the collision checker has been provided in curvilinear
         coordinates (default=False)
         :param factor: Factor when performing collision checks and the scenario is given in a different time
-        step, e.g., 0.02 for scenario and 0.2 for planner results in a factor of 10.
+        step, e.g., 0.02 for scenario and 0.2 for plannger results in a factor of 10.
         """
 
         assert is_positive(dt), '<ReactivePlanner>: provided dt is not correct! dt = {}'.format(dt)
@@ -299,12 +298,12 @@ class ReactivePlanner(object):
             s, d = self._co.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
 
         # compute orientation in curvilinear coordinate frame
-        ref_theta = np.unwrap(self._co.ref_theta())
-        theta_cl = x_0.orientation - np.interp(s, self._co.ref_pos(), ref_theta)
+        ref_theta = np.unwrap(self._co.ref_theta)
+        theta_cl = x_0.orientation - np.interp(s, self._co.ref_pos, ref_theta)
 
         # compute curvatures
-        kr = np.interp(s, self._co.ref_pos(), self._co.ref_curv())
-        kr_d = np.interp(s, self._co.ref_pos(), self._co.ref_curv_d())
+        kr = np.interp(s, self._co.ref_pos, self._co.ref_curv)
+        kr_d = np.interp(s, self._co.ref_pos, self._co.ref_curv_d)
 
         # compute d prime and d prime prime -> derivation after arclength
         d_p = (1 - kr * d) * np.tan(theta_cl)
@@ -319,9 +318,9 @@ class ReactivePlanner(object):
             # print(x_0.position)
             # print(x_0.orientation)
             # print(s)
-            # print(self._co.ref_pos())
-            # print(self._co.ref_theta())
-            # print(self._co.ref_curv())
+            # print(self._co.ref_pos)
+            # print(self._co.ref_theta)
+            # print(self._co.ref_curv)
             # print(self._co._reference)
             # print(theta_cl)
             # print(kr)
@@ -606,16 +605,16 @@ class ReactivePlanner(object):
                     dp = d_velocity[i]
                     dpp = d_acceleration[i]
 
-                s_idx = np.argmin(np.abs(self._co.ref_pos() - s[i]))
-                if self._co.ref_pos()[s_idx] < s[i]:
+                s_idx = np.argmin(np.abs(self._co.ref_pos - s[i]))
+                if self._co.ref_pos[s_idx] < s[i]:
                     s_idx += 1
 
-                if s_idx + 1 >= len(self._co.ref_pos()):
+                if s_idx + 1 >= len(self._co.ref_pos):
                     feasible = False
                     break
 
-                s_lambda = (self._co.ref_pos()[s_idx] - s[i]) / (
-                        self._co.ref_pos()[s_idx + 1] - self._co.ref_pos()[s_idx])
+                s_lambda = (self._co.ref_pos[s_idx] - s[i]) / (
+                        self._co.ref_pos[s_idx + 1] - self._co.ref_pos[s_idx])
 
                 # add cl and gl orientation
                 if s_velocity[i] > 0.005:
@@ -625,29 +624,29 @@ class ReactivePlanner(object):
                         theta_cl[i] = np.arctan2(d_velocity[i], s_velocity[i])
                     theta_gl[i] = theta_cl[i] + interpolate_angle(
                         s[i],
-                        self._co.ref_pos()[s_idx],
-                        self._co.ref_pos()[s_idx + 1],
-                        self._co.ref_theta()[s_idx],
-                        self._co.ref_theta()[s_idx + 1]
+                        self._co.ref_pos[s_idx],
+                        self._co.ref_pos[s_idx + 1],
+                        self._co.ref_theta[s_idx],
+                        self._co.ref_theta[s_idx + 1]
                     )
                     if theta_gl[i] < -np.pi:
                         theta_gl[i] += 2 * np.pi
                     if theta_gl[i] > np.pi:
                         theta_gl[i] -= 2 * np.pi
                     # theta_gl[i] = theta_cl[i] + (
-                    #         self._co.ref_theta()[s_idx + 1] - self._co.ref_theta()[s_idx]) * s_lambda + \
-                    #               self._co.ref_theta()[s_idx]
+                    #         self._co.ref_theta[s_idx + 1] - self._co.ref_theta[s_idx]) * s_lambda + \
+                    #               self._co.ref_theta[s_idx]
 
                 else:
-                    # theta_cl.append(np.interp(s[i], self._co.ref_pos(), self._co.ref_theta()))
-                    # theta_cl[i] = (self._co.ref_theta()[s_idx + 1] - self._co.ref_theta()[s_idx]) * s_lambda + \
-                    #               self._co.ref_theta()[s_idx]
+                    # theta_cl.append(np.interp(s[i], self._co.ref_pos, self._co.ref_theta))
+                    # theta_cl[i] = (self._co.ref_theta[s_idx + 1] - self._co.ref_theta[s_idx]) * s_lambda + \
+                    #               self._co.ref_theta[s_idx]
                     theta_cl[i] = interpolate_angle(
                         s[i],
-                        self._co.ref_pos()[s_idx],
-                        self._co.ref_pos()[s_idx + 1],
-                        self._co.ref_theta()[s_idx],
-                        self._co.ref_theta()[s_idx + 1]
+                        self._co.ref_pos[s_idx],
+                        self._co.ref_pos[s_idx + 1],
+                        self._co.ref_theta[s_idx],
+                        self._co.ref_theta[s_idx + 1]
                     )
                     if theta_cl[i] < -np.pi:
                         theta_cl[i] += 2 * np.pi
@@ -656,10 +655,10 @@ class ReactivePlanner(object):
                     theta_gl[i] = theta_cl[i]
 
                 # Compute curvature of reference at current position
-                k_r = (self._co.ref_curv()[s_idx + 1] - self._co.ref_curv()[s_idx]) * s_lambda + self._co.ref_curv()[
+                k_r = (self._co.ref_curv[s_idx + 1] - self._co.ref_curv[s_idx]) * s_lambda + self._co.ref_curv[
                     s_idx]
-                k_r_d = (self._co.ref_curv_d()[s_idx + 1] - self._co.ref_curv_d()[s_idx]) * s_lambda + \
-                        self._co.ref_curv_d()[s_idx]
+                k_r_d = (self._co.ref_curv_d[s_idx + 1] - self._co.ref_curv_d[s_idx]) * s_lambda + \
+                        self._co.ref_curv_d[s_idx]
 
                 # compute global curvature based on appendix A of Moritz Werling's PhD thesis
                 oneKrD = (1 - k_r * d[i])
@@ -859,16 +858,16 @@ class ReactivePlanner(object):
                     dp = d_velocity[i]
                     dpp = d_acceleration[i]
 
-                s_idx = np.argmin(np.abs(self._co.ref_pos() - s[i]))
-                if self._co.ref_pos()[s_idx] < s[i]:
+                s_idx = np.argmin(np.abs(self._co.ref_pos - s[i]))
+                if self._co.ref_pos[s_idx] < s[i]:
                     s_idx += 1
 
-                if s_idx + 1 >= len(self._co.ref_pos()):
+                if s_idx + 1 >= len(self._co.ref_pos):
                     feasible = False
                     break
 
-                s_lambda = (self._co.ref_pos()[s_idx] - s[i]) / (
-                        self._co.ref_pos()[s_idx + 1] - self._co.ref_pos()[s_idx])
+                s_lambda = (self._co.ref_pos[s_idx] - s[i]) / (
+                        self._co.ref_pos[s_idx + 1] - self._co.ref_pos[s_idx])
 
                 # add cl and gl orientation
                 if s_velocity[i] > 0.005:
@@ -878,29 +877,29 @@ class ReactivePlanner(object):
                         theta_cl[i] = np.arctan2(d_velocity[i], s_velocity[i])
                     theta_gl[i] = theta_cl[i] + interpolate_angle(
                         s[i],
-                        self._co.ref_pos()[s_idx],
-                        self._co.ref_pos()[s_idx + 1],
-                        self._co.ref_theta()[s_idx],
-                        self._co.ref_theta()[s_idx + 1]
+                        self._co.ref_pos[s_idx],
+                        self._co.ref_pos[s_idx + 1],
+                        self._co.ref_theta[s_idx],
+                        self._co.ref_theta[s_idx + 1]
                     )
                     if theta_gl[i] < -np.pi:
                         theta_gl[i] += 2 * np.pi
                     if theta_gl[i] > np.pi:
                         theta_gl[i] -= 2 * np.pi
                     # theta_gl[i] = theta_cl[i] + (
-                    #         self._co.ref_theta()[s_idx + 1] - self._co.ref_theta()[s_idx]) * s_lambda + \
-                    #               self._co.ref_theta()[s_idx]
+                    #         self._co.ref_theta[s_idx + 1] - self._co.ref_theta[s_idx]) * s_lambda + \
+                    #               self._co.ref_theta[s_idx]
 
                 else:
-                    # theta_cl.append(np.interp(s[i], self._co.ref_pos(), self._co.ref_theta()))
-                    # theta_cl[i] = (self._co.ref_theta()[s_idx + 1] - self._co.ref_theta()[s_idx]) * s_lambda + \
-                    #               self._co.ref_theta()[s_idx]
+                    # theta_cl.append(np.interp(s[i], self._co.ref_pos, self._co.ref_theta))
+                    # theta_cl[i] = (self._co.ref_theta[s_idx + 1] - self._co.ref_theta[s_idx]) * s_lambda + \
+                    #               self._co.ref_theta[s_idx]
                     theta_cl[i] = interpolate_angle(
                         s[i],
-                        self._co.ref_pos()[s_idx],
-                        self._co.ref_pos()[s_idx + 1],
-                        self._co.ref_theta()[s_idx],
-                        self._co.ref_theta()[s_idx + 1]
+                        self._co.ref_pos[s_idx],
+                        self._co.ref_pos[s_idx + 1],
+                        self._co.ref_theta[s_idx],
+                        self._co.ref_theta[s_idx + 1]
                     )
                     if theta_cl[i] < -np.pi:
                         theta_cl[i] += 2 * np.pi
@@ -909,10 +908,10 @@ class ReactivePlanner(object):
                     theta_gl[i] = theta_cl[i]
 
                 # Compute curvature of reference at current position
-                k_r = (self._co.ref_curv()[s_idx + 1] - self._co.ref_curv()[s_idx]) * s_lambda + self._co.ref_curv()[
+                k_r = (self._co.ref_curv[s_idx + 1] - self._co.ref_curv[s_idx]) * s_lambda + self._co.ref_curv[
                     s_idx]
-                k_r_d = (self._co.ref_curv_d()[s_idx + 1] - self._co.ref_curv_d()[s_idx]) * s_lambda + \
-                        self._co.ref_curv_d()[s_idx]
+                k_r_d = (self._co.ref_curv_d[s_idx + 1] - self._co.ref_curv_d[s_idx]) * s_lambda + \
+                        self._co.ref_curv_d[s_idx]
 
                 # compute global curvature based on appendix A of Moritz Werling's PhD thesis
                 oneKrD = (1 - k_r * d[i])
