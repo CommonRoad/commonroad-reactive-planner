@@ -6,8 +6,6 @@ __maintainer__ = "Christian Pek"
 __email__ = "Christian.Pek@tum.de"
 __status__ = "Beta"
 
-from commonroad.common.validity import *
-
 import numpy as np
 from abc import ABC, abstractmethod
 

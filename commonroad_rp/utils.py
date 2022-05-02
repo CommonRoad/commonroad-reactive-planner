@@ -1,4 +1,4 @@
-__author__ = "Christian Pek, Gerald Würsching"
+__author__ = "Gerald Würsching, Christian Pek"
 __copyright__ = "TUM Cyber-Physical Systems Group"
 __credits__ = ["BMW Group CAR@TUM, interACT"]
 __version__ = "0.1"
@@ -72,30 +72,6 @@ def compute_pathlength_from_polyline(polyline: np.ndarray) -> np.ndarray:
         distance[i] = distance[i - 1] + np.linalg.norm(polyline[i] - polyline[i - 1])
 
     return np.array(distance)
-
-
-def extend_trajectory(s, d, s_dot, theta, v, a, duration, dT) -> tuple:
-    """
-    Extends a trajectory assuming constant motion
-    :param s: Longitudinal position
-    :param d: Lateral position
-    :param s_dot: Longitudinal velocity
-    :param theta: Orientation
-    :param v: Velocity
-    :param a: Acceleration
-    :param duration: Duration of extension
-    :param dT: Time step of extension
-    :return: Tuple (s,d,theta,v,a)
-    """
-    # compute time array
-    t = np.arange(0, duration + dT, dT)
-    s_n = s + s_dot * t
-    d_n = d + v * np.sin(theta) * t  # np.repeat(d,len(t))
-    theta_n = np.repeat(theta, len(t))
-    v_n = np.repeat(v, len(t))
-    a_n = np.repeat(a, len(t))
-
-    return (s_n, d_n, theta_n, v_n, a_n)
 
 
 def interpolate_angle(x: float, x1: float, x2: float, y1: float, y2: float) -> float:

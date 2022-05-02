@@ -111,8 +111,8 @@ ego_vehicle = None
 
 
 # Run the planner
-# while not goal.is_reached(x_0):
-while current_count <=1:
+while not goal.is_reached(x_0):
+# while current_count <=1:
     current_count = len(record_state_list) - 1
     if current_count % replanning_frequency == 0:
         # new planning cycle -> plan a new optimal trajectory
@@ -128,17 +128,18 @@ while current_count <=1:
         comp_time_end = time.time()
         # END TIMER
 
+        # store planning times
+        planning_times.append(comp_time_end - comp_time_start)
+        print(f"***Total Planning Time: {planning_times[-1]}")
+
         # if the planner fails to find an optimal trajectory -> terminate
         if not optimal:
             print("not optimal")
             break
 
-        # store sampled trajectory bundle for visualization
+        # if desired, store sampled trajectory bundle for visualization
         if plot:
             sampled_trajectory_bundle = deepcopy(planner.bundle.trajectories)
-
-        # store planning times
-        planning_times.append(comp_time_end - comp_time_start)
 
         # correct orientation angle
         new_state_list = planner.shift_orientation(optimal[0])

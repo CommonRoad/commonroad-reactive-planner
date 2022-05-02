@@ -1,14 +1,15 @@
-__author__ = "Christian Pek"
+__author__ = "Christian Pek, Gerald Würsching"
 __copyright__ = "TUM Cyber-Physical Systems Group"
 __credits__ = ["BMW Group CAR@TUM, interACT"]
 __version__ = "0.5"
-__maintainer__ = "Christian Pek"
-__email__ = "Christian.Pek@tum.de"
+__maintainer__ = "Gerald Würsching"
+__email__ = "commonroad@lists.lrz.de"
 __status__ = "Beta"
 
 import numpy as np
 import warnings
 from abc import ABC, abstractmethod
+from methodtools import lru_cache
 
 import commonroad.common.validity as val
 
@@ -287,18 +288,28 @@ class QuinticTrajectory(PolynomialTrajectory):
         """
         p_init, p_init_d, p_init_dd = self.x_0
         p_final, p_final_d, p_final_dd = self.x_d
+        return QuinticTrajectory._calc_coeffs_static(p_init, p_init_d, p_init_dd, p_final, p_final_d, p_final_dd,
+                                                     self.delta_tau)
 
-        t2 = np.power(self.delta_tau, 2)
-        t3 = t2 * self.delta_tau
+    @lru_cache(3024)
+    @classmethod
+    def _calc_coeffs_static(cls, p_init, p_init_d, p_init_dd, p_final, p_final_d, p_final_dd, delta_tau) -> np.ndarray:
+        """
+        Computes the coefficients of the quintic polynomial trajectory
+        :return: The coefficients
+        """
+
+        t2 = np.power(delta_tau, 2)
+        t3 = t2 * delta_tau
         t4 = t2 * t2
-        t5 = t4 * self.delta_tau
+        t5 = t4 * delta_tau
 
         a = np.array([[t3, t4, t5],
                       [3. * t2, 4. * t3, 5. * t4],
-                      [6. * self.delta_tau, 12. * t2, 20. * t3]])
+                      [6. * delta_tau, 12. * t2, 20. * t3]])
 
-        b = np.array([p_final - (p_init + p_init_d * self.delta_tau + .5 * p_init_dd * t2),
-                      p_final_d - (p_init_d + p_init_dd * self.delta_tau),
+        b = np.array([p_final - (p_init + p_init_d * delta_tau + .5 * p_init_dd * t2),
+                      p_final_d - (p_init_d + p_init_dd * delta_tau),
                       p_final_dd - p_init_dd])
 
         # try to solve linear optimization problem
@@ -326,14 +337,19 @@ class QuarticTrajectory(PolynomialTrajectory):
         :return: The coefficients
         """
         p_init, p_init_d, p_init_dd = self.x_0
+        return QuarticTrajectory._calc_coeffs_static_(p_init, p_init_d, p_init_dd,
+                                                      self.delta_tau, self._desired_velocity)
 
-        t2 = np.power(self.delta_tau, 2)
-        t3 = t2 * self.delta_tau
+    @lru_cache(3024)
+    @classmethod
+    def _calc_coeffs_static_(cls, p_init, p_init_d, p_init_dd, delta_tau, _desired_velocity):
+        t2 = np.power(delta_tau, 2)
+        t3 = t2 * delta_tau
 
         a = np.array([[3. * t2, 4. * t3],
-                      [6. * self.delta_tau, 12. * t2]])
+                      [6. * delta_tau, 12. * t2]])
 
-        b = np.array([self._desired_velocity - p_init_d - p_init_dd * self.delta_tau,
+        b = np.array([_desired_velocity - p_init_d - p_init_dd * delta_tau,
                       - p_init_dd])
 
         # try to solve linear optimization problem
@@ -344,3 +360,4 @@ class QuarticTrajectory(PolynomialTrajectory):
             return np.empty(0)
 
         return np.array([p_init, p_init_d, .5 * p_init_dd, x[0], x[1], 0.])
+

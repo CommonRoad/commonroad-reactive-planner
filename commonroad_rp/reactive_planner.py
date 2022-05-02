@@ -1,4 +1,4 @@
-__author__ = "Christian Pek"
+__author__ = "Gerald Würsching, Christian Pek"
 __copyright__ = "TUM Cyber-Physical Systems Group"
 __credits__ = ["BMW Group CAR@TUM, interACT"]
 __version__ = "0.5"
@@ -13,6 +13,10 @@ import numpy as np
 from copy import deepcopy
 from typing import List, Tuple
 import matplotlib.pyplot as plt
+import cProfile
+import multiprocessing
+from multiprocessing import Semaphore
+from multiprocessing.context import Process
 
 # commonroad-io
 from commonroad import TWO_PI
@@ -39,7 +43,6 @@ _LOW_VEL_MODE = False
 # TODO: Fix in kinematic check for high acceleration values
 # TODO: Collision Checker as class variable
 # TODO: implement with getters and setters
-
 # TODO Unified config File for all parameters (equiv. to reachable set toolbox)
 
 
@@ -246,12 +249,12 @@ class ReactivePlanner(object):
                             if s_lon_goal <= 0:
                                 s_lon_goal = t
                             trajectory_lat = QuinticTrajectory(tau_0=0, delta_tau=s_lon_goal, x_0=np.array(x_0_lat),
-                                                            x_d=end_state_lat)
+                                                               x_d=end_state_lat)
 
                         # Switch to sampling over t for high velocities
                         else:
                             trajectory_lat = QuinticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lat),
-                                                            x_d=end_state_lat)
+                                                               x_d=end_state_lat)
                         if trajectory_lat.coeffs is not None:
                             trajectory_sample = TrajectorySample(self.horizon, self.dT, trajectory_long, trajectory_lat)
                             trajectories.append(trajectory_sample)
@@ -263,18 +266,6 @@ class ReactivePlanner(object):
             print('<ReactivePlanner>: %s trajectories sampled' % len(trajectory_bundle._trajectory_bundle))
 
         return trajectory_bundle
-
-    def draw_trajectory_set(self, trajectory_bundle: List[TrajectorySample], step=2):
-        """
-        Draws the trajectory set passed in trajectory_bundle
-        :param trajectory_bundle: Bundle of trajectories (either only feasible or all sampled trajectories)
-        :param step: Choose if you only want to plot every "step" trajectory => default 2
-        """
-        if trajectory_bundle is not None:
-            for i in range(0, len(trajectory_bundle), step):
-                color = 'blue'
-                plt.plot(trajectory_bundle[i].cartesian.x, trajectory_bundle[i].cartesian.y,
-                     color=color, zorder=21, linewidth=0.1, alpha=1.0)
 
     def _compute_initial_states(self, x_0: State) -> (np.ndarray, np.ndarray):
         """
@@ -407,7 +398,7 @@ class ReactivePlanner(object):
         optimal_trajectory = None
 
         # initial index of sampling set to use
-        i = 3  # Time sampling is not used. To get more samples, start with level 1.
+        i = 2  # Time sampling is not used. To get more samples, start with level 1.
 
         # sample until trajectory has been found or sampling sets are empty
         while optimal_trajectory is None and i < self._sampling_level:
@@ -743,20 +734,23 @@ class ReactivePlanner(object):
             print('<ReactivePlanner>: Kinematic check of %s trajectories done' % len(trajectory_bundle.trajectories))
         return feasible_trajectories
 
-    def check_kinematics(self, trajectory_bundle: TrajectoryBundle) -> List[TrajectorySample]:
+    def check_kinematics(self, trajectories: List[TrajectorySample], queue) -> List[TrajectorySample]:
         """
         Checks the kinematics of given trajectories in a bundle and computes the cartesian trajectory information
         Faster function: Lazy evaluation, only kinematically feasible trajectories are evaluated
 
-        :param trajectory_bundle: The trajectory bundle to check
+        :param trajectories: The list of trajectory samples to check
         :return: The list of trajectories which are kinematically feasible
         """
 
         # TODO: Make Debug as config parameter
         DEBUG = False
 
+        if self._DEBUG:
+            self.time_total = 0
+
         feasible_trajectories = list()
-        for trajectory in trajectory_bundle.trajectories:
+        for trajectory in trajectories:
             # create time array and precompute time interval information
             t = np.arange(0, np.round(trajectory.trajectory_long.delta_tau + self.dT, 5), self.dT)
             t2 = np.square(t)
@@ -909,6 +903,16 @@ class ReactivePlanner(object):
                         oneKrD * tanTheta * (kappa_gl[i] * oneKrD / cosTheta - k_r) - (
                         k_r_d * d[i] + k_r * d_velocity[i]))
 
+                """# compute helper variables
+                oneKrD, cosTheta, tanTheta = compute_helper_vars(k_r, d[i], theta_cl[i])
+
+                # compute Cartesian (global) and curvilinear (cl) curvature
+                kappa_gl[i], kappa_cl[i] = compute_cart_and_curv_curvature(k_r, dpp, dp, oneKrD, cosTheta, tanTheta)
+
+                # compute (global) Cartesian velocity and acceleration
+                v[i], a[i] = compute_cart_vel_and_acc(k_r, k_r_d, s_velocity[i], s_acceleration[i], d[i], d_velocity[i],
+                                                      theta_cl[i], kappa_gl[i], oneKrD, cosTheta, tanTheta)"""
+
                 # check kinematics to already discard infeasible trajectories
                 if abs(kappa_gl[i] > self.constraints.kappa_max):
                     # curvature constraint
@@ -941,7 +945,7 @@ class ReactivePlanner(object):
                     feasible = False
                     break
 
-            # if selected polyinomial trajectory is feasible, store it's Cartesian and Curvilinear trajectory
+            # if selected polynomial trajectory is feasible, store it's Cartesian and Curvilinear trajectory
             if feasible:
                 for i in range(0, traj_len):
                     # compute (global) Cartesian position
@@ -978,8 +982,9 @@ class ReactivePlanner(object):
                     feasible_trajectories.append(trajectory)
 
         if self._DEBUG:
-            print('<ReactivePlanner>: Kinematic check of %s trajectories done' % len(trajectory_bundle.trajectories))
-        return feasible_trajectories
+            print('<ReactivePlanner>: Kinematic check of %s trajectories done' % len(trajectories))
+        queue.put(feasible_trajectories)
+        # return feasible_trajectories
 
     def _get_optimal_trajectory(self, trajectory_bundle: TrajectoryBundle, cc: pycrcc.CollisionChecker, draw_traj_set=False) \
             -> TrajectorySample:
@@ -995,15 +1000,34 @@ class ReactivePlanner(object):
         self._infeasible_count_kinematics = 0
 
         # check kinematics of each trajectory
-        # if self._DEBUG:
-        #     profiler = cProfile.Profile()
-        #     profiler.enable()
-
         # USE FASTER FUNCTION WHEN NOT DRAWING TRAJECTORIES
         if not draw_traj_set:
-            feasible_trajectories = self.check_kinematics(trajectory_bundle)
+            num_workers = 8
+            # divide trajectory_bundle.trajectories into chunks
+            chunk_size = math.ceil(len(trajectory_bundle.trajectories) / num_workers)
+            chunks = [trajectory_bundle.trajectories[ii * chunk_size: min(len(trajectory_bundle.trajectories), (ii+1)*chunk_size)] for ii in range(0, num_workers)]
+
+            list_processes = []
+            feasible_trajectories = []
+            queue = multiprocessing.Queue()
+            for chunk in chunks:
+                p = Process(target=self.check_kinematics, args=(chunk, queue))
+                list_processes.append(p)
+                p.start()
+
+            # get return values from queue
+            for p in list_processes:
+                ret = queue.get()
+                feasible_trajectories.extend(ret)
+
+            # wait for all processes to finish
+            for p in list_processes:
+                p.join()
+
+            # feasible_trajectories = self.check_kinematics(trajectory_bundle.trajectories)
         else:
             feasible_trajectories = self.check_kinematics_vis(trajectory_bundle)
+
         self._infeasible_count_kinematics = len(trajectory_bundle.trajectories) - len(feasible_trajectories)
 
         # set feasible trajectories in bundle
@@ -1014,11 +1038,13 @@ class ReactivePlanner(object):
         # go through sorted list of trajectories and check for collisions
         for trajectory in trajectory_bundle.get_sorted_list():
 
+            # compute position and orientation
             pos1 = trajectory.curvilinear.s if self._collision_check_in_cl else trajectory.cartesian.x
             pos2 = trajectory.curvilinear.d if self._collision_check_in_cl else trajectory.cartesian.y
             theta = trajectory.curvilinear.theta if self._collision_check_in_cl else trajectory.cartesian.theta
 
             # check each pose for collisions
+            # TODO do continuous collision checks?
             collide = False
             for i in range(len(pos1)):
                 ego = pycrcc.TimeVariantCollisionObject(self.x_0.time_step + i * self._factor)
@@ -1028,13 +1054,7 @@ class ReactivePlanner(object):
                     collide = True
                     break
             if not collide:
-                # if self._DEBUG:
-                #     profiler.disable()
-                #     profiler.print_stats("time")
                 return trajectory
-        # if self._DEBUG:
-        #     profiler.disable()
-        #     profiler.print_stats("time")
         return None
 
     def convert_cr_trajectory_to_object(self, trajectory: Trajectory):
@@ -1045,10 +1065,8 @@ class ReactivePlanner(object):
         """
         # get shape of vehicle
         shape = Rectangle(self._length, self._width)
-
         # get trajectory prediction
         prediction = TrajectoryPrediction(trajectory, shape)
-
         return DynamicObstacle(42, ObstacleType.CAR, shape, trajectory.state_list[0], prediction)
 
     def shift_orientation(self, trajectory: Trajectory, interval_start=-np.pi, interval_end=np.pi):
@@ -1057,7 +1075,6 @@ class ReactivePlanner(object):
                 state.orientation += 2 * np.pi
             while state.orientation > interval_end:
                 state.orientation -= 2 * np.pi
-
         return trajectory
 
 
@@ -1072,3 +1089,29 @@ def shift_angle_to_interval(angle_list, interval_start=-np.pi, interval_end=np.p
 
     return new_angle_list
 
+
+def compute_helper_vars(k_r, d_i, theta_cl_i):
+    oneKrD = (1 - k_r * d_i)
+    cosTheta = np.cos(theta_cl_i)
+    tanTheta = np.tan(theta_cl_i)
+    return oneKrD, cosTheta, tanTheta
+
+
+def compute_cart_and_curv_curvature(k_r, dpp, dp, oneKrD, cosTheta, tanTheta):
+    # compute global curvature (see appendix A of Moritz Werling's PhD thesis)
+    kappa_gl = (dpp + k_r * dp * tanTheta) * cosTheta * (cosTheta / oneKrD) ** 2 + (
+            cosTheta / oneKrD) * k_r
+    kappa_cl = kappa_gl - k_r
+    return kappa_gl, kappa_cl
+
+
+def compute_cart_vel_and_acc(k_r, k_r_d, s_velocity_i, s_acceleration_i, d_i, d_velocity_i, theta_cl_i, kappa_gl_i, oneKrD, cosTheta, tanTheta):
+
+    # compute (global) Cartesian velocity
+    v = s_velocity_i * (oneKrD / (math.cos(theta_cl_i)))
+
+    # compute (global) Cartesian acceleration
+    a = s_acceleration_i * oneKrD / cosTheta + ((s_velocity_i ** 2) / cosTheta) * (
+            oneKrD * tanTheta * (kappa_gl_i * oneKrD / cosTheta - k_r) - (
+            k_r_d * d_i + k_r * d_velocity_i))
+    return v, a
