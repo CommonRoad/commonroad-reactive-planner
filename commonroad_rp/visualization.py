@@ -2,7 +2,7 @@ __author__ = "Gerald Würsching"
 __copyright__ = "TUM Cyber-Physical Systems Group"
 __version__ = "0.5"
 __maintainer__ = "Gerald Würsching"
-__email__ = "gerald.wuersching@tum.de"
+__email__ = "commonroad@lists.lrz.de"
 __status__ = "Beta"
 
 

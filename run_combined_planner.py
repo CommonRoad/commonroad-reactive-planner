@@ -1,3 +1,11 @@
+__author__ = "Gerald Würsching"
+__copyright__ = "TUM Cyber-Physical Systems Group"
+__credits__ = ["BMW Group CAR@TUM, interACT"]
+__version__ = "0.5"
+__maintainer__ = "Gerald Würsching"
+__email__ = "commonroad@lists.lrz.de"
+__status__ = "Beta"
+
 # standard imports
 import os
 import glob
@@ -43,7 +51,7 @@ planning_problem = list(problem_set.planning_problem_dict.values())[0]
 DT = scenario.dt            # planning time step
 T_H = 2                     # planning horizon
 replanning_frequency = 3    # re-plan every i-th time step
-plot = True                # plot results
+plot = False                # plot results
 
 
 # *************************************
@@ -103,7 +111,8 @@ ego_vehicle = None
 
 
 # Run the planner
-while not goal.is_reached(x_0):
+# while not goal.is_reached(x_0):
+while current_count <=1:
     current_count = len(record_state_list) - 1
     if current_count % replanning_frequency == 0:
         # new planning cycle -> plan a new optimal trajectory
@@ -125,7 +134,8 @@ while not goal.is_reached(x_0):
             break
 
         # store sampled trajectory bundle for visualization
-        sampled_trajectory_bundle = deepcopy(planner.bundle.trajectories)
+        if plot:
+            sampled_trajectory_bundle = deepcopy(planner.bundle.trajectories)
 
         # store planning times
         planning_times.append(comp_time_end - comp_time_start)

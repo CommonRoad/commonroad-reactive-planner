@@ -1,9 +1,9 @@
-__author__ = "Christian Pek"
+__author__ = "Christian Pek, Gerald Würsching"
 __copyright__ = "TUM Cyber-Physical Systems Group"
 __credits__ = ["BMW Group CAR@TUM, interACT"]
 __version__ = "0.1"
-__maintainer__ = "Christian Pek"
-__email__ = "Christian.Pek@tum.de"
+__maintainer__ = "Gerald Würsching"
+__email__ = "commonroad@lists.lrz.de"
 __status__ = "Alpha"
 
 import numpy as np
@@ -98,7 +98,7 @@ def extend_trajectory(s, d, s_dot, theta, v, a, duration, dT) -> tuple:
     return (s_n, d_n, theta_n, v_n, a_n)
 
 
-def interpolate_angle(x: float, x1: float, x2: float, y1: float, y2:float) -> float:
+def interpolate_angle(x: float, x1: float, x2: float, y1: float, y2: float) -> float:
     """
     Interpolates an angle value between two angles according to the miminal value of the absolute difference
     :param x: value of other dimension to interpolate
@@ -122,38 +122,53 @@ def interpolate_angle(x: float, x1: float, x2: float, y1: float, y2:float) -> fl
 class CoordinateSystem:
 
     def __init__(self, reference: np.ndarray):
-        self._reference = reference
-        self._ccosy = CurvilinearCoordinateSystem(reference)
-        self._ref_pos = compute_pathlength_from_polyline(reference)
-        self._ref_curv = compute_curvature_from_polyline(reference)
-        self._ref_theta = compute_orientation_from_polyline(reference)
+        # initialize reference and CCosy
+        self.reference = reference
+
+        # initialize reference state vectors
+        self._ref_pos = compute_pathlength_from_polyline(self.reference)
+        self._ref_curv = compute_curvature_from_polyline(self.reference)
+        self._ref_theta = compute_orientation_from_polyline(self.reference)
         self._ref_curv_d = np.gradient(self._ref_curv, self._ref_pos)
 
     @property
     def reference(self) -> np.ndarray:
-        return self._reference
+        """returns reference path used by CCosy due to slight modifications within the CCosy module"""
+        return np.asarray(self.ccosy.reference_path())
+
+    @reference.setter
+    def reference(self, reference):
+        """set reference path and Curvilinear Coordinate System"""
+        self._reference = reference
+        self._ccosy = CurvilinearCoordinateSystem(reference)
 
     @property
     def ccosy(self) -> CurvilinearCoordinateSystem:
+        """return Curvlinear Coordinate System"""
         return self._ccosy
 
     @property
     def ref_pos(self) -> np.ndarray:
+        """position (s-coordinate) along reference path"""
         return self._ref_pos
 
     @property
     def ref_curv(self) -> np.ndarray:
+        """curvature along reference path"""
         return self._ref_curv
 
     @property
     def ref_curv_d(self) -> np.ndarray:
+        """curvature rate along reference path"""
         return self._ref_curv_d
 
     @property
     def ref_theta(self) -> np.ndarray:
+        """orientation along reference path"""
         return self._ref_theta
 
     def convert_to_cartesian_coords(self, s: float, d: float) -> np.ndarray:
+        """convert curvilinear (s,d) point to Cartesian (x,y) point"""
         try:
             cartesian_coords = self._ccosy.convert_to_cartesian_coords(s, d)
         except:
@@ -162,4 +177,5 @@ class CoordinateSystem:
         return cartesian_coords
 
     def convert_to_curvilinear_coords(self, x: float, y: float) -> np.ndarray:
+        """convert Cartesian (x,y) point to curviinear (s,d) point"""
         return self._ccosy.convert_to_curvilinear_coords(x, y)
