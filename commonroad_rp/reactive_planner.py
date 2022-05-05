@@ -10,10 +10,8 @@ __status__ = "Beta"
 import math
 import time
 import numpy as np
-from copy import deepcopy
 from typing import List, Tuple
 import matplotlib.pyplot as plt
-import cProfile
 import multiprocessing
 from multiprocessing import Semaphore
 from multiprocessing.context import Process
@@ -73,7 +71,6 @@ class ReactivePlanner(object):
             N)
         assert is_positive(t_h), '<ReactivePlanner>: provided t_h is not correct! dt = {}'.format(dt)
         assert np.isclose(t_h, N * dt), '<ReactivePlanner>: Provided time horizon information is not correct!'
-        # assert np.isclose(N * dt, t_h)
 
         # Set horizon variables
         self.horizon = t_h
@@ -378,10 +375,11 @@ class ReactivePlanner(object):
             lat_list.append(
                 [trajectory.curvilinear.d[i], trajectory.curvilinear.d_dot[i], trajectory.curvilinear.d_ddot[i]])
 
+        # make Cartesian and Curvilinear Trajectory
         cartTraj = Trajectory(self.x_0.time_step, cart_list)
-        freTraj = Trajectory(self.x_0.time_step, cl_list)
+        cvlnTraj = Trajectory(self.x_0.time_step, cl_list)
 
-        return (cartTraj, freTraj, lon_list, lat_list)
+        return cartTraj, cvlnTraj, lon_list, lat_list
 
     def plan(self, x_0: State, cc: pycrcc.CollisionChecker, cl_states=None, draw_traj_set=False) -> tuple:
         """
@@ -419,12 +417,8 @@ class ReactivePlanner(object):
             if self._DEBUG:
                 print('<ReactivePlanner>: Starting at sampling density {} of {}'.format(i + 1, self._sampling_level))
 
-            # create trajectory bundle
+            # sample trajectory bundle
             bundle = self._create_trajectory_bundle(x_0_lon, x_0_lat, samp_level=i)
-
-            # store all sampled trajectories (only if it is required for visualization)
-            # if self.draw_traj_set:
-            #     self.bundle = deepcopy(bundle)
 
             # get optimal trajectory
             t0 = time.time()
@@ -438,8 +432,9 @@ class ReactivePlanner(object):
                 print('<ReactivePlanner>: Rejected {} infeasible trajectories due to collisions'.format(
                     self.no_of_infeasible_trajectories_collision()))
 
-            # increase sampling level
+            # increase sampling level (i.e., density) if no optimal trajectory could be found
             i = i + 1
+
         if optimal_trajectory is None and x_0.velocity <= 0.1:
             print('<ReactivePlanner>: planning standstill for the current scenario')
             optimal_trajectory = self._compute_standstill_trajectory(x_0, x_0_lon, x_0_lat)
@@ -453,11 +448,9 @@ class ReactivePlanner(object):
                       'Switching to emergency mode!')
         else:
             if self._DEBUG:
-                print(
-                    '<ReactivePlanner>: Found optimal trajectory with costs = {}, which '
-                    'corresponds to {} percent of seen costs'.format(
-                        optimal_trajectory.cost,
-                        ((optimal_trajectory.cost - bundle.min_costs().cost) / (
+                print('<ReactivePlanner>: Found optimal trajectory with costs = {}, which '
+                      'corresponds to {} percent of seen costs'.format(
+                        optimal_trajectory.cost, ((optimal_trajectory.cost - bundle.min_costs().cost) / (
                                 bundle.max_costs().cost - bundle.min_costs().cost))))
 
             self._optimal_cost = optimal_trajectory.cost
@@ -498,7 +491,7 @@ class ReactivePlanner(object):
     def _check_kinematics(self, trajectories: List[TrajectorySample], queue_1=None, queue_2=None):
         """
         Checks the kinematics of given trajectories in a bundle and computes the cartesian trajectory information
-        Faster function: Lazy evaluation, only kinematically feasible trajectories are evaluated
+        Lazy evaluation, only kinematically feasible trajectories are evaluated further
 
         :param trajectories: The list of trajectory samples to check
         :param queue_1: Multiprocessing.Queue() object for storing feasible trajectories
@@ -544,7 +537,6 @@ class ReactivePlanner(object):
                 d[:traj_len] = trajectory.trajectory_lat.calc_position(t, t2, t3, t4, t5)  # lat pos
                 d_velocity[:traj_len] = trajectory.trajectory_lat.calc_velocity(t, t2, t3, t4)  # lat velocity
                 d_acceleration[:traj_len] = trajectory.trajectory_lat.calc_acceleration(t, t2, t3)  # lat acceleration
-
             else:
                 # compute normalized travelled distance for low velocity mode of lateral planning
                 s1 = s - s[0]
@@ -577,7 +569,7 @@ class ReactivePlanner(object):
             feasible = True
 
             if not self.draw_traj_set:
-                # pre-filter with fast underapproximative check for feasibility
+                # pre-filter with quick underapproximative check for feasibility
                 if np.any(np.abs(s_acceleration) > self.constraints.a_max):
                     if DEBUG:
                         print(f"Acceleration {np.max(np.abs(s_acceleration))}")
@@ -788,9 +780,10 @@ class ReactivePlanner(object):
         num_workers = 8
         # divide trajectory_bundle.trajectories into chunks
         chunk_size = math.ceil(len(trajectory_bundle.trajectories) / num_workers)
-        chunks = [trajectory_bundle.trajectories[ii * chunk_size: min(len(trajectory_bundle.trajectories), (ii+1)*chunk_size)] for ii in range(0, num_workers)]
+        chunks = [trajectory_bundle.trajectories[ii * chunk_size: min(len(trajectory_bundle.trajectories),
+                                                                      (ii+1)*chunk_size)] for ii in range(0, num_workers)]
 
-        # initialize list of processes and Queues
+        # initialize list of Processes and Queues
         list_processes = []
         feasible_trajectories = []
         queue_1 = multiprocessing.Queue()

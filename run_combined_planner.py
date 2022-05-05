@@ -17,6 +17,7 @@ import numpy as np
 
 # commonroad-io
 from commonroad.common.file_reader import CommonRoadFileReader
+from commonroad.scenario.trajectory import Trajectory
 
 # commonroad_dc
 from commonroad_dc.boundary.boundary import create_road_boundary_obstacle
@@ -27,7 +28,7 @@ from commonroad_route_planner.route_planner import RoutePlanner
 
 # reactive planner
 from commonroad_rp.reactive_planner import ReactivePlanner
-from commonroad_rp.visualization import visualize_planning_result, visualize_collision_checker
+from commonroad_rp.visualization import visualize_planner_at_timestep, plot_final_trajectory
 
 
 # *************************************
@@ -174,8 +175,9 @@ while not goal.is_reached(x_0):
     print(f"current time step: {current_count}")
     # draw scenario + planning solution
     if plot:
-        visualize_planning_result(scenario=scenario, planning_problem=planning_problem, ego=ego_vehicle,
-                                  pos=positions, traj_set=sampled_trajectory_bundle, ref_path=ref_path,
-                                  timestep=current_count)
+        visualize_planner_at_timestep(scenario=scenario, planning_problem=planning_problem, ego=ego_vehicle,
+                                      pos=positions, traj_set=sampled_trajectory_bundle, ref_path=ref_path,
+                                      timestep=current_count)
 
-# TODO: store solution trajectory of ego vehicle as CR trajectory
+# plot occupancies of final ego vehicle trajectory
+plot_final_trajectory(scenario, planning_problem, record_state_list, (planner._length, planner._width))

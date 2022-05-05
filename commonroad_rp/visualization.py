@@ -7,7 +7,7 @@ __status__ = "Beta"
 
 
 # standard imports
-from typing import List
+from typing import List, Tuple
 
 # third party
 import matplotlib.pyplot as plt
@@ -16,8 +16,10 @@ import numpy as np
 # commonroad-io
 from commonroad.scenario.scenario import Scenario
 from commonroad.scenario.obstacle import DynamicObstacle
+from commonroad.scenario.trajectory import State
 from commonroad.planning.planning_problem import PlanningProblem
 from commonroad.visualization.mp_renderer import MPRenderer
+from commonroad.geometry.shape import Rectangle
 
 # commonroad_dc
 from commonroad_dc import pycrcc
@@ -38,13 +40,13 @@ def visualize_collision_checker(scenario: Scenario, cc: pycrcc.CollisionChecker)
     rnd.render(show=True)
 
 
-def visualize_planning_result(scenario: Scenario, planning_problem: PlanningProblem, ego: DynamicObstacle,
-                              pos: np.ndarray, timestep: int, traj_set: List[TrajectorySample] = None,
-                              ref_path: np.ndarray = None, rnd: MPRenderer = None, save_path: str = None):
+def visualize_planner_at_timestep(scenario: Scenario, planning_problem: PlanningProblem, ego: DynamicObstacle,
+                                  pos: np.ndarray, timestep: int, traj_set: List[TrajectorySample] = None,
+                                  ref_path: np.ndarray = None, rnd: MPRenderer = None, save_path: str = None):
     """
-    Function to visualize complete planning result from the reactive planner for a given time step
+    Function to visualize planning result from the reactive planner for a given time step
     :param scenario: CommonRoad scenario object
-    :param: planning_problem: CommonRoad PlanningProblem object
+    :param planning_problem CommonRoad Planning problem object
     :param ego: Ego vehicle as CommonRoad DynamicObstacle object
     :param pos: positions of planned trajectory [(nx2) np.ndarray]
     :param timestep: current time step of scenario to plot
@@ -60,7 +62,8 @@ def visualize_planning_result(scenario: Scenario, planning_problem: PlanningProb
     # visualize scenario
     scenario.draw(rnd, draw_params={'time_begin': timestep})
     # visualize planning problem
-    planning_problem.draw(rnd, draw_params={"initial_state": {"state": {"draw_arrow": False}}})
+    planning_problem.draw(rnd, draw_params={'planning_problem': {'initial_state': {'state': {
+                'draw_arrow': False, "radius": 0.5}}}})
     # visualize ego vehicle
     ego.draw(rnd, draw_params={"time_begin": timestep,
                                "dynamic_obstacle": {
@@ -107,5 +110,41 @@ def visualize_planning_result(scenario: Scenario, planning_problem: PlanningProb
                     bbox_inches='tight')
 
 
-def plot_final_solution():
-    pass
+def plot_final_trajectory(scenario: Scenario, planning_problem: PlanningProblem, state_list: List[State],
+                          dimensions: Tuple, ref_path: np.ndarray = None, save_path: str = None):
+    """
+    Function plots occupancies for a given CommonRoad trajectory (of the ego vehicle)
+    :param scenario: CommonRoad scenario object
+    :param planning_problem CommonRoad Planning problem object
+    :param state_list: List of trajectory States
+    :param dimensions: Tuple (length, width) of ego vehicle
+    :param ref_path: Reference path as [(nx2) np.ndarray] (optional)
+    :param save_path: Path to save plot as .png (optional)
+    """
+    # create renderer object (if no existing renderer is passed)
+    rnd = MPRenderer(figsize=(20, 10))
+
+    # visualize scenario
+    scenario.draw(rnd, draw_params={'time_begin': 0})
+    # visualize planning problem
+    planning_problem.draw(rnd, draw_params={'planning_problem': {'initial_state': {'state': {
+                'draw_arrow': False, "radius": 0.5}}}})
+    # visualize occupancies of trajectory
+    for state in state_list:
+        occ_pos = Rectangle(length=dimensions[0], width=dimensions[1], center=state.position,
+                            orientation=state.orientation)
+        occ_pos.draw(rnd, draw_params={'shape': {'rectangle': {'facecolor': '#E37222', 'opacity': 0.6}}})
+    # render scenario and occupancies
+    rnd.render()
+
+    # visualize reference path
+    if ref_path is not None:
+        rnd.ax.plot(ref_path[:, 0], ref_path[:, 1], color='g', marker='.', markersize=1, zorder=19, linewidth=0.8,
+                    label='reference path')
+
+    # show plot
+    plt.show(block=True)
+    # save as .png file
+    if save_path is not None:
+        plt.savefig(f"{save_path}/{scenario.scenario_id}_final_trajectory.png", format='png', dpi=300,
+                    bbox_inches='tight')
