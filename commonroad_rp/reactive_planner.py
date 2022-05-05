@@ -19,7 +19,6 @@ from multiprocessing import Semaphore
 from multiprocessing.context import Process
 
 # commonroad-io
-from commonroad import TWO_PI
 from commonroad.common.validity import *
 from commonroad.geometry.shape import Rectangle
 from commonroad.prediction.prediction import TrajectoryPrediction
@@ -43,7 +42,11 @@ _LOW_VEL_MODE = False
 # TODO: Fix in kinematic check for high acceleration values
 # TODO: Collision Checker as class variable
 # TODO: implement with getters and setters
-# TODO Unified config File for all parameters (equiv. to reachable set toolbox)
+# TODO: Unified config File for all parameters (equiv. to reachable set toolbox)
+# TODO: Make multiprocessing optional
+# TODO: introduce mode parameter for longitudinal planning
+# TODO: acceleration-based sampling
+# TODO: logging instead of print statements
 
 
 class ReactivePlanner(object):
@@ -88,7 +91,7 @@ class ReactivePlanner(object):
         self.x_0: State = None
 
         # store sampled trajectory set of last run
-        self.bundle = None
+        self.stored_trajectories = None
 
         # store total number of trajectories of last run
         self._total_count = 0
@@ -123,6 +126,7 @@ class ReactivePlanner(object):
         # DEBUG Mode
         self._DEBUG = True
 
+    # TODO: property & setter
     def set_t_sampling_parameters(self, t_min, dt, horizon):
         """
         Sets sample parameters of time horizon
@@ -133,7 +137,8 @@ class ReactivePlanner(object):
         self._sampling_t = TimeSampling(t_min, horizon, self._sampling_level, dt)
         self.N = int(round(horizon / dt))
         self.horizon = horizon
-    
+
+    # TODO: property & setter
     def set_d_sampling_parameters(self, delta_d_min, delta_d_max):
         """
         Sets sample parameters of lateral offset
@@ -143,7 +148,8 @@ class ReactivePlanner(object):
         assert delta_d_min <= 0, "<Reactive_planner>: delta_d_min must be not positive"
         assert delta_d_max >= 0, "<Reactive_planner>: delta_d_max must be not negative"
         self._sampling_d = PositionSampling(delta_d_min, delta_d_max, self._sampling_level)
-    
+
+    # TODO: property & setter
     def set_v_sampling_parameters(self, v_min, v_max):
         """
         Sets sample parameters of sampled velocity interval
@@ -152,6 +158,7 @@ class ReactivePlanner(object):
         """
         self._sampling_v = VelocitySampling(v_min, v_max, self._sampling_level)
 
+    # TODO: make setter
     def set_reference_path(self, reference_path: np.ndarray):
         """
         Sets the reference path and automatically creates a coordinate system
@@ -183,6 +190,7 @@ class ReactivePlanner(object):
         if self._DEBUG:
             print('<Reactive_planner>: Sampled interval of velocity: {} m/s - {} m/s'.format(min_v, max_v))    
 
+    # TODO: not used currently -> merge with reference path and make property
     def coordinate_system(self) -> CoordinateSystem:
         """
         Returns the created coordinate system of the reactive planner
@@ -199,6 +207,7 @@ class ReactivePlanner(object):
         return len(self._sampling_v.to_range(samp_level)) * len(self._sampling_d.to_range(samp_level)) * len(
             self._sampling_t.to_range(samp_level))
 
+    # TODO: can be removed
     def no_of_infeasible_trajectories_collision(self) -> int:
         """
         Returns the number of infeasible trajectories due to collision
@@ -206,6 +215,7 @@ class ReactivePlanner(object):
         """
         return self._infeasible_count_collision
 
+    # TODO: can be removed
     def no_of_infeasible_trajectories_kinematics(self) -> int:
         """
         Returns the number of infeasible trajectories due to kinematics
@@ -260,20 +270,20 @@ class ReactivePlanner(object):
                             trajectories.append(trajectory_sample)
 
         # perform pre check and order trajectories according their cost
-        trajectory_bundle = TrajectoryBundle(trajectories, cost_function=DefaultCostFunction(self._desired_speed))
+        trajectory_bundle = TrajectoryBundle(trajectories, cost_function=DefaultCostFunction(self._desired_speed, desired_d=0))
         self._total_count = len(trajectory_bundle._trajectory_bundle)
         if self._DEBUG:
             print('<ReactivePlanner>: %s trajectories sampled' % len(trajectory_bundle._trajectory_bundle))
 
         return trajectory_bundle
 
+    # TODO: Check & Refactor this function
     def _compute_initial_states(self, x_0: State) -> (np.ndarray, np.ndarray):
         """
         Computes the initial states for the polynomial planner based on a CommonRoad state
         :param x_0: The CommonRoad state object representing the initial state of the vehicle
         :return: A tuple containing the initial longitudinal and lateral states (lon,lat)
         """
-
         # compute curvilinear position
         try:
             s, d = self._co.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
@@ -382,7 +392,11 @@ class ReactivePlanner(object):
         :param draw_traj_set: Boolean visualize trajectory set yes/no -> default: False
         :return: Optimal trajectory as tuple
         """
+        # set Cartesian initial state
         self.x_0 = x_0
+
+        # draw trajectory? TODO: add as config param
+        self.draw_traj_set = draw_traj_set
 
         # compute initial states
         if cl_states is not None:
@@ -394,27 +408,27 @@ class ReactivePlanner(object):
             print('<Reactive Planner>: initial state is: lon = {} / lat = {}'.format(x_0_lon, x_0_lat))
             print('<Reactive Planner>: desired velocity is {} m/s'.format(self._desired_speed))
 
-        # optimal trajectory dummy
+        # initialize optimal trajectory dummy
         optimal_trajectory = None
 
         # initial index of sampling set to use
-        i = 2  # Time sampling is not used. To get more samples, start with level 1.
+        i = 1  # Time sampling is not used. To get more samples, start with level 1.
 
         # sample until trajectory has been found or sampling sets are empty
         while optimal_trajectory is None and i < self._sampling_level:
             if self._DEBUG:
                 print('<ReactivePlanner>: Starting at sampling density {} of {}'.format(i + 1, self._sampling_level))
 
-            # plan trajectory bundle
+            # create trajectory bundle
             bundle = self._create_trajectory_bundle(x_0_lon, x_0_lat, samp_level=i)
 
             # store all sampled trajectories (only if it is required for visualization)
-            if draw_traj_set:
-                self.bundle = deepcopy(bundle)
+            # if self.draw_traj_set:
+            #     self.bundle = deepcopy(bundle)
 
             # get optimal trajectory
             t0 = time.time()
-            optimal_trajectory = self._get_optimal_trajectory(bundle, cc, draw_traj_set)
+            optimal_trajectory = self._get_optimal_trajectory(bundle, cc)
             if self._DEBUG:
                 print('<ReactivePlanner>: Checked trajectories in {} seconds'.format(time.time() - t0))
 
@@ -424,6 +438,7 @@ class ReactivePlanner(object):
                 print('<ReactivePlanner>: Rejected {} infeasible trajectories due to collisions'.format(
                     self.no_of_infeasible_trajectories_collision()))
 
+            # increase sampling level
             i = i + 1
         if optimal_trajectory is None and x_0.velocity <= 0.1:
             print('<ReactivePlanner>: planning standstill for the current scenario')
@@ -480,276 +495,26 @@ class ReactivePlanner(object):
                                           np.repeat(x_0_lon[2], self.N))
         return p
 
-    def check_kinematics_vis(self, trajectory_bundle: TrajectoryBundle) -> List[TrajectorySample]:
-        """
-        Checks the kinematics of given trajectories in a bundle and computes the cartesian trajectory information
-        Slower function used for visualization: all trajectories (kinematically feasible and infeasible) are evaluated
-
-        :param trajectory_bundle: The trajectory bundle to check
-        :return: The list of trajectories which are kinematically feasible
-        """
-
-        DEBUG = False
-
-        feasible_trajectories = list()
-        infeasible_trajectories = list()
-        for trajectory in trajectory_bundle.trajectories:
-            # create time array and precompute time interval information
-            t = np.arange(0, np.round(trajectory.trajectory_long.delta_tau + self.dT, 5), self.dT)
-            t2 = np.square(t)
-            t3 = t2 * t
-            t4 = np.square(t2)
-            t5 = t4 * t
-
-            # compute position, velocity, acceleration from trajectory sample
-            s = trajectory.trajectory_long.calc_position(t, t2, t3, t4, t5)  # lon pos
-            s_velocity = trajectory.trajectory_long.calc_velocity(t, t2, t3, t4)  # lon velocity
-            s_acceleration = trajectory.trajectory_long.calc_acceleration(t, t2, t3)  # lon acceleration
-
-            # At low speeds, we have to sample the lateral motion over the travelled distance rather than time.
-            if not _LOW_VEL_MODE:
-                d = trajectory.trajectory_lat.calc_position(t, t2, t3, t4, t5)  # lat pos
-                d_velocity = trajectory.trajectory_lat.calc_velocity(t, t2, t3, t4)  # lat velocity
-                d_acceleration = trajectory.trajectory_lat.calc_acceleration(t, t2, t3)  # lat acceleration
-
-            else:
-                # compute normalized travelled distance for low velocity mode of lateral planning
-                s1 = s - s[0]
-                s2 = np.square(s1)
-                s3 = s2 * s1
-                s4 = np.square(s2)
-                s5 = s4 * s1
-
-                d = trajectory.trajectory_lat.calc_position(s1, s2, s3, s4, s5)  # lat pos
-                # in LOW_VEL_MODE d_velocity is actually d' (see Diss. Moritz Werling  p.124)
-                d_velocity = trajectory.trajectory_lat.calc_velocity(s1, s2, s3, s4)  # lat velocity
-                d_acceleration = trajectory.trajectory_lat.calc_acceleration(s1, s2, s3)  # lat acceleration
-
-            # Compute cartesian information of trajectory
-            s_length = len(s)
-            x = np.zeros(s_length)
-            y = np.zeros(s_length)
-            theta_gl = np.zeros(s_length)
-            theta_cl = np.zeros(s_length)
-            v = np.zeros(s_length)
-            a = np.zeros(s_length)
-            kappa_gl = np.zeros(s_length)
-            kappa_cl = np.zeros(s_length)
-            feasible = True
-            for i in range(0, s_length):
-                # compute Global position
-                pos: np.ndarray = self._co.convert_to_cartesian_coords(s[i], d[i])
-
-                if pos is not None:
-                    x[i] = pos[0]
-                    y[i] = pos[1]
-                else:
-                    feasible = False
-                    if DEBUG:
-                        print("Out of projection domain")
-                    break
-
-                # compute orientations
-                if not _LOW_VEL_MODE:
-                    if s_velocity[i] > 0.001:
-                        dp = d_velocity[i] / s_velocity[i]
-                    else:
-                        if d_velocity[i] > 0.001:
-                            dp = None
-                        else:
-                            dp = 0.
-                    ddot = d_acceleration[i] - dp * s_acceleration[i]
-
-                    if s_velocity[i] > 0.001:
-                        dpp = ddot / (s_velocity[i] ** 2)
-                    else:
-                        if np.abs(ddot) > 0.00003:
-                            dpp = None
-                        else:
-                            dpp = 0.
-                else:
-                    dp = d_velocity[i]
-                    dpp = d_acceleration[i]
-
-                s_idx = np.argmin(np.abs(self._co.ref_pos - s[i]))
-                if self._co.ref_pos[s_idx] < s[i]:
-                    s_idx += 1
-
-                if s_idx + 1 >= len(self._co.ref_pos):
-                    feasible = False
-                    break
-
-                s_lambda = (self._co.ref_pos[s_idx] - s[i]) / (
-                        self._co.ref_pos[s_idx + 1] - self._co.ref_pos[s_idx])
-
-                # add cl and gl orientation
-                if s_velocity[i] > 0.005:
-                    if _LOW_VEL_MODE:
-                        theta_cl[i] = np.arctan2(dp, 1.0)
-                    else:
-                        theta_cl[i] = np.arctan2(d_velocity[i], s_velocity[i])
-                    theta_gl[i] = theta_cl[i] + interpolate_angle(
-                        s[i],
-                        self._co.ref_pos[s_idx],
-                        self._co.ref_pos[s_idx + 1],
-                        self._co.ref_theta[s_idx],
-                        self._co.ref_theta[s_idx + 1]
-                    )
-                    if theta_gl[i] < -np.pi:
-                        theta_gl[i] += 2 * np.pi
-                    if theta_gl[i] > np.pi:
-                        theta_gl[i] -= 2 * np.pi
-                    # theta_gl[i] = theta_cl[i] + (
-                    #         self._co.ref_theta[s_idx + 1] - self._co.ref_theta[s_idx]) * s_lambda + \
-                    #               self._co.ref_theta[s_idx]
-
-                else:
-                    # theta_cl.append(np.interp(s[i], self._co.ref_pos, self._co.ref_theta))
-                    # theta_cl[i] = (self._co.ref_theta[s_idx + 1] - self._co.ref_theta[s_idx]) * s_lambda + \
-                    #               self._co.ref_theta[s_idx]
-                    theta_cl[i] = interpolate_angle(
-                        s[i],
-                        self._co.ref_pos[s_idx],
-                        self._co.ref_pos[s_idx + 1],
-                        self._co.ref_theta[s_idx],
-                        self._co.ref_theta[s_idx + 1]
-                    )
-                    if theta_cl[i] < -np.pi:
-                        theta_cl[i] += 2 * np.pi
-                    if theta_cl[i] > np.pi:
-                        theta_cl[i] -= 2 * np.pi
-                    theta_gl[i] = theta_cl[i]
-
-                # Compute curvature of reference at current position
-                k_r = (self._co.ref_curv[s_idx + 1] - self._co.ref_curv[s_idx]) * s_lambda + self._co.ref_curv[
-                    s_idx]
-                k_r_d = (self._co.ref_curv_d[s_idx + 1] - self._co.ref_curv_d[s_idx]) * s_lambda + \
-                        self._co.ref_curv_d[s_idx]
-
-                # compute global curvature based on appendix A of Moritz Werling's PhD thesis
-                oneKrD = (1 - k_r * d[i])
-                cosTheta = np.cos(theta_cl[i])
-                tanTheta = np.tan(theta_cl[i])
-                kappa_gl[i] = (dpp + k_r * dp * tanTheta) * cosTheta * (cosTheta / oneKrD) ** 2 + (
-                        cosTheta / oneKrD) * k_r
-                kappa_cl[i] = kappa_gl[i] - k_r
-
-                # velocity
-                v[i] = s_velocity[i] * (oneKrD / (np.cos(theta_cl[i])))
-
-                # compute acceleration
-                a[i] = s_acceleration[i] * oneKrD / cosTheta + ((s_velocity[i] ** 2) / cosTheta) * (
-                        oneKrD * tanTheta * (kappa_gl[i] * oneKrD / cosTheta - k_r) - (
-                        k_r_d * d[i] + k_r * d_velocity[i]))
-
-            # changed by GW: for visualization of kinematic infeasible trajectories
-            for i in range(0, s_length):
-                # check kinematics to already discard infeasible trajectories
-                if abs(kappa_gl[i] > self.constraints.kappa_max):
-                    if DEBUG:
-                        print(f"Kappa {kappa_gl[i]} at step {i}")
-                    feasible = False
-                    break
-                if abs((kappa_gl[i] - kappa_gl[i - 1]) / self.dT if i > 0 else 0.) > self.constraints.kappa_dot_max:
-                    if DEBUG:
-                        print(f"KappaDOT {abs((kappa_gl[i] - kappa_gl[i - 1]) / self.dT if i > 0 else 0.)} between step {i-1} and {i}")
-                    feasible = False
-                    break
-                if abs(a[i]) > self.constraints.a_max:
-                    if DEBUG:
-                        print(f"Acceleration {a[i]} at step {i}")
-                    feasible = False
-                    break
-                if abs(v[i]) < -0.1:
-                    if DEBUG:
-                        print(f"Velocity {v[i]} at step {i}")
-                    feasible = False
-                    break
-
-                if abs((theta_gl[i - 1] - theta_gl[i]) / self.dT if i > 0 else 0.) > self.constraints.theta_dot_max:
-                    if DEBUG:
-                        print(f"Theta_dot {(theta_gl[i - 1] - theta_gl[i]) / self.dT if i > 0 else 0.} between step {i-1} and {i}")
-                    feasible = False
-                    break
-
-            if feasible:
-                # store Cartesian trajectory
-                trajectory.cartesian = CartesianSample(x, y, theta_gl, v, a, kappa_gl,
-                                                       np.append([0], np.diff(kappa_gl)))
-
-                # store Curvilinear trajectory
-                trajectory.curvilinear = CurviLinearSample(s, d, theta_gl, ss=s_velocity, sss=s_acceleration,
-                                                           dd=d_velocity,
-                                                           ddd=d_acceleration)
-
-                # check if trajectories planning horizon is shorter than expected and extend if necessary
-                # if self.horizon > trajectory.trajectory_long.delta_tau:
-                if self.N + 1 > len(trajectory.cartesian.x):
-                    trajectory.enlarge(self.N + 1 - len(trajectory.cartesian.x), self.dT)
-
-                if self.N + 1 != len(trajectory.cartesian.x):
-                    print(self.N)
-                    print(self.horizon)
-                    print(self.dT)
-                    print(self.horizon / self.dT)
-                    print(len(trajectory.cartesian.x))
-                    print(self._sampling_t._db)
-                    print(t)
-                assert self.N + 1 == len(trajectory.cartesian.x) == len(trajectory.cartesian.y) == len(
-                    trajectory.cartesian.theta), '<ReactivePlanner/kinematics>: Trajectory computation is incorrect!' \
-                                                 ' Lenghts of state variables is not equal.'
-                feasible_trajectories.append(trajectory)
-
-            # changed by GW: store also infeasible trajectories for visualization
-            if not feasible:
-                # store Cartesian trajectory
-                trajectory.cartesian = CartesianSample(x, y, theta_gl, v, a, kappa_gl,
-                                                       np.append([0], np.diff(kappa_gl)))
-                # store Curvilinear trajectory
-                trajectory.curvilinear = CurviLinearSample(s, d, theta_gl, ss=s_velocity, sss=s_acceleration,
-                                                           dd=d_velocity,
-                                                           ddd=d_acceleration)
-                # check if trajectories planning horizon is shorter than expected and extend if necessary
-                # if self.horizon > trajectory.trajectory_long.delta_tau:
-                if self.N + 1 > len(trajectory.cartesian.x):
-                    trajectory.enlarge(self.N + 1 - len(trajectory.cartesian.x), self.dT)
-
-                if self.N + 1 != len(trajectory.cartesian.x):
-                    print(self.N)
-                    print(self.horizon)
-                    print(self.dT)
-                    print(self.horizon / self.dT)
-                    print(len(trajectory.cartesian.x))
-                    print(self._sampling_t._db)
-                    print(t)
-                assert self.N + 1 == len(trajectory.cartesian.x) == len(trajectory.cartesian.y) == len(
-                    trajectory.cartesian.theta), '<ReactivePlanner/kinematics>: Trajectory computation is incorrect!' \
-                                                 ' Lenghts of state variables is not equal.'
-                infeasible_trajectories.append(trajectory)
-
-        # store all trajectories in self.bundle
-        self.bundle.trajectories = feasible_trajectories + infeasible_trajectories
-
-        if self._DEBUG:
-            print('<ReactivePlanner>: Kinematic check of %s trajectories done' % len(trajectory_bundle.trajectories))
-        return feasible_trajectories
-
-    def check_kinematics(self, trajectories: List[TrajectorySample], queue) -> List[TrajectorySample]:
+    def _check_kinematics(self, trajectories: List[TrajectorySample], queue_1=None, queue_2=None):
         """
         Checks the kinematics of given trajectories in a bundle and computes the cartesian trajectory information
         Faster function: Lazy evaluation, only kinematically feasible trajectories are evaluated
 
         :param trajectories: The list of trajectory samples to check
-        :return: The list of trajectories which are kinematically feasible
+        :param queue_1: Multiprocessing.Queue() object for storing feasible trajectories
+        :param queue_2: Multiprocessing.Queue() object for storing infeasible trajectories (only vor visualization)
+        :return: The list of output trajectories
         """
 
         # TODO: Make Debug as config parameter
         DEBUG = False
 
-        if self._DEBUG:
-            self.time_total = 0
-
+        # initialize lists for output trajectories
+        # infeasible trajectory list is only used for visualization when self.draw_traj_set is True
         feasible_trajectories = list()
+        infeasible_trajectories = list()
+
+        # loop over list of trajectories
         for trajectory in trajectories:
             # create time array and precompute time interval information
             t = np.arange(0, np.round(trajectory.trajectory_long.delta_tau + self.dT, 5), self.dT)
@@ -811,17 +576,18 @@ class ReactivePlanner(object):
             # Initialize Feasibility boolean
             feasible = True
 
-            # pre-filter with fast underapproximative check for feasibility
-            if np.any(np.abs(s_acceleration) > self.constraints.a_max):
-                if DEBUG:
-                    print(f"Acceleration {np.max(np.abs(s_acceleration))}")
-                feasible = False
-                continue
-            if np.any(s_velocity < -0.1):
-                if DEBUG:
-                    print(f"Velocity {min(s_velocity)} at step")
-                feasible = False
-                continue
+            if not self.draw_traj_set:
+                # pre-filter with fast underapproximative check for feasibility
+                if np.any(np.abs(s_acceleration) > self.constraints.a_max):
+                    if DEBUG:
+                        print(f"Acceleration {np.max(np.abs(s_acceleration))}")
+                    feasible = False
+                    continue
+                if np.any(s_velocity < -0.1):
+                    if DEBUG:
+                        print(f"Velocity {min(s_velocity)} at step")
+                    feasible = False
+                    continue
 
             for i in range(0, traj_len):
                 # compute orientations
@@ -903,50 +669,46 @@ class ReactivePlanner(object):
                         oneKrD * tanTheta * (kappa_gl[i] * oneKrD / cosTheta - k_r) - (
                         k_r_d * d[i] + k_r * d_velocity[i]))
 
-                """# compute helper variables
-                oneKrD, cosTheta, tanTheta = compute_helper_vars(k_r, d[i], theta_cl[i])
-
-                # compute Cartesian (global) and curvilinear (cl) curvature
-                kappa_gl[i], kappa_cl[i] = compute_cart_and_curv_curvature(k_r, dpp, dp, oneKrD, cosTheta, tanTheta)
-
-                # compute (global) Cartesian velocity and acceleration
-                v[i], a[i] = compute_cart_vel_and_acc(k_r, k_r_d, s_velocity[i], s_acceleration[i], d[i], d_velocity[i],
-                                                      theta_cl[i], kappa_gl[i], oneKrD, cosTheta, tanTheta)"""
-
+                # TODO: Outsource Checks to Constraints class?
                 # check kinematics to already discard infeasible trajectories
                 if abs(kappa_gl[i] > self.constraints.kappa_max):
                     # curvature constraint
                     if DEBUG:
                         print(f"Kappa {kappa_gl[i]} at step {i}")
                     feasible = False
-                    break
+                    if not self.draw_traj_set:
+                        break
                 if abs((kappa_gl[i] - kappa_gl[i - 1]) / self.dT if i > 0 else 0.) > self.constraints.kappa_dot_max:
                     # curvature rate constraint
                     if DEBUG:
                         print(f"KappaDOT {abs((kappa_gl[i] - kappa_gl[i - 1]) / self.dT if i > 0 else 0.)} between step {i-1} and {i}")
                     feasible = False
-                    break
+                    if not self.draw_traj_set:
+                        break
                 if abs(a[i]) > self.constraints.a_max:
                     # acceleration constraint
                     if DEBUG:
                         print(f"Acceleration {a[i]} at step {i}")
                     feasible = False
-                    break
+                    if not self.draw_traj_set:
+                        break
                 if abs(v[i]) < -0.1:
                     # velocity constraint
                     if DEBUG:
                         print(f"Velocity {v[i]} at step {i}")
                     feasible = False
-                    break
+                    if not self.draw_traj_set:
+                        break
                 if abs((theta_gl[i - 1] - theta_gl[i]) / self.dT if i > 0 else 0.) > self.constraints.theta_dot_max:
                     # yaw rate (orientation change) constraint
                     if DEBUG:
                         print(f"Theta_dot {(theta_gl[i - 1] - theta_gl[i]) / self.dT if i > 0 else 0.} between step {i-1} and {i}")
                     feasible = False
-                    break
+                    if not self.draw_traj_set:
+                        break
 
             # if selected polynomial trajectory is feasible, store it's Cartesian and Curvilinear trajectory
-            if feasible:
+            if feasible or self.draw_traj_set:
                 for i in range(0, traj_len):
                     # compute (global) Cartesian position
                     pos: np.ndarray = self._co.convert_to_cartesian_coords(s[i], d[i])
@@ -977,16 +739,39 @@ class ReactivePlanner(object):
 
                     assert self.N + 1 == trajectory.cartesian.current_time_step == len(trajectory.cartesian.x) == \
                            len(trajectory.cartesian.y) == len(trajectory.cartesian.theta), \
-                        '<ReactivePlanner/kinematics>: Trajectory computation is incorrect!' \
-                        ' Lenghts of state variables is not equal.'
+                        '<ReactivePlanner/kinematics>:  Lenghts of state variables is not equal.'
+                    # store trajectory in feasible trajectories list
                     feasible_trajectories.append(trajectory)
+
+                if not feasible and self.draw_traj_set:
+                    # store Cartesian trajectory
+                    trajectory.cartesian = CartesianSample(x, y, theta_gl, v, a, kappa_gl,
+                                                           kappa_dot=np.append([0], np.diff(kappa_gl)),
+                                                           current_time_step=traj_len)
+
+                    # store Curvilinear trajectory
+                    trajectory.curvilinear = CurviLinearSample(s, d, theta_gl,
+                                                               ss=s_velocity, sss=s_acceleration,
+                                                               dd=d_velocity, ddd=d_acceleration,
+                                                               current_time_step=traj_len)
+
+                    # check if trajectories planning horizon is shorter than expected and extend if necessary
+                    if self.N + 1 > trajectory.cartesian.current_time_step:
+                        trajectory.enlarge(self.dT)
+
+                    # store trajectory in infeasible trajectories list
+                    infeasible_trajectories.append(trajectory)
 
         if self._DEBUG:
             print('<ReactivePlanner>: Kinematic check of %s trajectories done' % len(trajectories))
-        queue.put(feasible_trajectories)
-        # return feasible_trajectories
 
-    def _get_optimal_trajectory(self, trajectory_bundle: TrajectoryBundle, cc: pycrcc.CollisionChecker, draw_traj_set=False) \
+        # store feasible trajectories in Queue 1
+        queue_1.put(feasible_trajectories)
+        # if visualization is required: store infeasible trajectories in Queue 1
+        if self.draw_traj_set:
+            queue_2.put(infeasible_trajectories)
+
+    def _get_optimal_trajectory(self, trajectory_bundle: TrajectoryBundle, cc: pycrcc.CollisionChecker) \
             -> TrajectorySample:
         """
         Computes the optimal trajectory from a given trajectory bundle
@@ -1000,35 +785,38 @@ class ReactivePlanner(object):
         self._infeasible_count_kinematics = 0
 
         # check kinematics of each trajectory
-        # USE FASTER FUNCTION WHEN NOT DRAWING TRAJECTORIES
-        if not draw_traj_set:
-            num_workers = 8
-            # divide trajectory_bundle.trajectories into chunks
-            chunk_size = math.ceil(len(trajectory_bundle.trajectories) / num_workers)
-            chunks = [trajectory_bundle.trajectories[ii * chunk_size: min(len(trajectory_bundle.trajectories), (ii+1)*chunk_size)] for ii in range(0, num_workers)]
+        num_workers = 8
+        # divide trajectory_bundle.trajectories into chunks
+        chunk_size = math.ceil(len(trajectory_bundle.trajectories) / num_workers)
+        chunks = [trajectory_bundle.trajectories[ii * chunk_size: min(len(trajectory_bundle.trajectories), (ii+1)*chunk_size)] for ii in range(0, num_workers)]
 
-            list_processes = []
-            feasible_trajectories = []
-            queue = multiprocessing.Queue()
-            for chunk in chunks:
-                p = Process(target=self.check_kinematics, args=(chunk, queue))
-                list_processes.append(p)
-                p.start()
+        # initialize list of processes and Queues
+        list_processes = []
+        feasible_trajectories = []
+        queue_1 = multiprocessing.Queue()
+        infeasible_trajectories = []
+        queue_2 = multiprocessing.Queue()
+        for chunk in chunks:
+            p = Process(target=self._check_kinematics, args=(chunk, queue_1, queue_2))
+            list_processes.append(p)
+            p.start()
 
-            # get return values from queue
-            for p in list_processes:
-                ret = queue.get()
-                feasible_trajectories.extend(ret)
+        # get return values from queue
+        for p in list_processes:
+            feasible_trajectories.extend(queue_1.get())
+            if self.draw_traj_set:
+                infeasible_trajectories.extend(queue_2.get())
 
-            # wait for all processes to finish
-            for p in list_processes:
-                p.join()
+        # wait for all processes to finish
+        for p in list_processes:
+            p.join()
 
-            # feasible_trajectories = self.check_kinematics(trajectory_bundle.trajectories)
-        else:
-            feasible_trajectories = self.check_kinematics_vis(trajectory_bundle)
-
+        # update number of infeasible trajectories
         self._infeasible_count_kinematics = len(trajectory_bundle.trajectories) - len(feasible_trajectories)
+
+        # for visualization store all trajectories
+        if self.draw_traj_set:
+            self.stored_trajectories = feasible_trajectories + infeasible_trajectories
 
         # set feasible trajectories in bundle
         trajectory_bundle.trajectories = feasible_trajectories
@@ -1088,30 +876,3 @@ def shift_angle_to_interval(angle_list, interval_start=-np.pi, interval_end=np.p
         new_angle_list[idx] = angle
 
     return new_angle_list
-
-
-def compute_helper_vars(k_r, d_i, theta_cl_i):
-    oneKrD = (1 - k_r * d_i)
-    cosTheta = np.cos(theta_cl_i)
-    tanTheta = np.tan(theta_cl_i)
-    return oneKrD, cosTheta, tanTheta
-
-
-def compute_cart_and_curv_curvature(k_r, dpp, dp, oneKrD, cosTheta, tanTheta):
-    # compute global curvature (see appendix A of Moritz Werling's PhD thesis)
-    kappa_gl = (dpp + k_r * dp * tanTheta) * cosTheta * (cosTheta / oneKrD) ** 2 + (
-            cosTheta / oneKrD) * k_r
-    kappa_cl = kappa_gl - k_r
-    return kappa_gl, kappa_cl
-
-
-def compute_cart_vel_and_acc(k_r, k_r_d, s_velocity_i, s_acceleration_i, d_i, d_velocity_i, theta_cl_i, kappa_gl_i, oneKrD, cosTheta, tanTheta):
-
-    # compute (global) Cartesian velocity
-    v = s_velocity_i * (oneKrD / (math.cos(theta_cl_i)))
-
-    # compute (global) Cartesian acceleration
-    a = s_acceleration_i * oneKrD / cosTheta + ((s_velocity_i ** 2) / cosTheta) * (
-            oneKrD * tanTheta * (kappa_gl_i * oneKrD / cosTheta - k_r) - (
-            k_r_d * d_i + k_r * d_velocity_i))
-    return v, a

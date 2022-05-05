@@ -105,3 +105,7 @@ def visualize_planning_result(scenario: Scenario, planning_problem: PlanningProb
     if save_path is not None:
         plt.savefig(f"{save_path}/{scenario.scenario_id}_{timestep}.png", format='png', dpi=300,
                     bbox_inches='tight')
+
+
+def plot_final_solution():
+    pass

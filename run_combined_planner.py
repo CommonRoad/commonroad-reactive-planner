@@ -112,7 +112,6 @@ ego_vehicle = None
 
 # Run the planner
 while not goal.is_reached(x_0):
-# while current_count <=1:
     current_count = len(record_state_list) - 1
     if current_count % replanning_frequency == 0:
         # new planning cycle -> plan a new optimal trajectory
@@ -139,7 +138,7 @@ while not goal.is_reached(x_0):
 
         # if desired, store sampled trajectory bundle for visualization
         if plot:
-            sampled_trajectory_bundle = deepcopy(planner.bundle.trajectories)
+            sampled_trajectory_bundle = deepcopy(planner.stored_trajectories)
 
         # correct orientation angle
         new_state_list = planner.shift_orientation(optimal[0])
@@ -178,3 +177,5 @@ while not goal.is_reached(x_0):
         visualize_planning_result(scenario=scenario, planning_problem=planning_problem, ego=ego_vehicle,
                                   pos=positions, traj_set=sampled_trajectory_bundle, ref_path=ref_path,
                                   timestep=current_count)
+
+# TODO: store solution trajectory of ego vehicle as CR trajectory
