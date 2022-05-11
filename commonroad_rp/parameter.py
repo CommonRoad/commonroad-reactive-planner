@@ -175,17 +175,3 @@ class DefGymSampling(SamplingSet):
         d_samples = PositionSampling(-2.0, 2.0, sampling_level)
         v_samples = VelocitySampling(0., 25.0, sampling_level)
         super(DefGymSampling, self).__init__(t_samples, d_samples, v_samples)
-
-
-class VehModelParameters:
-    """
-    Class that represents the vehicle's constraints and parameters a_max=8, 0.2, 0.2, 10)
-    """
-
-    def __init__(self, a_max=8.0, theta_dot_max=1.0, kappa_max=0.2, kappa_dot_max=5, veh_length=4.508, veh_width=1.61):
-        self.a_max = a_max
-        self.theta_dot_max = theta_dot_max
-        self.kappa_max = kappa_max
-        self.kappa_dot_max = kappa_dot_max
-        self.veh_length = veh_length
-        self.veh_width = veh_width

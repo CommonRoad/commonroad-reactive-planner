@@ -26,6 +26,8 @@ from commonroad_route_planner.route_planner import RoutePlanner
 # reactive planner
 from commonroad_rp.reactive_planner import ReactivePlanner
 from commonroad_rp.utility.visualization import visualize_planner_at_timestep, plot_final_trajectory
+from commonroad_rp.utility.evaluation import create_planning_problem_solution, reconstruct_inputs, plot_states, \
+    plot_inputs
 from commonroad_rp.configuration import build_configuration
 
 
@@ -45,18 +47,14 @@ planning_problem = list(problem_set.planning_problem_dict.values())[0]
 
 
 # *************************************
-# Set Global Configurations
+# Set Configurations
 # *************************************
 config = build_configuration(filename[:-4])
-
-DT = scenario.dt            # planning time step
-T_H = 2                     # planning horizon
-replanning_frequency = 3    # re-plan every i-th time step
-plot = False                # plot results
+DT = config.planning.dt            # planning time step
 
 
 # *************************************
-# Initializations
+# Init and Goal State
 # *************************************
 # initial state configuration
 problem_init_state = planning_problem.initial_state
@@ -74,17 +72,19 @@ if hasattr(planning_problem.goal.state_list[0], 'velocity'):
         desired_velocity = (planning_problem.goal.state_list[0].velocity.start
                             + planning_problem.goal.state_list[0].velocity.end) / 2
 else:
-    desired_velocity = problem_init_state.velocity
+    desired_velocity = x_0.velocity
 
 
+# *************************************
+# Initialize Planner
+# *************************************
 # initialize reactive planner
 planner = ReactivePlanner(config)
+# set sampling parameters
 planner.set_d_sampling_parameters(-3, 3)
 planner.set_t_sampling_parameters(0.4, planner.dT, planner.horizon)
-
 # set collision checker
 planner.set_collision_checker(scenario)
-
 # initialize route planner and set reference path
 route_planner = RoutePlanner(scenario, planning_problem)
 ref_path = route_planner.plan_routes().retrieve_first_route().reference_path
@@ -96,6 +96,7 @@ planner.set_reference_path(ref_path)
 # **************************
 # initialize some variables
 record_state_list = list()
+record_input_list = list()
 x_cl = None
 current_count = 0
 planning_times = list()
@@ -106,19 +107,15 @@ record_state_list.append(x_0)
 delattr(record_state_list[0], "slip_angle")
 record_state_list[0].steering_angle = np.arctan2(config.vehicle.wheelbase * record_state_list[0].yaw_rate,
                                                  record_state_list[0].velocity)
-
-record_input_list = list()
 record_input_state = State(
         steering_angle=np.arctan2(config.vehicle.wheelbase * x_0.yaw_rate, x_0.velocity),
         acceleration=x_0.acceleration,
         time_step=x_0.time_step,
-        steering_angle_speed=0.
-)
+        steering_angle_speed=0.)
 record_input_list.append(record_input_state)
 
 
-
-# Run the planner
+# Run planner
 while not goal.is_reached(x_0):
     current_count = len(record_state_list) - 1
     if current_count % config.planning.replanning_frequency == 0:
@@ -145,7 +142,7 @@ while not goal.is_reached(x_0):
             break
 
         # if desired, store sampled trajectory bundle for visualization
-        if plot:
+        if config.debug.show_plots:
             sampled_trajectory_bundle = deepcopy(planner.stored_trajectories)
 
         # correct orientation angle
@@ -181,7 +178,7 @@ while not goal.is_reached(x_0):
         sampled_trajectory_bundle = None
 
         # continue on optimal trajectory
-        temp = current_count % replanning_frequency
+        temp = current_count % config.planning.replanning_frequency
         new_state = new_state_list.state_list[1 + temp]
         new_state.time_step = current_count + 1
 
@@ -204,151 +201,28 @@ while not goal.is_reached(x_0):
 
     print(f"current time step: {current_count}")
     # draw scenario + planning solution
-    if plot:
+    if config.debug.show_plots:
         visualize_planner_at_timestep(scenario=scenario, planning_problem=planning_problem, ego=ego_vehicle,
                                       pos=positions, traj_set=sampled_trajectory_bundle, ref_path=ref_path,
                                       timestep=current_count)
 
 
-# ************************************
-# Plot and Check CommonRoad Solution
-# ************************************
-from commonroad.scenario.trajectory import Trajectory
-from commonroad.common.solution import Solution, PlanningProblemSolution, VehicleModel, \
-    VehicleType, CostFunction
+# **************************
+# Evaluate results
+# **************************
 from commonroad_dc.feasibility.solution_checker import valid_solution
-from commonroad_dc.feasibility.feasibility_checker import trajectory_feasibility, VehicleDynamics, \
-    state_transition_feasibility, position_orientation_objective, position_orientation_feasibility_criteria
-from vehiclemodels.parameters_vehicle2 import parameters_vehicle2
-
-veh_params = parameters_vehicle2()
-
-# plot occupancies of final ego vehicle trajectory
+# plot  final ego vehicle trajectory
 plot_final_trajectory(scenario, planning_problem, record_state_list, (config.vehicle.length, config.vehicle.width))
 
-# create solution object
-input_solution = False
-if input_solution:
-    ego_vehicle_trajectory = Trajectory(initial_time_step=record_input_list[0].time_step, state_list=record_input_list)
-    pps = PlanningProblemSolution(planning_problem_id=planning_problem.planning_problem_id,
-                                  vehicle_type=VehicleType.BMW_320i,
-                                  vehicle_model=VehicleModel.KS,
-                                  cost_function=CostFunction.JB1,
-                                  trajectory=ego_vehicle_trajectory)
-    from commonroad_dc.feasibility.solution_checker import _simulate_trajectory_if_input_vector
-    _, trajectory = _simulate_trajectory_if_input_vector(problem_set, pps, DT)
-
-    plot_final_trajectory(scenario, planning_problem, trajectory.state_list, (config.vehicle.length, config.vehicle.width))
-else:
-    ego_vehicle_trajectory = Trajectory(initial_time_step=record_state_list[0].time_step, state_list=record_state_list)
-    pps = PlanningProblemSolution(planning_problem_id=planning_problem.planning_problem_id,
-                                  vehicle_type=VehicleType.BMW_320i,
-                                  vehicle_model=VehicleModel.KS,
-                                  cost_function=CostFunction.JB1,
-                                  trajectory=ego_vehicle_trajectory)
-
-# create solution object
-solution = Solution(scenario.scenario_id, [pps])
+# create CR solution
+solution = create_planning_problem_solution(config, record_state_list, scenario, planning_problem)
 
 # check validity of solution
 is_valid, res = valid_solution(scenario, problem_set, solution)
 
-if not input_solution:
-    # check kinematic feasibility
-    vehicle_dynamics = VehicleDynamics.from_model(pps.vehicle_model, pps.vehicle_type)
-    feasible, reconstructed_inputs = trajectory_feasibility(pps.trajectory, vehicle_dynamics, DT)
+# reconstruct inputs
+_, reconstructed_inputs = reconstruct_inputs(config, solution.planning_problem_solutions[0])
 
-    feasible_state_list = []
-    reconstructed_inputs = []
-    for x0, x1 in zip(pps.trajectory.state_list[:-1], pps.trajectory.state_list[1:]):
-        feasible_state, reconstructed_input_state = state_transition_feasibility(x0, x1, vehicle_dynamics, DT,
-                                                                            position_orientation_objective,
-                                                                            position_orientation_feasibility_criteria,
-                                                                            1e-8, np.array([2e-2, 2e-2, 3e-2]),
-                                                                            4, 100, False)
-        feasible_state_list.append(feasible_state)
-        reconstructed_inputs.append(reconstructed_input_state)
-
-
-# ************************
-# Evaluation
-# ************************
-# plot inputs
-plt.figure()
-plt.subplot(2, 1, 1)
-plt.plot(list(range(len(record_input_list))),
-         [state.steering_angle_speed for state in record_input_list], color="black", label="planned")
-plt.plot([0, len(record_input_list)], [veh_params.steering.v_min, veh_params.steering.v_min],
-         color="red", label="bounds")
-plt.plot([0, len(record_input_list)], [veh_params.steering.v_max, veh_params.steering.v_max],
-         color="red")
-plt.legend()
-plt.ylabel("v_delta")
-plt.subplot(2, 1, 2)
-plt.plot(list(range(len(record_input_list))),
-         [state.acceleration for state in record_input_list], color="black", label="planned")
-plt.plot([0, len(record_input_list)], [-veh_params.longitudinal.a_max, -veh_params.longitudinal.a_max],
-         color="red", label="bounds")
-plt.plot([0, len(record_input_list)], [veh_params.longitudinal.a_max, veh_params.longitudinal.a_max],
-         color="red")
-plt.ylabel("a_long")
-plt.tight_layout()
-plt.show()
-
-# plot states
-plt.figure()
-plt.subplot(4, 1, 1)
-plt.plot(list(range(len(record_state_list))),
-         [state.steering_angle for state in record_state_list], color="black", label="planned")
-# plt.plot([0, len(record_state_list)], [veh_params.steering.min, veh_params.steering.min],
-#          color="red", label="bounds")
-# plt.plot([0, len(record_state_list)], [veh_params.steering.max, veh_params.steering.max],
-#          color="red")
-plt.legend()
-plt.ylabel("delta")
-plt.subplot(4, 1, 2)
-plt.plot(list(range(len(record_state_list))),
-         [state.velocity for state in record_state_list], color="black", label="planned")
-plt.legend()
-plt.ylabel("v")
-plt.subplot(4, 1, 3)
-plt.plot(list(range(len(record_state_list))),
-         [state.orientation for state in record_state_list], color="black", label="planned")
-plt.ylabel("theta")
-plt.tight_layout()
-plt.subplot(4, 1, 4)
-plt.plot(list(range(len(record_state_list))),
-         [state.yaw_rate for state in record_state_list], color="black", label="planned")
-plt.ylabel("theta_dot")
-plt.tight_layout()
-plt.show()
-
-# check reconstructed inputs
-if not input_solution:
-    # reconstructed_input_list = reconstructed_inputs.state_list
-    reconstructed_input_list = reconstructed_inputs
-    plt.figure()
-    plt.subplot(2, 1, 1)
-    plt.plot(list(range(len(record_input_list))),
-             [state.steering_angle_speed for state in record_input_list], color="black", label="planned")
-    plt.plot([0, len(record_input_list)], [veh_params.steering.v_min, veh_params.steering.v_min],
-             color="red", label="bounds")
-    plt.plot([0, len(record_input_list)], [veh_params.steering.v_max, veh_params.steering.v_max],
-             color="red")
-    plt.plot(list(range(len(reconstructed_input_list))),
-             [state.steering_angle_speed for state in reconstructed_input_list], color="blue",
-             label="reconstructed")
-    plt.legend()
-    plt.ylabel("steering angle velocity")
-    plt.subplot(2, 1, 2)
-    plt.plot(list(range(len(record_input_list))),
-             [state.acceleration for state in record_input_list], color="black", label="planned")
-    plt.plot(list(range(len(reconstructed_input_list))),
-             [state.acceleration for state in reconstructed_input_list], color="blue", label="reconstructed")
-    # plt.plot([0, len(record_input_list)], [-veh_params.longitudinal.a_max, -veh_params.longitudinal.a_max],
-    #          color="red", label="bounds")
-    # plt.plot([0, len(record_input_list)], [veh_params.longitudinal.a_max, veh_params.longitudinal.a_max],
-    #          color="red")
-    plt.ylabel("acceleration")
-    plt.show()
-
+# evaluate
+plot_states(config, record_state_list, plot_bounds=True)
+plot_inputs(config, record_input_list, reconstructed_inputs, plot_bounds=True)

@@ -57,7 +57,7 @@ sampling:
 # debug configuration
 debug:
   # show/save plots
-  show_plots: True
+  show_plots: False
   save_plots: False
   # draw sampled trajectory set
   draw_traj_set: False

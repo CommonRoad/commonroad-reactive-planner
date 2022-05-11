@@ -29,7 +29,7 @@ from commonroad_dc.collision.collision_detection.pycrcc_collision_dispatch impor
 
 # commonroad_rp imports
 from commonroad_rp.cost_function import DefaultCostFunction
-from commonroad_rp.parameter import VehModelParameters, DefGymSampling, TimeSampling, VelocitySampling, PositionSampling
+from commonroad_rp.parameter import DefGymSampling, TimeSampling, VelocitySampling, PositionSampling
 from commonroad_rp.polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
 from commonroad_rp.trajectories import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample
 from commonroad_rp.utils import CoordinateSystem, interpolate_angle
