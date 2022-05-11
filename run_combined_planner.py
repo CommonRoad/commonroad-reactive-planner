@@ -131,7 +131,7 @@ while not goal.is_reached(x_0):
         planner.set_desired_velocity(desired_velocity)
 
         # plan trajectory
-        optimal = planner.plan(x_0, cl_states=x_cl)     # returns the planned (i.e., optimal) trajectory
+        optimal = planner.plan(x_0, x_cl)     # returns the planned (i.e., optimal) trajectory
         comp_time_end = time.time()
         # END TIMER
 

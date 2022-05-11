@@ -48,6 +48,7 @@ class VehicleConfiguration:
 
         # get constraints from given vehicle ID
         self.a_max = vehicle_parameters.longitudinal.a_max
+        self.v_switch = vehicle_parameters.longitudinal.v_switch
         self.delta_min = vehicle_parameters.steering.min
         self.delta_max = vehicle_parameters.steering.max
         self.v_delta_min = vehicle_parameters.steering.v_min

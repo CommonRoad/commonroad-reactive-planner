@@ -65,10 +65,6 @@ class ReactivePlanner(object):
         # get vehicle parameters from configuration
         self.vehicle_params: VehicleConfiguration = config.vehicle
 
-        # TODO: Remove the following line after adapting with self.vehicle_params
-        # Create default VehModelParameters
-        self.constraints = VehModelParameters()
-
         # Initial State
         self.x_0 = None
 
@@ -89,7 +85,7 @@ class ReactivePlanner(object):
         self._desired_speed = None
         self._desired_d = 0.
         self._desired_t = self.horizon
-        # Default sampling -> [desired - min,desired + max,initial step]
+        # Default sampling TODO: Improve initialization of Sampling Set
         fs_sampling = DefGymSampling(self.dT, self.horizon)
         self._sampling_d = fs_sampling.d_samples
         self._sampling_t = fs_sampling.t_samples
@@ -150,7 +146,6 @@ class ReactivePlanner(object):
         """
         self._co: CoordinateSystem = CoordinateSystem(reference_path)
 
-    # TODO: property & setter
     def set_t_sampling_parameters(self, t_min, dt, horizon):
         """
         Sets sample parameters of time horizon
@@ -162,18 +157,14 @@ class ReactivePlanner(object):
         self.N = int(round(horizon / dt))
         self.horizon = horizon
 
-    # TODO: property & setter
     def set_d_sampling_parameters(self, delta_d_min, delta_d_max):
         """
         Sets sample parameters of lateral offset
         :param delta_d_min: lateral distance lower than reference
         :param delta_d_max: lateral distance higher than reference
         """
-        assert delta_d_min <= 0, "<Reactive_planner>: delta_d_min must be not positive"
-        assert delta_d_max >= 0, "<Reactive_planner>: delta_d_max must be not negative"
         self._sampling_d = PositionSampling(delta_d_min, delta_d_max, self._sampling_level)
 
-    # TODO: property & setter
     def set_v_sampling_parameters(self, v_min, v_max):
         """
         Sets sample parameters of sampled velocity interval
@@ -197,7 +188,7 @@ class ReactivePlanner(object):
             else:
                 reference_speed = self._desired_speed
 
-            min_v = max(0, reference_speed - (0.125 * self.horizon * self.constraints.a_max))
+            min_v = max(0, reference_speed - (0.125 * self.horizon * self.vehicle_params.a_max))
             # max_v = max(min_v + 5.0, reference_speed + (0.25 * self.horizon * self.constraints.a_max))
             max_v = max(min_v + 5.0, reference_speed + 2)
             self._sampling_v = VelocitySampling(min_v, max_v, self._sampling_level)
@@ -562,7 +553,7 @@ class ReactivePlanner(object):
 
             if not self._draw_traj_set:
                 # pre-filter with quick underapproximative check for feasibility
-                if np.any(np.abs(s_acceleration) > self.constraints.a_max):
+                if np.any(np.abs(s_acceleration) > self.vehicle_params.a_max):
                     if DEBUG:
                         print(f"Acceleration {np.max(np.abs(s_acceleration))}")
                     feasible = False
@@ -653,39 +644,38 @@ class ReactivePlanner(object):
                         oneKrD * tanTheta * (kappa_gl[i] * oneKrD / cosTheta - k_r) - (
                         k_r_d * d[i] + k_r * d_velocity[i]))
 
-                # check kinematics to already discard infeasible trajectories
-                if abs(kappa_gl[i] > self.constraints.kappa_max):
-                    # curvature constraint
-                    if DEBUG:
-                        print(f"Kappa {kappa_gl[i]} at step {i}")
-                    feasible = False
-                    if not self._draw_traj_set:
-                        break
-                if abs((kappa_gl[i] - kappa_gl[i - 1]) / self.dT if i > 0 else 0.) > self.constraints.kappa_dot_max:
-                    # curvature rate constraint
-                    if DEBUG:
-                        print(f"KappaDOT {abs((kappa_gl[i] - kappa_gl[i - 1]) / self.dT if i > 0 else 0.)} between step {i-1} and {i}")
-                    feasible = False
-                    if not self._draw_traj_set:
-                        break
-                if abs(a[i]) > self.constraints.a_max:
-                    # acceleration constraint
-                    if DEBUG:
-                        print(f"Acceleration {a[i]} at step {i}")
-                    feasible = False
-                    if not self._draw_traj_set:
-                        break
+                # CHECK KINEMATIC CONSTRAINTS (remove infeasible trajectories)
+                # velocity constraint
                 if abs(v[i]) < -0.1:
-                    # velocity constraint
-                    if DEBUG:
-                        print(f"Velocity {v[i]} at step {i}")
                     feasible = False
                     if not self._draw_traj_set:
                         break
-                if abs((theta_gl[i - 1] - theta_gl[i]) / self.dT if i > 0 else 0.) > self.constraints.theta_dot_max:
-                    # yaw rate (orientation change) constraint
-                    if DEBUG:
-                        print(f"Theta_dot {(theta_gl[i - 1] - theta_gl[i]) / self.dT if i > 0 else 0.} between step {i-1} and {i}")
+                # curvature constraint
+                kappa_max = np.tan(self.vehicle_params.delta_max) / self.vehicle_params.wheelbase
+                if abs(kappa_gl[i]) > kappa_max:
+                    feasible = False
+                    if not self._draw_traj_set:
+                        break
+                # yaw rate (orientation change) constraint
+                yaw_rate = (theta_gl[i - 1] - theta_gl[i]) / self.dT if i > 0 else 0.
+                theta_dot_max = kappa_max * v[i]
+                if abs(yaw_rate) > theta_dot_max:
+                    feasible = False
+                    if not self._draw_traj_set:
+                        break
+                # curvature rate constraint
+                steering_angle = np.arctan2(self.vehicle_params.wheelbase * yaw_rate, v[i])
+                kappa_dot_max = self.vehicle_params.v_delta_max / self.vehicle_params.wheelbase * \
+                                math.cos(steering_angle) ** 2
+                if abs((kappa_gl[i] - kappa_gl[i - 1]) / self.dT if i > 0 else 0.) > kappa_dot_max:
+                    feasible = False
+                    if not self._draw_traj_set:
+                        break
+                # acceleration constraint (considering switching velocity, see vehicle models documentation)
+                v_switch = self.vehicle_params.v_switch
+                a_max = self.vehicle_params.a_max * v_switch / v[i] if v[i] > v_switch else self.vehicle_params.a_max
+                a_min = -self.vehicle_params.a_max
+                if not a_min <= a[i] <= a_max:
                     feasible = False
                     if not self._draw_traj_set:
                         break
@@ -853,5 +843,4 @@ def shift_angle_to_interval(angle_list, interval_start=-np.pi, interval_end=np.p
         while angle > interval_end:
             angle -= 2 * np.pi
         new_angle_list[idx] = angle
-
     return new_angle_list
