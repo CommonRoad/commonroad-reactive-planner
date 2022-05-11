@@ -27,6 +27,10 @@ class PlanningConfiguration:
         self.dt = config.dt
         self.planning_horizon = config.planning_horizon
         self.replanning_frequency = config.replanning_frequency
+        self.mode = config.mode
+        self.collision_check_in_cl = config.collision_check_in_cl
+        self.factor = config.factor
+        self.low_vel_mode_threshold = config.low_vel_mode_threshold
 
 
 class VehicleConfiguration:
@@ -71,7 +75,8 @@ class DebugConfiguration:
         self.show_plots = config.show_plots
         self.save_plots = config.save_plots
         self.draw_traj_set = config.draw_traj_set
-        self.debug_level = config.debug_level
+        self.debug_mode = config.debug_mode
+        self.num_workers = config.num_workers
 
 
 def build_configuration(name_scenario: str = None, dir_config: str = "configurations") -> Configuration:
