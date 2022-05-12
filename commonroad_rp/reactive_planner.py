@@ -35,9 +35,6 @@ from commonroad_rp.utility.utils_coordinate_system import CoordinateSystem, inte
 from commonroad_rp.configuration import Configuration, VehicleConfiguration
 
 
-_LOW_VEL_MODE = False
-
-# TODO switch to low velocity mode
 # TODO: introduce mode parameter for longitudinal planning (point following, velocity following, stopping)
 # TODO: acceleration-based sampling
 # TODO: use logging instead of print statements
@@ -92,6 +89,7 @@ class ReactivePlanner(object):
         self._sampling_level = fs_sampling.max_iteration
         # threshold for low velocity mode
         self._low_vel_mode_threshold = config.planning.low_vel_mode_threshold
+        self._LOW_VEL_MODE = False
         # workers for multiprocessing
         self._num_workers = config.debug.num_workers
         # visualize trajectory set
@@ -233,7 +231,7 @@ class ReactivePlanner(object):
                     for d in self._sampling_d.to_range(samp_level).union({x_0_lat[0]}):
                         end_state_lat = np.array([d, 0.0, 0.0])
                         # SWITCHING TO POSITION DOMAIN FOR LATERAL TRAJECTORY PLANNING
-                        if _LOW_VEL_MODE:
+                        if self._LOW_VEL_MODE:
                             s_lon_goal = trajectory_long.evaluate_state_at_tau(t)[0] - x_0_lon[0]
                             if s_lon_goal <= 0:
                                 s_lon_goal = t
@@ -376,6 +374,12 @@ class ReactivePlanner(object):
         # set Cartesian initial state
         self.x_0 = x_0
 
+        # check for low velocity mode
+        if self.x_0.velocity < self._low_vel_mode_threshold:
+            self._LOW_VEL_MODE = True
+        else:
+            self._LOW_VEL_MODE = False
+
         # compute curvilinear initial states
         if cl_states is not None:
             x_0_lon, x_0_lat = cl_states
@@ -514,7 +518,7 @@ class ReactivePlanner(object):
             s_acceleration[:traj_len] = trajectory.trajectory_long.calc_acceleration(t, t2, t3)  # lon acceleration
 
             # At low speeds, we have to sample the lateral motion over the travelled distance rather than time.
-            if not _LOW_VEL_MODE:
+            if not self._LOW_VEL_MODE:
                 d[:traj_len] = trajectory.trajectory_lat.calc_position(t, t2, t3, t4, t5)  # lat pos
                 d_velocity[:traj_len] = trajectory.trajectory_lat.calc_velocity(t, t2, t3, t4)  # lat velocity
                 d_acceleration[:traj_len] = trajectory.trajectory_lat.calc_acceleration(t, t2, t3)  # lat acceleration
@@ -565,7 +569,7 @@ class ReactivePlanner(object):
             for i in range(0, traj_len):
                 # compute orientations
                 # see Appendix A.1 of Moritz Werling's PhD Thesis for equations
-                if not _LOW_VEL_MODE:
+                if not self._LOW_VEL_MODE:
                     if s_velocity[i] > 0.001:
                         dp = d_velocity[i] / s_velocity[i]
                     else:
@@ -598,7 +602,7 @@ class ReactivePlanner(object):
                 # compute curvilinear and (global) Cartesian orientation
                 if s_velocity[i] > 0.005:
                     # compute curvilinear orientation
-                    if _LOW_VEL_MODE:
+                    if self._LOW_VEL_MODE:
                         theta_cl[i] = np.arctan2(dp, 1.0)
                     else:
                         theta_cl[i] = np.arctan2(d_velocity[i], s_velocity[i])
