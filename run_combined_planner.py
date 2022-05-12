@@ -11,7 +11,6 @@ import os
 import glob
 import time
 from copy import deepcopy
-from matplotlib import pyplot as plt
 
 # third party
 import numpy as np
@@ -155,7 +154,7 @@ while not goal.is_reached(x_0):
         new_state.time_step = current_count + 1
 
         # TODO recompute acceleration
-        new_state.acceleration = (new_state.velocity - record_state_list[-1].velocity) / DT
+        # new_state.acceleration = (new_state.velocity - record_state_list[-1].velocity) / DT
 
         record_state_list.append(new_state)
 
@@ -183,7 +182,7 @@ while not goal.is_reached(x_0):
         new_state.time_step = current_count + 1
 
         # TODO recompute acceleration
-        new_state.acceleration = (new_state.velocity - record_state_list[-1].velocity) / DT
+        # new_state.acceleration = (new_state.velocity - record_state_list[-1].velocity) / DT
 
         record_state_list.append(new_state)
 

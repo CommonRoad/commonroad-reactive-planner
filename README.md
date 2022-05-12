@@ -1,7 +1,7 @@
 # Reactive Planner
 
 Currently, this project generates solutions to trajectory planning problems given in the [CommonRoad](https://commonroad.in.tum.de/) scenario format.
-The trajectories are generated according to the sampling-based approach in [1]. 
+The trajectories are generated according to the sampling-based approach in [1][2]. 
 
 ## Getting Started
 These instructions should help you to install the trajectory planner and use it for development and testing purposes.
@@ -24,11 +24,11 @@ For the development IDE we suggest [PyCharm](http://www.jetbrains.com/pycharm/)
 
 ### Example script
 
-Two example scripts are provided:
-
-* `run_combined_planner.py`: plan intended trajectories for motion planning
-* `ford_test.py`: use reactive planner as fail-safe planner (in combination with spot) **-> DEPRECATED**
+An example script `run_combined_planner.py` is provided, which plans intended trajectories for motion planning
 
 
 ## Literature
 [1] Werling M., et al. *Optimal trajectory generation for dynamic street scenarios in a frenet frame*. In: IEEE International Conference on Robotics and Automation, Anchorage, Alaska, 987–993.
+
+[2] Werling M., et al. *Optimal trajectories for time-critical street scenarios using discretized terminal manifolds* In:
+The International Journal of Robotics Research, 2012

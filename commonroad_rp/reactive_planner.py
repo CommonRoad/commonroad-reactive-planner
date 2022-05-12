@@ -12,7 +12,6 @@ import time
 import numpy as np
 from typing import List
 import multiprocessing
-from multiprocessing import Semaphore
 from multiprocessing.context import Process
 
 # commonroad-io
@@ -32,17 +31,16 @@ from commonroad_rp.cost_function import DefaultCostFunction
 from commonroad_rp.parameter import DefGymSampling, TimeSampling, VelocitySampling, PositionSampling
 from commonroad_rp.polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
 from commonroad_rp.trajectories import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample
-from commonroad_rp.utils import CoordinateSystem, interpolate_angle
+from commonroad_rp.utility.utils_coordinate_system import CoordinateSystem, interpolate_angle
 from commonroad_rp.configuration import Configuration, VehicleConfiguration
 
 
 _LOW_VEL_MODE = False
 
 # TODO switch to low velocity mode
-# TODO: Align kinematic check to CR vehicle params
 # TODO: introduce mode parameter for longitudinal planning (point following, velocity following, stopping)
 # TODO: acceleration-based sampling
-# TODO: logging instead of print statements
+# TODO: use logging instead of print statements
 
 
 class ReactivePlanner(object):
@@ -62,7 +60,7 @@ class ReactivePlanner(object):
         self._factor = config.planning.factor
         self._check_valid_settings()
 
-        # get vehicle parameters from configuration
+        # get vehicle parameters from config file
         self.vehicle_params: VehicleConfiguration = config.vehicle
 
         # Initial State
