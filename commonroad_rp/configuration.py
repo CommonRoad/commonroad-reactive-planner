@@ -28,6 +28,7 @@ class PlanningConfiguration:
         self.planning_horizon = config.planning_horizon
         self.replanning_frequency = config.replanning_frequency
         self.mode = config.mode
+        self.continuous_cc = config.continuous_cc
         self.collision_check_in_cl = config.collision_check_in_cl
         self.factor = config.factor
         self.low_vel_mode_threshold = config.low_vel_mode_threshold

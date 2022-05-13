@@ -20,11 +20,14 @@ from commonroad.geometry.shape import Rectangle
 from commonroad.prediction.prediction import TrajectoryPrediction
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 from commonroad.scenario.trajectory import Trajectory, State
+from commonroad.scenario.scenario import Scenario
 
 # commonroad_dc
 import commonroad_dc.pycrcc as pycrcc
 from commonroad_dc.boundary.boundary import create_road_boundary_obstacle
-from commonroad_dc.collision.collision_detection.pycrcc_collision_dispatch import create_collision_checker
+from commonroad_dc.collision.collision_detection.pycrcc_collision_dispatch import create_collision_checker, \
+    create_collision_object
+from commonroad_dc.collision.trajectory_queries.trajectory_queries import trajectory_preprocess_obb_sum, OBBSumException
 
 # commonroad_rp imports
 from commonroad_rp.cost_function import DefaultCostFunction
@@ -75,6 +78,7 @@ class ReactivePlanner(object):
         self._infeasible_count_collision = 0
         self._infeasible_count_kinematics = 0
         self._optimal_cost = 0
+        self._continuous_cc = config.planning.continuous_cc
         self._collision_check_in_cl = config.planning.collision_check_in_cl
         # desired speed, d and t
         self._desired_speed = None
@@ -125,15 +129,26 @@ class ReactivePlanner(object):
         """Number of kinematically infeasible trajectories"""
         return self._infeasible_count_kinematics
 
-    def set_collision_checker(self, scenario):
+    def set_collision_checker(self, scenario: Scenario):
         """
         Creates the road boundary and creates a collision checker object for a given scenario
         :param scenario: CommonRoad Scenario object
         """
+        cc_scenario = pycrcc.CollisionChecker()
+        for co in scenario.static_obstacles:
+            obs = create_collision_object(co)
+            cc_scenario.add_collision_object(obs)
+        for co in scenario.dynamic_obstacles:
+            tvo = create_collision_object(co)
+            if self._continuous_cc:
+                tvo, err = trajectory_preprocess_obb_sum(tvo)
+                if err == -1:
+                    raise OBBSumException("Invalid input for trajectory_preprocess_obb_sum: dynamic "
+                                          "obstacle elements overlap")
+            cc_scenario.add_collision_object(tvo)
         _, road_boundary_sg_obb = create_road_boundary_obstacle(scenario)
-        collision_checker_scenario = create_collision_checker(scenario)
-        collision_checker_scenario.add_collision_object(road_boundary_sg_obb)
-        self._cc: pycrcc.CollisionChecker = collision_checker_scenario
+        cc_scenario.add_collision_object(road_boundary_sg_obb)
+        self._cc: pycrcc.CollisionChecker = cc_scenario
 
     def set_reference_path(self, reference_path: np.ndarray):
         """
@@ -659,7 +674,7 @@ class ReactivePlanner(object):
                     if not self._draw_traj_set:
                         break
                 # yaw rate (orientation change) constraint
-                yaw_rate = (theta_gl[i - 1] - theta_gl[i]) / self.dT if i > 0 else 0.
+                yaw_rate = (theta_gl[i] - theta_gl[i-1]) / self.dT if i > 0 else 0.
                 theta_dot_max = kappa_max * v[i]
                 if abs(yaw_rate) > theta_dot_max:
                     feasible = False
@@ -811,6 +826,7 @@ class ReactivePlanner(object):
                     self._infeasible_count_collision += 1
                     collide = True
                     break
+                # TODO add OBB Sum hull for ego
             if not collide:
                 return trajectory
         return None
@@ -837,6 +853,7 @@ class ReactivePlanner(object):
         return trajectory
 
 
+# TODO remove?
 def shift_angle_to_interval(angle_list, interval_start=-np.pi, interval_end=np.pi):
     new_angle_list = np.zeros(angle_list.shape)
     for idx, angle in enumerate(angle_list):

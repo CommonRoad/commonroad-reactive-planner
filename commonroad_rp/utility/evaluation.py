@@ -60,33 +60,49 @@ def reconstruct_inputs(config: Configuration, pps: PlanningProblemSolution):
     return feasible_state_list, reconstructed_inputs
 
 
-def plot_states(config: Configuration, state_list: List[State], plot_bounds=False):
+def plot_states(config: Configuration, state_list: List[State], reconstructed_states=None, plot_bounds=False):
     """
     Plots states of trajectory from a given state_list
     state_list must contain the following states: steering_angle, velocity, orientation and yaw_rate
     """
-    plt.figure()
-    plt.subplot(4, 1, 1)
+    plt.figure(figsize=(7, 7.5))
+    plt.subplot(5, 1, 1)
+    plt.plot([state.position[0] for state in state_list],
+             [state.position[1] for state in state_list], color="black", label="planned")
+    if reconstructed_states:
+        plt.plot([state.position[0] for state in reconstructed_states],
+                 [state.position[1] for state in reconstructed_states], color="blue", label="reconstructed")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.subplot(5, 1, 2)
     plt.plot(list(range(len(state_list))),
              [state.steering_angle for state in state_list], color="black", label="planned")
+    if reconstructed_states:
+        plt.plot(list(range(len(reconstructed_states))),
+                 [state.steering_angle for state in reconstructed_states], color="blue", label="reconstructed")
     if plot_bounds:
         plt.plot([0, len(state_list)], [config.vehicle.delta_min, config.vehicle.delta_min],
                  color="red", label="bounds")
         plt.plot([0, len(state_list)], [config.vehicle.delta_max, config.vehicle.delta_max],
                  color="red")
-    plt.legend()
     plt.ylabel("delta")
-    plt.subplot(4, 1, 2)
+    plt.subplot(5, 1, 3)
     plt.plot(list(range(len(state_list))),
              [state.velocity for state in state_list], color="black", label="planned")
+    if reconstructed_states:
+        plt.plot(list(range(len(reconstructed_states))),
+                 [state.velocity for state in reconstructed_states], color="blue", label="reconstructed")
     plt.legend()
     plt.ylabel("v")
-    plt.subplot(4, 1, 3)
+    plt.subplot(5, 1, 4)
     plt.plot(list(range(len(state_list))),
              [state.orientation for state in state_list], color="black", label="planned")
+    if reconstructed_states:
+        plt.plot(list(range(len(reconstructed_states))),
+                 [state.orientation for state in reconstructed_states], color="blue", label="reconstructed")
     plt.ylabel("theta")
     plt.tight_layout()
-    plt.subplot(4, 1, 4)
+    plt.subplot(5, 1, 5)
     plt.plot(list(range(len(state_list))),
              [state.yaw_rate for state in state_list], color="black", label="planned")
     plt.ylabel("theta_dot")
