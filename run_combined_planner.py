@@ -26,7 +26,7 @@ from commonroad_route_planner.route_planner import RoutePlanner
 from commonroad_rp.reactive_planner import ReactivePlanner
 from commonroad_rp.utility.visualization import visualize_planner_at_timestep, plot_final_trajectory
 from commonroad_rp.utility.evaluation import create_planning_problem_solution, reconstruct_inputs, plot_states, \
-    plot_inputs
+    plot_inputs, reconstruct_states
 from commonroad_rp.configuration import build_configuration
 
 
@@ -113,7 +113,6 @@ record_input_state = State(
         steering_angle_speed=0.)
 record_input_list.append(record_input_state)
 
-
 # Run planner
 while not goal.is_reached(x_0):
     current_count = len(record_state_list) - 1
@@ -153,9 +152,6 @@ while not goal.is_reached(x_0):
         new_state = new_state_list.state_list[1]
         new_state.time_step = current_count + 1
 
-        # TODO recompute acceleration
-        # new_state.acceleration = (new_state.velocity - record_state_list[-1].velocity) / DT
-
         record_state_list.append(new_state)
 
         # TODO: add input to list
@@ -181,9 +177,6 @@ while not goal.is_reached(x_0):
         new_state = new_state_list.state_list[1 + temp]
         new_state.time_step = current_count + 1
 
-        # TODO recompute acceleration
-        # new_state.acceleration = (new_state.velocity - record_state_list[-1].velocity) / DT
-
         record_state_list.append(new_state)
 
         # TODO: add input to list
@@ -206,10 +199,17 @@ while not goal.is_reached(x_0):
                                       timestep=current_count)
 
 
+# remove first element
+record_input_list.pop(0)
+
 # **************************
 # Evaluate results
 # **************************
 from commonroad_dc.feasibility.solution_checker import valid_solution
+from commonroad_dc.feasibility.ks_optimizer import KSOptimizer
+from commonroad_dc.feasibility.vehicle_dynamics import VehicleDynamics
+from commonroad.common.solution import VehicleType
+
 # plot  final ego vehicle trajectory
 plot_final_trajectory(scenario, planning_problem, record_state_list, (config.vehicle.length, config.vehicle.width))
 
@@ -217,11 +217,25 @@ plot_final_trajectory(scenario, planning_problem, record_state_list, (config.veh
 solution = create_planning_problem_solution(config, record_state_list, scenario, planning_problem)
 
 # check validity of solution
-is_valid, res = valid_solution(scenario, problem_set, solution)
+# is_valid, res = valid_solution(scenario, problem_set, solution)
 
-# reconstruct inputs
-_, reconstructed_inputs = reconstruct_inputs(config, solution.planning_problem_solutions[0])
-
-# evaluate
-plot_states(config, record_state_list, plot_bounds=True)
-plot_inputs(config, record_input_list, reconstructed_inputs, plot_bounds=True)
+# check feasibility
+global_optimizer = False
+if not global_optimizer:
+    # reconstruct inputs (state transition optimizations)
+    feasible, reconstructed_inputs = reconstruct_inputs(config, solution.planning_problem_solutions[0])
+    # reconstruct states from inputs
+    reconstructed_states = reconstruct_states(config, record_state_list, reconstructed_inputs)
+    # evaluate
+    plot_states(config, record_state_list, reconstructed_states, plot_bounds=True)
+    plot_inputs(config, record_input_list, reconstructed_inputs, plot_bounds=True)
+else:
+    # reconstruct (global optimizer)
+    opti = KSOptimizer(config.planning.dt, VehicleDynamics.KS(VehicleType.BMW_320i), q_x=[0.1, 0.1, 0.0, 0.0, 1.0],
+                       q_u=[0.05, 0.0])
+    res = opti.reconstruct(solution.planning_problem_solutions[0].trajectory)
+    reconstructed_states = res[0].state_list
+    reconstructed_inputs = res[1].state_list
+    # evaluate
+    plot_states(config, record_state_list, reconstructed_states, plot_bounds=False)
+    plot_inputs(config, record_input_list, reconstructed_inputs, plot_bounds=True)
