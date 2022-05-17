@@ -24,7 +24,7 @@ For the development IDE we suggest [PyCharm](http://www.jetbrains.com/pycharm/)
 
 ### Example script
 
-An example script `run_combined_planner.py` is provided, which plans intended trajectories for motion planning
+An example script `run_planner.py` is provided, which plans intended trajectories for motion planning
 
 
 ## Literature
