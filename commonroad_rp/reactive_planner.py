@@ -270,7 +270,7 @@ class ReactivePlanner(object):
 
     def _compute_initial_states(self, x_0: State) -> (np.ndarray, np.ndarray):
         """
-        Computes the initial states for the polynomial planner based on a CommonRoad state
+        Computes the curvilienar initial states for the polynomial planner based on a Cartesian CommonRoad state
         :param x_0: The CommonRoad state object representing the initial state of the vehicle
         :return: A tuple containing the initial longitudinal and lateral states (lon,lat)
         """
@@ -281,22 +281,23 @@ class ReactivePlanner(object):
             print('<Reactive_planner>: Value Error for curvilinear transformation')
             tmp = np.array([x_0.position])
             print(x_0.position)
-            if self._co._reference[0][0] > x_0.position[0]:
-                reference_path = np.concatenate((tmp, self._co._reference), axis=0)
+            if self._co.reference[0][0] > x_0.position[0]:
+                reference_path = np.concatenate((tmp, self._co.reference), axis=0)
             else:
-                reference_path = np.concatenate((self._co._reference, tmp), axis=0)
+                reference_path = np.concatenate((self._co.reference, tmp), axis=0)
             self.set_reference_path(reference_path)
             s, d = self._co.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
 
         # compute orientation in curvilinear coordinate frame
         ref_theta = np.unwrap(self._co.ref_theta)
+        # TODO use interpolate_angle function
         theta_cl = x_0.orientation - np.interp(s, self._co.ref_pos, ref_theta)
 
         # compute curvatures
         kr = np.interp(s, self._co.ref_pos, self._co.ref_curv)
         kr_d = np.interp(s, self._co.ref_pos, self._co.ref_curv_d)
 
-        # compute d prime and d prime prime -> derivation after arclength
+        # compute d prime and d prime prime -> derivation after arclength (s)
         d_p = (1 - kr * d) * np.tan(theta_cl)
         d_pp = -(kr_d * d + kr * d_p) * np.tan(theta_cl) + ((1 - kr * d) / (math.cos(theta_cl) ** 2)) * (
                 x_0.yaw_rate * (1 - kr * d) / math.cos(theta_cl) - kr)
@@ -443,13 +444,10 @@ class ReactivePlanner(object):
             if self._DEBUG:
                 print('<ReactivePlanner>: Could not find any trajectory out of {} trajectories'.format(
                     sum([self._get_no_of_samples(i) for i in range(self._sampling_level)])))
-                print('<ReactivePlanner>: Cannot find trajectory with default sampling parameters. '
-                      'Switching to emergency mode!')
         else:
             if self._DEBUG:
-                print('<ReactivePlanner>: Found optimal trajectory with costs = {}, which '
-                      'corresponds to {} percent of seen costs'.format(
-                        optimal_trajectory.cost, ((optimal_trajectory.cost - bundle.min_costs().cost) / (
+                print('<ReactivePlanner>: Found optimal trajectory with costs = {}, which corresponds to {} percent '
+                      'of seen costs'.format(optimal_trajectory.cost, ((optimal_trajectory.cost - bundle.min_costs().cost) / (
                                 bundle.max_costs().cost - bundle.min_costs().cost))))
 
             self._optimal_cost = optimal_trajectory.cost
