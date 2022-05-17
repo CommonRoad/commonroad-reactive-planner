@@ -6,3 +6,8 @@
 .ipynb_checkpoints
 .pyc
 __pycache__
+
+scenarios/
+plots/
+unit_tests/img/
+evals/

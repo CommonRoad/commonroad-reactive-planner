@@ -1,23 +1,37 @@
-__author__ = "Christian Pek"
+__author__ = "Christian Pek, Gerald Würsching"
 __copyright__ = "TUM Cyber-Physical Systems Group"
 __credits__ = ["BMW Group CAR@TUM, interACT"]
 __version__ = "0.5"
-__maintainer__ = "Christian Pek"
-__email__ = "Christian.Pek@tum.de"
+__maintainer__ = "Gerald Würsching"
+__email__ = "commonroad@lists.lrz.de"
 __status__ = "Beta"
 
 from typing import Union, List
 import numpy as np
 from abc import ABC, abstractmethod
+import math
 
 from commonroad_rp.polynomial_trajectory import PolynomialTrajectory
-import commonroad.common.validity as val
 
 
 class Sample(ABC):
     """
-    Abstract class representing a trajectory ssample in a certain coordinate system
+    Abstract class representing a trajectory sample in a certain coordinate system
     """
+
+    def __init__(self, current_time_step: int):
+        """
+        :param current_time_step
+        """
+        self.current_time_step = current_time_step
+
+    @property
+    def current_time_step(self):
+        return self._current_time_step
+
+    @current_time_step.setter
+    def current_time_step(self, curr_time_step):
+        self._current_time_step = curr_time_step
 
     @abstractmethod
     def length(self) -> int:
@@ -28,12 +42,10 @@ class Sample(ABC):
         pass
 
     @abstractmethod
-    def enlarge(self, steps: int, dt: float):
+    def enlarge(self, dt: float):
         """
         Enlarges the sample specified by a certain number of steps
-        :param steps: The steps for enlarging the sample
         :param dt: The time step of between each step
-        :return:
         """
         pass
 
@@ -44,33 +56,15 @@ class CartesianSample(Sample):
     """
 
     def __init__(self, x: np.ndarray, y: np.ndarray, theta: np.ndarray, v: np.ndarray, a: np.ndarray, kappa: np.ndarray,
-                 kappa_dot: np.ndarray):
-        # assert val.is_real_number_vector(
-        #     x), '<CartesianSample/init>: Provided x positions are not valid! x = {}'.format(x)
-        # assert val.is_real_number_vector(
-        #     y, length=len(x)), '<CartesianSample/init>: Provided y positions are not valid! y = {}'.format(y)
-        # assert val.is_real_number_vector(
-        #     theta, length=len(x)), '<CartesianSample/init>: Provided orientations are not valid! theta = {}'.format(
-        #     theta)
-        # assert val.is_real_number_vector(
-        #     v, length=len(x)), '<CartesianSample/init>: Provided velocities are not valid! v = {}'.format(v)
-        # assert val.is_real_number_vector(
-        #     a, length=len(x)), '<CartesianSample/init>: Provided accelerations are not valid! a = {}'.format(a)
-        # assert val.is_real_number_vector(
-        #     kappa, length=len(x)), '<CartesianSample/init>: Provided curvatures are not valid! kappa =
-        #     {}'.format(kappa)
-        # assert val.is_real_number_vector(
-        #     kappa_dot,
-        #     length=len(x)), '<CartesianSample/init>: Provided curvature changes are not valid! kappa_dot = {}'.format(
-        #     kappa_dot)
-
-        self._x = x
-        self._y = y
-        self._theta = theta
-        self._v = v
-        self._a = a
-        self._kappa = kappa
-        self._kappa_dot = kappa_dot
+                 kappa_dot: np.ndarray, current_time_step: int):
+        super().__init__(current_time_step)
+        self.x = x
+        self.y = y
+        self.theta = theta
+        self.v = v
+        self.a = a
+        self.kappa = kappa
+        self.kappa_dot = kappa_dot
 
     @property
     def x(self) -> np.ndarray:
@@ -82,7 +76,7 @@ class CartesianSample(Sample):
 
     @x.setter
     def x(self, x):
-        pass
+        self._x = x
 
     @property
     def y(self) -> np.ndarray:
@@ -94,7 +88,7 @@ class CartesianSample(Sample):
 
     @y.setter
     def y(self, y):
-        pass
+        self._y = y
 
     @property
     def theta(self) -> np.ndarray:
@@ -106,7 +100,7 @@ class CartesianSample(Sample):
 
     @theta.setter
     def theta(self, theta):
-        pass
+        self._theta = theta
 
     @property
     def v(self) -> np.ndarray:
@@ -118,7 +112,7 @@ class CartesianSample(Sample):
 
     @v.setter
     def v(self, v):
-        pass
+        self._v = v
 
     @property
     def a(self) -> np.ndarray:
@@ -130,7 +124,7 @@ class CartesianSample(Sample):
 
     @a.setter
     def a(self, a):
-        pass
+        self._a = a
 
     @property
     def kappa(self) -> np.ndarray:
@@ -142,7 +136,7 @@ class CartesianSample(Sample):
 
     @kappa.setter
     def kappa(self, kappa):
-        pass
+        self._kappa = kappa
 
     @property
     def kappa_dot(self) -> np.ndarray:
@@ -154,7 +148,7 @@ class CartesianSample(Sample):
 
     @kappa_dot.setter
     def kappa_dot(self, kappa_dot):
-        pass
+        self._kappa_dot = kappa_dot
 
     def length(self) -> int:
         """
@@ -163,60 +157,53 @@ class CartesianSample(Sample):
         """
         return len(self.x)
 
-    def enlarge(self, steps: int, dt: float):
+    def enlarge(self, dt: float):
         """
         Enlarges the Cartesian sample specified by the number of steps
-        :param steps: The number of steps for enlarging the sample
         :param dt: The time step between two consecutive steps
         """
-        assert val.is_positive(steps), '<CartesianSample>: Provided steps is not valid! steps = {}'.format(steps)
-        assert val.is_real_number(dt), '<CartesianSample>: Provided time step is not valid! dt = {}'.format(dt)
+        last_time_step = self.current_time_step - 1
+        steps = self.length() - self.current_time_step
 
         # create time index
         t = np.arange(1, steps + 1, 1) * dt
         # enlarge acceleration values
-        self._a = np.append(self.a, np.repeat(self.a[-1], steps))
+        self.a[self.current_time_step:] = np.repeat(self.a[last_time_step], steps)
 
         # enlarge velocities by considering acceleration
-        v_temp = self.v[-1] + t * self.a[-1]
+        # TODO remove a?
+        v_temp = self.v[last_time_step] + t * self.a[-1]
         # remove negative velocities
         v_temp = v_temp * np.greater_equal(v_temp, 0)
-        self._v = np.append(self._v, v_temp)
+        self.v[self.current_time_step:] = v_temp
 
         # enlarge orientations
-        self._theta = np.append(self.theta, np.repeat(self.theta[-1], steps))
+        self.theta[self.current_time_step:] = np.repeat(self.theta[last_time_step], steps)
         # enlarge curvatures
-        self._kappa = np.append(self.kappa, np.repeat(self.kappa[-1], steps))
+        self.kappa[self.current_time_step:] = np.repeat(self.kappa[last_time_step], steps)
         # enlarge curvature changes
-        self._kappa_dot = np.append(self.kappa_dot, np.repeat(self.kappa_dot[-1], steps))
+        self.kappa_dot[self.current_time_step:] = np.repeat(self.kappa_dot[last_time_step], steps)
 
         # enlarge positions
-        self._x = np.append(self.x, self.x[-1] + np.cumsum(dt * v_temp * np.cos(self.theta[-1])))
-        self._y = np.append(self.y, self.y[-1] + np.cumsum(dt * v_temp * np.sin(self.theta[-1])))
+        self.x[self.current_time_step:] = self.x[last_time_step] + np.cumsum(dt * v_temp * math.cos(self.theta[last_time_step]))
+        self.y[self.current_time_step:] = self.y[last_time_step] + np.cumsum(dt * v_temp * math.sin(self.theta[last_time_step]))
+        self.current_time_step = self.length()
 
 
 class CurviLinearSample(Sample):
     """
-        Class representing the curvilinear trajectory of a given trajectory sample
+    Class representing the curvilinear trajectory of a given trajectory sample
     """
 
-    def __init__(self, s: np.ndarray, d: np.ndarray, theta: np.ndarray, dd=None, ddd=None, ss=None, sss=None):
-        # assert val.is_real_number_vector(
-        #     s), '<CurvilinearSample/init>: Provided s positions are not valid! s = {}'.format(s)
-        # assert val.is_real_number_vector(
-        #     d, length=len(s)), '<CurvilinearSample/init>: Provided d positions are not valid! d = {}'.format(d)
-        # assert val.is_real_number_vector(
-        #     theta, length=len(s)), '<CurvilinearSample/init>: Provided orientations are not valid! theta = {}'.format(
-        #     theta)
-
-        self._s = s
-        self._d = d
-        self._theta = theta
-        # store time derivations
-        self._d_dot = dd
-        self._d_ddot = ddd
-        self._s_dot = ss
-        self._s_ddot = sss
+    def __init__(self, s: np.ndarray, d: np.ndarray, theta: np.ndarray, current_time_step: int, dd=None, ddd=None, ss=None, sss=None):
+        super().__init__(current_time_step)
+        self.s = s
+        self.d = d
+        self.theta = theta
+        self.d_dot = dd
+        self.d_ddot = ddd
+        self.s_dot = ss
+        self.s_ddot = sss
 
     @property
     def s(self) -> np.ndarray:
@@ -228,7 +215,7 @@ class CurviLinearSample(Sample):
 
     @s.setter
     def s(self, s):
-        pass
+        self._s = s
 
     @property
     def d(self) -> np.ndarray:
@@ -240,7 +227,7 @@ class CurviLinearSample(Sample):
 
     @d.setter
     def d(self, d):
-        pass
+        self._d = d
 
     @property
     def theta(self) -> np.ndarray:
@@ -252,7 +239,7 @@ class CurviLinearSample(Sample):
 
     @theta.setter
     def theta(self, theta):
-        pass
+        self._theta = theta
 
     @property
     def d_dot(self) -> np.ndarray:
@@ -264,7 +251,7 @@ class CurviLinearSample(Sample):
 
     @d_dot.setter
     def d_dot(self, d_dot):
-        pass
+        self._d_dot = d_dot
 
     @property
     def d_ddot(self) -> np.ndarray:
@@ -276,7 +263,7 @@ class CurviLinearSample(Sample):
 
     @d_ddot.setter
     def d_ddot(self, d_ddot):
-        pass
+        self._d_ddot = d_ddot
 
     @property
     def s_dot(self) -> np.ndarray:
@@ -288,7 +275,7 @@ class CurviLinearSample(Sample):
 
     @s_dot.setter
     def s_dot(self, s_dot):
-        pass
+        self._s_dot = s_dot
 
     @property
     def s_ddot(self) -> np.ndarray:
@@ -300,43 +287,44 @@ class CurviLinearSample(Sample):
 
     @s_ddot.setter
     def s_ddot(self, s_ddot):
-        pass
+        self._s_ddot = s_ddot
 
     def length(self) -> int:
         return len(self.s)
 
-    def enlarge(self, steps: int, dt: float):
+    def enlarge(self, dt: float):
         """
         Enlarges the curvilinear sample specified by the number of steps
-        :param steps: The number of steps for enlarging
         :param dt: The time step between two v steps
-        :return:
         """
-        assert val.is_positive(steps), '<CartesianSample>: Provided steps is not valid! steps = {}'.format(steps)
-        assert val.is_real_number(dt), '<CartesianSample>: Provided time step is not valid! dt = {}'.format(dt)
+        last_time_step = self._current_time_step - 1
+        steps = self.length() - self._current_time_step
 
         # create time array
         t = np.arange(1, (steps + 1), 1) * dt
         # enlarge velocities by considering acceleration
-        s_dot_temp = self.s_dot[-1] + t * self.s_ddot[-1]
+        #TODO Remove acceleration?
+        s_dot_temp = self.s_dot[last_time_step] + t * self.s_ddot[-1]
         # remove negative velocities
         s_dot_temp = s_dot_temp * np.greater_equal(s_dot_temp, 0)
-        self._s_dot = np.append(self.s_dot, s_dot_temp)
+        self.s_dot[self.current_time_step:] = s_dot_temp
 
         # enlarge velocities by considering acceleration
-        d_dot_temp = self.d_dot[-1] + t * self.d_ddot[-1]
-        self._d_dot = np.append(self.d_dot, d_dot_temp)
+        # TODO remove acceleration?
+        d_dot_temp = self.d_dot[last_time_step] + t * self.d_ddot[-1]
+        self.d_dot = np.append(self.d_dot, d_dot_temp)
 
         # enlarge accelerations
-        self._s_ddot = np.append(self.s_ddot, np.repeat(self.s_ddot, steps))
-        self._d_ddot = np.append(self.d_ddot, np.repeat(self.d_ddot, steps))
+        self.s_ddot[self.current_time_step:] = np.repeat(self.s_ddot[last_time_step], steps)
+        self.d_ddot[self.current_time_step:] = np.repeat(self.d_ddot[last_time_step], steps)
 
         # enlarge orientations
-        self._theta = np.append(self.theta, np.repeat(self.theta[-1], steps))
+        self.theta[self.current_time_step:] = np.repeat(self.theta[last_time_step], steps)
 
         # enlarge positions
-        self._s = np.append(self.s, self.s[-1] + t * self.s_dot[-1])
-        self._d = np.append(self.d, self.d[-1] + t * self.d_dot[-1])
+        self.s[self.current_time_step:] = self.s[last_time_step] + t * self.s_dot[last_time_step]
+        self.d[self.current_time_step:] = self.d[last_time_step] + t * self.d_dot[last_time_step]
+        self.current_time_step = self.length()
 
 
 class TrajectorySample(Sample):
@@ -449,16 +437,13 @@ class TrajectorySample(Sample):
         """
         return self.cartesian.length()
 
-    def enlarge(self, steps: int, dt: float):
+    def enlarge(self, dt: float):
         """
         Enlarges the Cartesian and curvilinear sample specified by the given steps
-        :param steps: The steps for enlarging
         :param dt: The time step between two consecutive steps
         """
-        assert val.is_positive(steps), '<CartesianSample>: Provided steps is not valid! steps = {}'.format(steps)
-        assert val.is_real_number(dt), '<CartesianSample>: Provided time step is not valid! dt = {}'.format(dt)
-        self._cartesian.enlarge(steps, dt)
-        self._curvilinear.enlarge(steps, dt)
+        self._cartesian.enlarge(dt)
+        self._curvilinear.enlarge(dt)
 
 
 class TrajectoryBundle:
@@ -472,13 +457,30 @@ class TrajectoryBundle:
         :param trajectories: The list of trajectory samples
         :param cost_function: The cost function for the evaluation
         """
-        assert isinstance(trajectories, list) and all([isinstance(t, TrajectorySample) for t in
-                                                       trajectories]), '<TrajectoryBundle/init>: ' \
-                                                                       'Provided list of trajectory samples is not ' \
-                                                                       'valid! List = {}'.format(trajectories)
-        self._trajectory_bundle: List[TrajectorySample] = trajectories
+        assert isinstance(trajectories, list) and all([isinstance(t, TrajectorySample) for t in trajectories]), \
+            '<TrajectoryBundle/init>: ' \
+            'Provided list of trajectory samples is not ' \
+            'valid! List = {}'.format(trajectories)
+
+        self.trajectories: List[TrajectorySample] = trajectories
         self._cost_function = cost_function
         self._is_sorted = False
+
+    @property
+    def trajectories(self) -> List[TrajectorySample]:
+        """
+        Returns the list of trajectory samples
+        :return: The list of trajectory samples
+        """
+        return self._trajectory_bundle
+
+    @trajectories.setter
+    def trajectories(self, trajectories: List[TrajectorySample]):
+        """
+        Sets the list of trajectory samples
+        :param trajectories: The list of trajectory samples
+        """
+        self._trajectory_bundle = trajectories
 
     def sort(self):
         """
@@ -524,21 +526,6 @@ class TrajectoryBundle:
         return self._trajectory_bundle
 
     @property
-    def trajectories(self) -> List[TrajectorySample]:
-        """
-        Returns the list of trajectory samples
-        :return: The list of trajectory samples
-        """
-        return self._trajectory_bundle
-
-    @trajectories.setter
-    def trajectories(self, trajectories: List[TrajectorySample]):
-        """
-        Sets the list of trajectory samples
-        :param trajectories: The list of trajectory samples
-        """
-        self._trajectory_bundle = trajectories
-
     def empty(self) -> bool:
         """
         Checks if the TrajectoryBundle is empty, i.e., does not contain any TrajectorySample

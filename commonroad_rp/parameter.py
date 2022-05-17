@@ -2,11 +2,9 @@ __author__ = "Christian Pek"
 __copyright__ = "TUM Cyber-Physical Systems Group"
 __credits__ = ["BMW Group CAR@TUM, interACT"]
 __version__ = "0.5"
-__maintainer__ = "Christian Pek"
-__email__ = "Christian.Pek@tum.de"
+__maintainer__ = "Gerald Würsching"
+__email__ = "commonroad@lists.lrz.de"
 __status__ = "Beta"
-
-from commonroad.common.validity import *
 
 import numpy as np
 from abc import ABC, abstractmethod
@@ -19,12 +17,8 @@ class Sampling(ABC):
 
     def __init__(self, low: float, up: float, n_samples: int):
         # Check validity of input
-        assert is_real_number(low), '<SamplingParameters>: Lower sampling bound not valid! low = {}'.format(low)
-        assert is_real_number(up), '<SamplingParameters>: Upper sampling bound not valid! up = {}'.format(up)
-        assert np.greater_equal(up,
-                                low), '<SamplingParameters>: Upper sampling bound is not greater than ' \
+        assert np.greater_equal(up, low), '<SamplingParameters>: Upper sampling bound is not greater than ' \
                                       'lower bound! up = {} , low = {}'.format(up, low)
-        assert is_positive(n_samples), '<SamplingParameters>: Step size is not valid! step size = {}'.format(n_samples)
         assert isinstance(n_samples, int)
         assert n_samples > 0
 
@@ -48,11 +42,11 @@ class Sampling(ABC):
         :param sampling_stage: The sampling stage to receive (>=0)
         :return: The set of sampling steps for the queried sampling stage
         """
-        assert 0 <= sampling_stage < self.no_of_samples(), '<Sampling/to_range>: Provided sampling stage is' \
-                                                           ' incorrect! stage = {}'.format(
-            sampling_stage)
+        assert 0 <= sampling_stage < self.no_of_samples, '<Sampling/to_range>: Provided sampling stage is' \
+                                                           ' incorrect! stage = {}'.format(sampling_stage)
         return self._db[sampling_stage]
 
+    @property
     def no_of_samples(self) -> int:
         """
         Returns the maximum number of sampling stages
@@ -70,8 +64,10 @@ class VelocitySampling(Sampling):
         super(VelocitySampling, self).__init__(low, up, n_samples)
 
     def _setup(self):
-        for i in range(self.no_of_samples()):
-            self._db.append(set(np.linspace(self.low, self.up, i + 3)))
+        n = 3
+        for i in range(self.no_of_samples):
+            self._db.append(set(np.linspace(self.low, self.up, n)))
+            n = (n * 2) - 1
 
 
 class PositionSampling(Sampling):
@@ -83,12 +79,10 @@ class PositionSampling(Sampling):
         super(PositionSampling, self).__init__(low, up, n_samples)
 
     def _setup(self):
-        removal = set()
-        for i in range(self.no_of_samples()):
-            # samp = set(np.linspace(self.low, self.up, i + 4))
-            samp = set(np.arange(self.low, self.up + 1 / (i + 1), 1 / (i + 1)))
-            self._db.append((samp - removal) | {0})
-            removal |= samp
+        n = 3
+        for i in range(self.no_of_samples):
+            self._db.append(set(np.linspace(self.low, self.up, n)))
+            n = (n * 2) - 1
 
 
 class TimeSampling(Sampling):
@@ -101,10 +95,14 @@ class TimeSampling(Sampling):
         super(TimeSampling, self).__init__(low, up, n_samples)
 
     def _setup(self):
-        self._db.append(np.arange(1, self.up + 1, 1))
-        for i in range(1, self.no_of_samples()):
-            samp = set(np.arange(self.low, self.up + self.dT, self.dT))
+        # self._db.append(np.arange(1, int(self.up) + 1, int(1/self.dT)*self.dT))
+        for i in range(self.no_of_samples):
+            step_size = int((1 / (i + 1)) / self.dT)
+            samp = set(np.arange(self.low, round(self.up + self.dT, 2), step_size * self.dT))
+            samp.discard(round(self.up + self.dT, 2))
             self._db.append(samp)
+        # samp = set(np.arange(self.low, round(self.up + self.dT,2), self.dT))
+        # self._db.append(samp)
 
 
 class SamplingSet(ABC):
@@ -114,8 +112,8 @@ class SamplingSet(ABC):
 
     def __init__(self, t_samples: TimeSampling, d_samples: PositionSampling, v_samples: VelocitySampling):
         assert isinstance(t_samples, TimeSampling)
-        assert isinstance(d_samples, PositionSampling) and t_samples.no_of_samples() == d_samples.no_of_samples()
-        assert isinstance(v_samples, VelocitySampling) and t_samples.no_of_samples() == v_samples.no_of_samples()
+        assert isinstance(d_samples, PositionSampling) and t_samples.no_of_samples == d_samples.no_of_samples
+        assert isinstance(v_samples, VelocitySampling) and t_samples.no_of_samples == v_samples.no_of_samples
 
         self._t_samples = t_samples
         self._d_samples = d_samples
@@ -151,7 +149,7 @@ class SamplingSet(ABC):
         Returns the maximum number of sampling stages
         :return:
         """
-        return self._t_samples.no_of_samples()
+        return self._t_samples.no_of_samples
 
 
 class DefFailSafeSampling(SamplingSet):
@@ -166,15 +164,14 @@ class DefFailSafeSampling(SamplingSet):
         super(DefFailSafeSampling, self).__init__(t_samples, d_samples, v_samples)
 
 
-class VehModelParameters:
+class DefGymSampling(SamplingSet):
     """
-    Class that represents the vehicle's constraints and parameters a_max=8, 0.2, 0.2, 10)
+    Class representing the default Sampling steps
     """
 
-    def __init__(self, a_max=8, theta_dot_max=0.2, kappa_max=0.2, kappa_dot_max=5, veh_length=4.933, veh_width=2.11):
-        self.a_max = a_max
-        self.theta_dot_max = theta_dot_max
-        self.kappa_max = kappa_max
-        self.kappa_dot_max = kappa_dot_max
-        self.veh_length = veh_length
-        self.veh_width = veh_width
+    def __init__(self, dt, horizon):
+        sampling_level = 4
+        t_samples = TimeSampling(0.2, horizon, sampling_level, dt)
+        d_samples = PositionSampling(-2.0, 2.0, sampling_level)
+        v_samples = VelocitySampling(0., 25.0, sampling_level)
+        super(DefGymSampling, self).__init__(t_samples, d_samples, v_samples)
