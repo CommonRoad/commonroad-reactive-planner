@@ -40,7 +40,7 @@ from commonroad_rp.configuration import Configuration, VehicleConfiguration
 
 # TODO: introduce mode parameter for longitudinal planning (point following, velocity following, stopping)
 # TODO: acceleration-based sampling
-# TODO: use logging instead of print statements
+# TODO: make debug level
 
 
 class ReactivePlanner(object):
@@ -505,14 +505,30 @@ class ReactivePlanner(object):
         feasible_trajectories = list()
         infeasible_trajectories = list()
 
+        # store precomputed sampling time coefficients
+        self.t = {}
+        self.t2 = {}
+        self.t3 = {}
+        self.t4 = {}
+        self.t5 = {}
+
         # loop over list of trajectories
         for trajectory in trajectories:
             # create time array and precompute time interval information
-            t = np.arange(0, np.round(trajectory.trajectory_long.delta_tau + self.dT, 5), self.dT)
-            t2 = np.square(t)
-            t3 = t2 * t
-            t4 = np.square(t2)
-            t5 = t4 * t
+            delta_tau = trajectory.trajectory_long.delta_tau
+            if delta_tau not in self.t:
+                self.t[delta_tau] = np.arange(0, np.round(trajectory.trajectory_long.delta_tau + self.dT, 5) - 1e-6,
+                                              self.dT)
+                self.t2[delta_tau] = np.square(self.t[delta_tau])
+                self.t3[delta_tau] = self.t2[delta_tau] * self.t[delta_tau]
+                self.t4[delta_tau] = np.square(self.t2[delta_tau])
+                self.t5[delta_tau] = self.t4[delta_tau] * self.t[delta_tau]
+            t = self.t[delta_tau]
+            t2 = self.t2[delta_tau]
+            t3 = self.t3[delta_tau]
+            t4 = self.t4[delta_tau]
+            t5 = self.t5[delta_tau]
+
 
             # initialize long. (s) and lat. (d) state vectors
             s = np.zeros(self.N + 1)

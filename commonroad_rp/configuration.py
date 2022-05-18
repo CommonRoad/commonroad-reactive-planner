@@ -76,6 +76,7 @@ class DebugConfiguration:
     def __init__(self, config: Union[ListConfig, DictConfig]):
         self.show_plots = config.show_plots
         self.save_plots = config.save_plots
+        self.draw_icons = config.draw_icons
         self.draw_traj_set = config.draw_traj_set
         self.debug_mode = config.debug_mode
         self.num_workers = config.num_workers

@@ -61,6 +61,8 @@ debug:
   # show/save plots
   show_plots: False
   save_plots: False
+  # draw obstacles with vehicle icons
+  draw_icons: True
   # draw sampled trajectory set
   draw_traj_set: False
   # set debug level
