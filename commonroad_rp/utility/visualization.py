@@ -8,6 +8,7 @@ __status__ = "Beta"
 
 # standard imports
 from typing import List, Tuple
+import os
 
 # third party
 import matplotlib.pyplot as plt
@@ -26,6 +27,7 @@ from commonroad_dc import pycrcc
 
 # commonroad-rp
 from commonroad_rp.trajectories import TrajectorySample
+from commonroad_rp.configuration import Configuration
 
 
 def visualize_collision_checker(scenario: Scenario, cc: pycrcc.CollisionChecker):
@@ -41,8 +43,9 @@ def visualize_collision_checker(scenario: Scenario, cc: pycrcc.CollisionChecker)
 
 
 def visualize_planner_at_timestep(scenario: Scenario, planning_problem: PlanningProblem, ego: DynamicObstacle,
-                                  pos: np.ndarray, timestep: int, traj_set: List[TrajectorySample] = None,
-                                  ref_path: np.ndarray = None, rnd: MPRenderer = None, save_path: str = None):
+                                  pos: np.ndarray, timestep: int, config: Configuration,
+                                  traj_set: List[TrajectorySample] = None, ref_path: np.ndarray = None,
+                                  rnd: MPRenderer = None):
     """
     Function to visualize planning result from the reactive planner for a given time step
     :param scenario: CommonRoad scenario object
@@ -50,6 +53,7 @@ def visualize_planner_at_timestep(scenario: Scenario, planning_problem: Planning
     :param ego: Ego vehicle as CommonRoad DynamicObstacle object
     :param pos: positions of planned trajectory [(nx2) np.ndarray]
     :param timestep: current time step of scenario to plot
+    :param config: Configuration object for plot/save settings
     :param traj_set: List of sampled trajectories (optional)
     :param ref_path: Reference path for planner as polyline [(nx2) np.ndarray] (optional)
     :param rnd: MPRenderer object (optional: if none is passed, the function creates a new renderer object; otherwise it
@@ -101,23 +105,27 @@ def visualize_planner_at_timestep(scenario: Scenario, planning_problem: Planning
         rnd.ax.plot(ref_path[:, 0], ref_path[:, 1], color='g', marker='.', markersize=1, zorder=19, linewidth=0.8,
                     label='reference path')
 
-    # show plot
-    plt.show(block=True)
-
     # save as .png file
-    if save_path is not None:
-        plt.savefig(f"{save_path}/{scenario.scenario_id}_{timestep}.png", format='png', dpi=300,
+    if config.debug.save_plots:
+        os.makedirs(os.path.join(os.path.dirname(__file__), "../../plots/", str(scenario.scenario_id)),
+                    exist_ok=True)
+        plot_dir = os.path.join(os.path.dirname(__file__), "../../plots/", str(scenario.scenario_id))
+        plt.savefig(f"{plot_dir}/{scenario.scenario_id}_{timestep}.png", format='png', dpi=300,
                     bbox_inches='tight')
+
+    # show plot
+    if config.debug.show_plots:
+        plt.show(block=True)
 
 
 def plot_final_trajectory(scenario: Scenario, planning_problem: PlanningProblem, state_list: List[State],
-                          dimensions: Tuple, ref_path: np.ndarray = None, save_path: str = None):
+                          config: Configuration, ref_path: np.ndarray = None):
     """
     Function plots occupancies for a given CommonRoad trajectory (of the ego vehicle)
     :param scenario: CommonRoad scenario object
     :param planning_problem CommonRoad Planning problem object
     :param state_list: List of trajectory States
-    :param dimensions: Tuple (length, width) of ego vehicle
+    :param config: Configuration object for plot/save settings
     :param ref_path: Reference path as [(nx2) np.ndarray] (optional)
     :param save_path: Path to save plot as .png (optional)
     """
@@ -131,7 +139,7 @@ def plot_final_trajectory(scenario: Scenario, planning_problem: PlanningProblem,
                 'draw_arrow': False, "radius": 0.5}}}})
     # visualize occupancies of trajectory
     for state in state_list:
-        occ_pos = Rectangle(length=dimensions[0], width=dimensions[1], center=state.position,
+        occ_pos = Rectangle(length=config.vehicle.length, width=config.vehicle.width, center=state.position,
                             orientation=state.orientation)
         occ_pos.draw(rnd, draw_params={'shape': {'rectangle': {'facecolor': '#E37222', 'opacity': 0.6}}})
     # render scenario and occupancies
@@ -142,9 +150,14 @@ def plot_final_trajectory(scenario: Scenario, planning_problem: PlanningProblem,
         rnd.ax.plot(ref_path[:, 0], ref_path[:, 1], color='g', marker='.', markersize=1, zorder=19, linewidth=0.8,
                     label='reference path')
 
-    # show plot
-    plt.show(block=True)
     # save as .png file
-    if save_path is not None:
-        plt.savefig(f"{save_path}/{scenario.scenario_id}_final_trajectory.png", format='png', dpi=300,
+    if config.debug.save_plots:
+        os.makedirs(os.path.join(os.path.dirname(__file__), "../../plots/", str(scenario.scenario_id)),
+                    exist_ok=True)
+        plot_dir = os.path.join(os.path.dirname(__file__), "../../plots/", str(scenario.scenario_id))
+        plt.savefig(f"{plot_dir}/{scenario.scenario_id}_final_trajectory.png", format='png', dpi=300,
                     bbox_inches='tight')
+
+    # show plot
+    if config.debug.show_plots:
+        plt.show(block=True)

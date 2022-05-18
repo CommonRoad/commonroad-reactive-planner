@@ -80,8 +80,8 @@ else:
 # initialize reactive planner
 planner = ReactivePlanner(config)
 # set sampling parameters
-planner.set_d_sampling_parameters(-3, 3)
-planner.set_t_sampling_parameters(0.4, planner.dT, planner.horizon)
+planner.set_d_sampling_parameters(config.sampling.d_min, config.sampling.d_max)
+planner.set_t_sampling_parameters(config.sampling.t_min, config.planning.dt, config.planning.planning_horizon)
 # set collision checker
 planner.set_collision_checker(scenario)
 # initialize route planner and set reference path
@@ -140,7 +140,7 @@ while not goal.is_reached(x_0):
             break
 
         # if desired, store sampled trajectory bundle for visualization
-        if config.debug.show_plots:
+        if config.debug.show_plots or config.debug.save_plots:
             sampled_trajectory_bundle = deepcopy(planner.stored_trajectories)
 
         # correct orientation angle
@@ -193,10 +193,10 @@ while not goal.is_reached(x_0):
 
     print(f"current time step: {current_count}")
     # draw scenario + planning solution
-    if config.debug.show_plots:
+    if config.debug.show_plots or config.debug.save_plots:
         visualize_planner_at_timestep(scenario=scenario, planning_problem=planning_problem, ego=ego_vehicle,
                                       pos=positions, traj_set=sampled_trajectory_bundle, ref_path=ref_path,
-                                      timestep=current_count)
+                                      timestep=current_count, config=config)
 
 
 # remove first element
@@ -211,7 +211,7 @@ from commonroad_dc.feasibility.vehicle_dynamics import VehicleDynamics
 from commonroad.common.solution import VehicleType
 
 # plot  final ego vehicle trajectory
-plot_final_trajectory(scenario, planning_problem, record_state_list, (config.vehicle.length, config.vehicle.width))
+plot_final_trajectory(scenario, planning_problem, record_state_list, config)
 
 # create CR solution
 solution = create_planning_problem_solution(config, record_state_list, scenario, planning_problem)
