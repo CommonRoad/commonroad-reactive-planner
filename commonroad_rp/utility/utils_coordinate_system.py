@@ -10,7 +10,7 @@ import numpy as np
 
 from commonroad_dc.pycrccosy import CurvilinearCoordinateSystem
 from commonroad_dc.geometry.util import compute_pathlength_from_polyline,compute_curvature_from_polyline, \
-    compute_orientation_from_polyline
+    compute_orientation_from_polyline, resample_polyline
 
 from commonroad.common.util import make_valid_orientation
 
@@ -34,6 +34,20 @@ def interpolate_angle(x: float, x1: float, x2: float, y1: float, y2: float) -> f
     # delta = absmin(np.array([delta, delta_2pi_minus, delta_2pi_plus]))
 
     return make_valid_orientation(delta * (x - x1) / (x2 - x1) + y1)
+
+
+def extrapolate_ref_path(reference_path: np.ndarray, resample_step: float = 2.0) -> np.ndarray:
+    """
+    Function to extrapolate the end of the reference path in order to avoid CCosy errors and/or invalid trajectory
+    samples when the reference path is shorter than the planning horizon.
+    :param reference_path: original reference path
+    :param resample_step: interval for resampling
+    :return extrapolated reference path
+    """
+    p = np.poly1d(np.polyfit(reference_path[-2:, 0], reference_path[-2:, 1], 1))
+    x = 2.3*reference_path[-1, 0] - reference_path[-2, 0]
+    new_polyline = np.concatenate((reference_path, np.array([[x, p(x)]])), axis=0)
+    return resample_polyline(new_polyline, step=resample_step)
 
 
 class CoordinateSystem:
