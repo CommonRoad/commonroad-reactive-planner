@@ -1,0 +1,71 @@
+# planning configuration
+planning:
+  # planner time step (in s)
+  dt: 0.1
+  # planning time horizon (in s)
+  planning_horizon: 2
+  # replanning frequency (in time steps)
+  replanning_frequency: 3
+  # planner mode TODO: modes not implemented yet
+  mode: !!null
+  # continuous collision checking
+  continuous_cc: False
+  # collision check in curvilinear coordinates
+  collision_check_in_cl: False
+  # time scaling factor for collision checking if planner time step and scenario time step deviate
+  factor: 1
+  # velocity threshold (in m/s) for switching to low velocity mode
+  low_vel_mode_threshold: 4
+
+
+
+# vehicle configuration
+# by default, vehicle parameters are specified by an ID corresponding to the CommonRoad vehicle models
+vehicle:
+  # CR vehicle type (see commonroad-vehicle-models): #1: Ford Escort, #2: BMW 320i, 3 = VW Vanagon
+  cr_vehicle_id: 2
+
+  # explicitly provide one of the following parameters to overwrite the default parameters of CR vehicle type
+  # vehicle dimensions
+  length: !!null
+  width: !!null
+  wheelbase: !!null
+  # acceleration
+  a_max: !!null
+  # switching velocity
+  v_switch: !!null
+  #steering angle
+  delta_min: !!null
+  delta_max: !!null
+  # steering velocity
+  v_delta_min: !!null
+  v_delta_max: !!null
+
+
+
+# sampling configuration
+sampling:
+  # minimum time sampling in s (t_max is given by planning horizon)
+  t_min: 0.4
+  # velocity sampling interval
+  v_min: 0
+  v_max: 0
+  # lateral sampling interval
+  d_min: -3
+  d_max: 3
+
+
+
+# debug configuration
+debug:
+  # show/save plots
+  show_plots: False
+  save_plots: False
+  # draw obstacles with vehicle icons
+  draw_icons: True
+  # draw sampled trajectory set
+  draw_traj_set: False
+  # set debug level: #0: print no debug info,  #1: print basic debug info,   #2: print all debug info
+  debug_mode: 1
+  # number of workers for multiprocessing
+  num_workers: 6

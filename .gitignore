@@ -5,3 +5,10 @@
 .DS_Store
 .ipynb_checkpoints
 .pyc
+__pycache__
+
+scenarios/
+plots/
+unit_tests/img/
+evals/
+doc/build
