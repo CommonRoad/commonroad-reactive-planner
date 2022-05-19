@@ -268,7 +268,7 @@ class ReactivePlanner(object):
 
     def _compute_initial_states(self, x_0: State) -> (np.ndarray, np.ndarray):
         """
-        Computes the curvilienar initial states for the polynomial planner based on a Cartesian CommonRoad state
+        Computes the curvilinear initial states for the polynomial planner based on a Cartesian CommonRoad state
         :param x_0: The CommonRoad state object representing the initial state of the vehicle
         :return: A tuple containing the initial longitudinal and lateral states (lon,lat)
         """
@@ -288,7 +288,6 @@ class ReactivePlanner(object):
 
         # compute orientation in curvilinear coordinate frame
         ref_theta = np.unwrap(self._co.ref_theta)
-        # TODO use interpolate_angle function
         theta_cl = x_0.orientation - np.interp(s, self._co.ref_pos, ref_theta)
 
         # compute curvatures
@@ -303,9 +302,8 @@ class ReactivePlanner(object):
         # compute s dot and s dot dot -> derivation after time
         s_d = x_0.velocity * math.cos(theta_cl) / (1 - kr * d)
         if s_d < 0:
-            raise Exception(
-                "Initial state or reference incorrect! Curvilinear velocity is negative which indicates that the "
-                "ego vehicle is not driving in the same direction as specified by the reference")
+            raise Exception("Initial state or reference incorrect! Curvilinear velocity is negative which indicates"
+                            "that the ego vehicle is not driving in the same direction as specified by the reference")
 
         s_dd = x_0.acceleration
         s_dd -= (s_d ** 2 / math.cos(theta_cl)) * (
@@ -313,6 +311,7 @@ class ReactivePlanner(object):
                 (kr_d * d + kr * d_p))
         s_dd /= ((1 - kr * d) / (math.cos(theta_cl)))
 
+        # compute d dot and d dot dot
         d_d = x_0.velocity * math.sin(theta_cl)
         d_dd = s_dd * d_p + s_d ** 2 * d_pp
 
@@ -460,7 +459,6 @@ class ReactivePlanner(object):
         :param x_0_lat: The lateral state in curvilinear coordinates
         :return: The TrajectorySample for a standstill trajectory
         """
-        # TODO: Function needs to be updated
         # create artificial standstill trajectory
         if self.debug_mode >= 1:
             print('Adding standstill trajectory')
@@ -470,18 +468,23 @@ class ReactivePlanner(object):
             for i in x_0_lon:
                 print("The element {} of format {} is a real number? {}".format(i, type(i), is_real_number(i)))
             print("x_0_lat is {}".format(x_0_lat))
+        # create lon and lat polynomial
         traj_lon = QuarticTrajectory(tau_0=0, delta_tau=self.horizon, x_0=np.asarray(x_0_lon),
                                      x_d=np.array([self._desired_speed, 0]))
         traj_lat = QuinticTrajectory(tau_0=0, delta_tau=self.horizon, x_0=np.asarray(x_0_lat),
                                      x_d=np.array([x_0_lat[0], 0, 0]))
+
+        # create Cartesian and Curvilinear trajectory
         p = TrajectorySample(self.horizon, self.dT, traj_lon, traj_lat)
         p.cartesian = CartesianSample(np.repeat(x_0.position[0], self.N), np.repeat(x_0.position[1], self.N),
                                       np.repeat(x_0.orientation, self.N), np.repeat(0, self.N),
-                                      np.repeat(0, self.N), np.repeat(0, self.N), np.repeat(0, self.N))
+                                      np.repeat(0, self.N), np.repeat(0, self.N), np.repeat(0, self.N),
+                                      current_time_step=self.N)
+
         p.curvilinear = CurviLinearSample(np.repeat(x_0_lon[0], self.N), np.repeat(x_0_lat[0], self.N),
-                                          np.repeat(x_0.orientation, self.N), np.repeat(x_0_lat[1], self.N),
-                                          np.repeat(x_0_lat[2], self.N), np.repeat(x_0_lon[1], self.N),
-                                          np.repeat(x_0_lon[2], self.N))
+                                          np.repeat(x_0.orientation, self.N), dd=np.repeat(x_0_lat[1], self.N),
+                                          ddd=np.repeat(x_0_lat[2], self.N), ss=np.repeat(x_0_lon[1], self.N),
+                                          sss=np.repeat(x_0_lon[2], self.N), current_time_step=self.N)
         return p
 
     def _check_kinematics(self, trajectories: List[TrajectorySample], queue_1=None, queue_2=None):
@@ -834,7 +837,6 @@ class ReactivePlanner(object):
                     self._infeasible_count_collision += 1
                     collide = True
                     break
-                # TODO add OBB Sum hull for ego
             if not collide:
                 return trajectory
         return None
