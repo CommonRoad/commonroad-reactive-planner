@@ -38,10 +38,8 @@ from commonroad_rp.utility.utils_coordinate_system import CoordinateSystem, inte
 from commonroad_rp.configuration import Configuration, VehicleConfiguration
 
 
-# TODO: introduce mode parameter for longitudinal planning (point following, velocity following, stopping)
+# TODO: use mode parameter for longitudinal planning (point following, velocity following, stopping)
 # TODO: acceleration-based sampling
-# TODO: make debug level
-
 
 class ReactivePlanner(object):
     """
@@ -99,7 +97,7 @@ class ReactivePlanner(object):
         # visualize trajectory set
         self._draw_traj_set = config.debug.draw_traj_set
         # Debug mode
-        self._DEBUG = config.debug.debug_mode
+        self.debug_mode = config.debug.debug_mode
 
     def _check_valid_settings(self):
         """Checks validity of provided dt and horizon"""
@@ -205,7 +203,7 @@ class ReactivePlanner(object):
             self._sampling_v = VelocitySampling(min_v, max_v, self._sampling_level)
         else:
             self._sampling_v = VelocitySampling(self._desired_speed, self._desired_speed, self._sampling_level)
-        if self._DEBUG:
+        if self.debug_mode >= 1:
             print('<Reactive_planner>: Sampled interval of velocity: {} m/s - {} m/s'.format(min_v, max_v))
 
     def _get_no_of_samples(self, samp_level: int) -> int:
@@ -264,7 +262,7 @@ class ReactivePlanner(object):
         # perform pre check and order trajectories according their cost
         trajectory_bundle = TrajectoryBundle(trajectories, cost_function=DefaultCostFunction(self._desired_speed, desired_d=0))
         self._total_count = len(trajectory_bundle._trajectory_bundle)
-        if self._DEBUG:
+        if self.debug_mode >= 1:
             print('<ReactivePlanner>: %s trajectories sampled' % len(trajectory_bundle._trajectory_bundle))
         return trajectory_bundle
 
@@ -321,7 +319,7 @@ class ReactivePlanner(object):
         x_0_lon: List[float] = [s, s_d, s_dd]
         x_0_lat: List[float] = [d, d_d, d_dd]
 
-        if self._DEBUG:
+        if self.debug_mode >= 1:
             print("<ReactivePlanner>: Starting planning with: \n#################")
             print(f'Initial state for planning is {x_0}')
             print(f'Initial x_0 lon = {x_0_lon}')
@@ -402,7 +400,7 @@ class ReactivePlanner(object):
         else:
             x_0_lon, x_0_lat = self._compute_initial_states(x_0)
 
-        if self._DEBUG:
+        if self.debug_mode >= 1:
             print('<Reactive Planner>: initial state is: lon = {} / lat = {}'.format(x_0_lon, x_0_lat))
             print('<Reactive Planner>: desired velocity is {} m/s'.format(self._desired_speed))
 
@@ -414,7 +412,7 @@ class ReactivePlanner(object):
 
         # sample until trajectory has been found or sampling sets are empty
         while optimal_trajectory is None and i < self._sampling_level:
-            if self._DEBUG:
+            if self.debug_mode >= 1:
                 print('<ReactivePlanner>: Starting at sampling density {} of {}'.format(i + 1, self._sampling_level))
 
             # sample trajectory bundle
@@ -423,10 +421,10 @@ class ReactivePlanner(object):
             # get optimal trajectory
             t0 = time.time()
             optimal_trajectory = self._get_optimal_trajectory(bundle)
-            if self._DEBUG:
+            if self.debug_mode >= 1:
                 print('<ReactivePlanner>: Checked trajectories in {} seconds'.format(time.time() - t0))
 
-            if self._DEBUG:
+            if self.debug_mode >= 1:
                 print('<ReactivePlanner>: Rejected {} infeasible trajectories due to kinematics'.format(
                     self.infeasible_count_kinematics))
                 print('<ReactivePlanner>: Rejected {} infeasible trajectories due to collisions'.format(
@@ -441,11 +439,11 @@ class ReactivePlanner(object):
 
         # check if feasible trajectory exists -> emergency mode
         if optimal_trajectory is None:
-            if self._DEBUG:
+            if self.debug_mode >= 1:
                 print('<ReactivePlanner>: Could not find any trajectory out of {} trajectories'.format(
                     sum([self._get_no_of_samples(i) for i in range(self._sampling_level)])))
         else:
-            if self._DEBUG:
+            if self.debug_mode >= 1:
                 print('<ReactivePlanner>: Found optimal trajectory with costs = {}, which corresponds to {} percent '
                       'of seen costs'.format(optimal_trajectory.cost, ((optimal_trajectory.cost - bundle.min_costs().cost) / (
                                 bundle.max_costs().cost - bundle.min_costs().cost))))
@@ -464,7 +462,7 @@ class ReactivePlanner(object):
         """
         # TODO: Function needs to be updated
         # create artificial standstill trajectory
-        if self._DEBUG:
+        if self.debug_mode >= 1:
             print('Adding standstill trajectory')
             print("x_0 is {}".format(x_0))
             print("x_0_lon is {}".format(x_0_lon))
@@ -496,10 +494,6 @@ class ReactivePlanner(object):
         :param queue_2: Multiprocessing.Queue() object for storing infeasible trajectories (only vor visualization)
         :return: The list of output trajectories
         """
-
-        # TODO: Remove this Debug parameter
-        DEBUG = False
-
         # initialize lists for output trajectories
         # infeasible trajectory list is only used for visualization when self._draw_traj_set is True
         feasible_trajectories = list()
@@ -585,12 +579,12 @@ class ReactivePlanner(object):
             if not self._draw_traj_set:
                 # pre-filter with quick underapproximative check for feasibility
                 if np.any(np.abs(s_acceleration) > self.vehicle_params.a_max):
-                    if DEBUG:
+                    if self.debug_mode >= 2:
                         print(f"Acceleration {np.max(np.abs(s_acceleration))}")
                     feasible = False
                     continue
                 if np.any(s_velocity < -0.1):
-                    if DEBUG:
+                    if self.debug_mode >= 2:
                         print(f"Velocity {min(s_velocity)} at step")
                     feasible = False
                     continue
@@ -721,7 +715,7 @@ class ReactivePlanner(object):
                         y[i] = pos[1]
                     else:
                         feasible = False
-                        if DEBUG:
+                        if self.debug_mode >= 2:
                             print("Out of projection domain")
                         break
 
@@ -766,7 +760,7 @@ class ReactivePlanner(object):
                     # store trajectory in infeasible trajectories list
                     infeasible_trajectories.append(trajectory)
 
-        if self._DEBUG:
+        if self.debug_mode >= 1:
             print('<ReactivePlanner>: Kinematic check of %s trajectories done' % len(trajectories))
 
         # store feasible trajectories in Queue 1
@@ -865,15 +859,3 @@ class ReactivePlanner(object):
             while state.orientation > interval_end:
                 state.orientation -= 2 * np.pi
         return trajectory
-
-
-# TODO remove?
-def shift_angle_to_interval(angle_list, interval_start=-np.pi, interval_end=np.pi):
-    new_angle_list = np.zeros(angle_list.shape)
-    for idx, angle in enumerate(angle_list):
-        while angle < interval_start:
-            angle += 2 * np.pi
-        while angle > interval_end:
-            angle -= 2 * np.pi
-        new_angle_list[idx] = angle
-    return new_angle_list

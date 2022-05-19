@@ -43,9 +43,8 @@ def visualize_collision_checker(scenario: Scenario, cc: pycrcc.CollisionChecker)
 
 
 def visualize_planner_at_timestep(scenario: Scenario, planning_problem: PlanningProblem, ego: DynamicObstacle,
-                                  pos: np.ndarray, timestep: int, config: Configuration,
-                                  traj_set: List[TrajectorySample] = None, ref_path: np.ndarray = None,
-                                  rnd: MPRenderer = None):
+                                  timestep: int, config: Configuration, traj_set: List[TrajectorySample] = None,
+                                  ref_path: np.ndarray = None, rnd: MPRenderer = None):
     """
     Function to visualize planning result from the reactive planner for a given time step
     :param scenario: CommonRoad scenario object
@@ -64,7 +63,7 @@ def visualize_planner_at_timestep(scenario: Scenario, planning_problem: Planning
     if rnd is None:
         rnd = MPRenderer(figsize=(20, 10))
     # visualize scenario
-    scenario.draw(rnd, draw_params={'time_begin': timestep})
+    scenario.draw(rnd, draw_params={'time_begin': timestep, 'dynamic_obstacle': {"draw_icon": config.debug.draw_icons}})
     # visualize planning problem
     planning_problem.draw(rnd, draw_params={'planning_problem': {'initial_state': {'state': {
                 'draw_arrow': False, "radius": 0.5}}}})
@@ -89,6 +88,7 @@ def visualize_planner_at_timestep(scenario: Scenario, planning_problem: Planning
     rnd.render()
 
     # visualize optimal trajectory
+    pos = np.asarray([state.position for state in ego.prediction.trajectory.state_list])
     rnd.ax.plot(pos[:, 0], pos[:, 1], color='k', marker='x', markersize=1.5, zorder=21, linewidth=1.5,
                 label='optimal trajectory')
 

@@ -93,15 +93,15 @@ planner.set_reference_path(ref_path)
 # **************************
 # Run Planning
 # **************************
-# initialize some variables
+# initialize lists to store states and inputs
 record_state_list = list()
 record_input_list = list()
 x_cl = None
 current_count = 0
 planning_times = list()
-positions = None
 ego_vehicle = None
 
+# add initial state to recorded state list
 record_state_list.append(x_0)
 delattr(record_state_list[0], "slip_angle")
 record_state_list[0].steering_angle = np.arctan2(config.vehicle.wheelbase * record_state_list[0].yaw_rate,
@@ -146,15 +146,12 @@ while not goal.is_reached(x_0):
         # correct orientation angle
         new_state_list = planner.shift_orientation(optimal[0])
 
-        # get positions of optimal trajectory
-        positions = np.asarray([state.position for state in new_state_list.state_list])
-
+        # add new state to recorded state list
         new_state = new_state_list.state_list[1]
         new_state.time_step = current_count + 1
-
         record_state_list.append(new_state)
 
-        # TODO: add input to list
+        # add input to recorded input list
         record_input_list.append(State(
             steering_angle=new_state.steering_angle,
             acceleration=new_state.acceleration,
@@ -174,12 +171,13 @@ while not goal.is_reached(x_0):
 
         # continue on optimal trajectory
         temp = current_count % config.planning.replanning_frequency
+
+        # add new state to recorded state list
         new_state = new_state_list.state_list[1 + temp]
         new_state.time_step = current_count + 1
-
         record_state_list.append(new_state)
 
-        # TODO: add input to list
+        # add input to recorded input list
         record_input_list.append(State(
             steering_angle=new_state.steering_angle,
             acceleration=new_state.acceleration,
@@ -195,7 +193,7 @@ while not goal.is_reached(x_0):
     # draw scenario + planning solution
     if config.debug.show_plots or config.debug.save_plots:
         visualize_planner_at_timestep(scenario=scenario, planning_problem=planning_problem, ego=ego_vehicle,
-                                      pos=positions, traj_set=sampled_trajectory_bundle, ref_path=ref_path,
+                                      traj_set=sampled_trajectory_bundle, ref_path=ref_path,
                                       timestep=current_count, config=config)
 
 
@@ -206,7 +204,6 @@ record_input_list.pop(0)
 # Evaluate results
 # **************************
 from commonroad_dc.feasibility.solution_checker import valid_solution
-from commonroad_dc.feasibility.ks_optimizer import KSOptimizer
 from commonroad_dc.feasibility.vehicle_dynamics import VehicleDynamics
 from commonroad.common.solution import VehicleType
 
@@ -216,26 +213,11 @@ plot_final_trajectory(scenario, planning_problem, record_state_list, config)
 # create CR solution
 solution = create_planning_problem_solution(config, record_state_list, scenario, planning_problem)
 
-# check validity of solution
-# is_valid, res = valid_solution(scenario, problem_set, solution)
-
 # check feasibility
-global_optimizer = False
-if not global_optimizer:
-    # reconstruct inputs (state transition optimizations)
-    feasible, reconstructed_inputs = reconstruct_inputs(config, solution.planning_problem_solutions[0])
-    # reconstruct states from inputs
-    reconstructed_states = reconstruct_states(config, record_state_list, reconstructed_inputs)
-    # evaluate
-    plot_states(config, record_state_list, reconstructed_states, plot_bounds=True)
-    plot_inputs(config, record_input_list, reconstructed_inputs, plot_bounds=True)
-else:
-    # reconstruct (global optimizer)
-    opti = KSOptimizer(config.planning.dt, VehicleDynamics.KS(VehicleType.BMW_320i), q_x=[0.1, 0.1, 0.0, 0.0, 1.0],
-                       q_u=[0.05, 0.0])
-    res = opti.reconstruct(solution.planning_problem_solutions[0].trajectory)
-    reconstructed_states = res[0].state_list
-    reconstructed_inputs = res[1].state_list
-    # evaluate
-    plot_states(config, record_state_list, reconstructed_states, plot_bounds=False)
-    plot_inputs(config, record_input_list, reconstructed_inputs, plot_bounds=True)
+# reconstruct inputs (state transition optimizations)
+feasible, reconstructed_inputs = reconstruct_inputs(config, solution.planning_problem_solutions[0])
+# reconstruct states from inputs
+reconstructed_states = reconstruct_states(config, record_state_list, reconstructed_inputs)
+# evaluate
+plot_states(config, record_state_list, reconstructed_states, plot_bounds=True)
+plot_inputs(config, record_input_list, reconstructed_inputs, plot_bounds=True)
