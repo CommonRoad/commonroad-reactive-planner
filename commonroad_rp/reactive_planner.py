@@ -27,7 +27,7 @@ import commonroad_dc.pycrcc as pycrcc
 from commonroad_dc.boundary.boundary import create_road_boundary_obstacle
 from commonroad_dc.collision.collision_detection.pycrcc_collision_dispatch import create_collision_checker, \
     create_collision_object
-from commonroad_dc.collision.trajectory_queries.trajectory_queries import trajectory_preprocess_obb_sum, OBBSumException
+from commonroad_dc.collision.trajectory_queries.trajectory_queries import trajectory_preprocess_obb_sum
 
 # commonroad_rp imports
 from commonroad_rp.cost_function import DefaultCostFunction
@@ -143,8 +143,8 @@ class ReactivePlanner(object):
             if self._continuous_cc:
                 tvo, err = trajectory_preprocess_obb_sum(tvo)
                 if err == -1:
-                    raise OBBSumException("Invalid input for trajectory_preprocess_obb_sum: dynamic "
-                                          "obstacle elements overlap")
+                    raise Exception("Invalid input for trajectory_preprocess_obb_sum: dynamic "
+                                    "obstacle elements overlap")
             cc_scenario.add_collision_object(tvo)
         _, road_boundary_sg_obb = create_road_boundary_obstacle(scenario)
         cc_scenario.add_collision_object(road_boundary_sg_obb)
