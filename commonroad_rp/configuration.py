@@ -79,6 +79,7 @@ class DebugConfiguration:
         self.draw_icons = config.draw_icons
         self.draw_traj_set = config.draw_traj_set
         self.debug_mode = config.debug_mode
+        self.multiproc = config.multiproc
         self.num_workers = config.num_workers
 
 

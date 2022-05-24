@@ -203,21 +203,23 @@ record_input_list.pop(0)
 # **************************
 # Evaluate results
 # **************************
-from commonroad_dc.feasibility.solution_checker import valid_solution
-from commonroad_dc.feasibility.vehicle_dynamics import VehicleDynamics
-from commonroad.common.solution import VehicleType
+evaluate = False
+if evaluate:
+    from commonroad_dc.feasibility.solution_checker import valid_solution
+    from commonroad_dc.feasibility.vehicle_dynamics import VehicleDynamics
+    from commonroad.common.solution import VehicleType
 
-# plot  final ego vehicle trajectory
-plot_final_trajectory(scenario, planning_problem, record_state_list, config)
+    # plot  final ego vehicle trajectory
+    plot_final_trajectory(scenario, planning_problem, record_state_list, config)
 
-# create CR solution
-solution = create_planning_problem_solution(config, record_state_list, scenario, planning_problem)
+    # create CR solution
+    solution = create_planning_problem_solution(config, record_state_list, scenario, planning_problem)
 
-# check feasibility
-# reconstruct inputs (state transition optimizations)
-feasible, reconstructed_inputs = reconstruct_inputs(config, solution.planning_problem_solutions[0])
-# reconstruct states from inputs
-reconstructed_states = reconstruct_states(config, record_state_list, reconstructed_inputs)
-# evaluate
-plot_states(config, record_state_list, reconstructed_states, plot_bounds=True)
-plot_inputs(config, record_input_list, reconstructed_inputs, plot_bounds=True)
+    # check feasibility
+    # reconstruct inputs (state transition optimizations)
+    feasible, reconstructed_inputs = reconstruct_inputs(config, solution.planning_problem_solutions[0])
+    # reconstruct states from inputs
+    reconstructed_states = reconstruct_states(config, record_state_list, reconstructed_inputs)
+    # evaluate
+    plot_states(config, record_state_list, reconstructed_states, plot_bounds=True)
+    plot_inputs(config, record_input_list, reconstructed_inputs, plot_bounds=True)

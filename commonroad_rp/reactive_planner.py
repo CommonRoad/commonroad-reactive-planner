@@ -92,7 +92,8 @@ class ReactivePlanner(object):
         # threshold for low velocity mode
         self._low_vel_mode_threshold = config.planning.low_vel_mode_threshold
         self._LOW_VEL_MODE = False
-        # workers for multiprocessing
+        # multiprocessing
+        self._multiproc = config.debug.multiproc
         self._num_workers = config.debug.num_workers
         # visualize trajectory set
         self._draw_traj_set = config.debug.draw_traj_set
@@ -502,29 +503,14 @@ class ReactivePlanner(object):
         feasible_trajectories = list()
         infeasible_trajectories = list()
 
-        # store precomputed sampling time coefficients
-        self.t = {}
-        self.t2 = {}
-        self.t3 = {}
-        self.t4 = {}
-        self.t5 = {}
-
         # loop over list of trajectories
         for trajectory in trajectories:
             # create time array and precompute time interval information
-            delta_tau = trajectory.trajectory_long.delta_tau
-            if delta_tau not in self.t:
-                self.t[delta_tau] = np.arange(0, np.round(trajectory.trajectory_long.delta_tau + self.dT, 5) - 1e-6,
-                                              self.dT)
-                self.t2[delta_tau] = np.square(self.t[delta_tau])
-                self.t3[delta_tau] = self.t2[delta_tau] * self.t[delta_tau]
-                self.t4[delta_tau] = np.square(self.t2[delta_tau])
-                self.t5[delta_tau] = self.t4[delta_tau] * self.t[delta_tau]
-            t = self.t[delta_tau]
-            t2 = self.t2[delta_tau]
-            t3 = self.t3[delta_tau]
-            t4 = self.t4[delta_tau]
-            t5 = self.t5[delta_tau]
+            t = np.arange(0, np.round(trajectory.trajectory_long.delta_tau + self.dT, 5), self.dT)
+            t2 = np.square(t)
+            t3 = t2 * t
+            t4 = np.square(t2)
+            t5 = t4 * t
 
 
             # initialize long. (s) and lat. (d) state vectors
@@ -766,11 +752,14 @@ class ReactivePlanner(object):
         if self.debug_mode >= 1:
             print('<ReactivePlanner>: Kinematic check of %s trajectories done' % len(trajectories))
 
-        # store feasible trajectories in Queue 1
-        queue_1.put(feasible_trajectories)
-        # if visualization is required: store infeasible trajectories in Queue 1
-        if self._draw_traj_set:
-            queue_2.put(infeasible_trajectories)
+        if self._multiproc:
+            # store feasible trajectories in Queue 1
+            queue_1.put(feasible_trajectories)
+            # if visualization is required: store infeasible trajectories in Queue 1
+            if self._draw_traj_set:
+                queue_2.put(infeasible_trajectories)
+        else:
+            return feasible_trajectories, infeasible_trajectories
 
     def _get_optimal_trajectory(self, trajectory_bundle: TrajectoryBundle) -> Union[TrajectorySample, None]:
         """
@@ -783,31 +772,36 @@ class ReactivePlanner(object):
         self._infeasible_count_kinematics = 0
 
         # check kinematics of each trajectory
-        # divide trajectory_bundle.trajectories into chunks
-        chunk_size = math.ceil(len(trajectory_bundle.trajectories) / self._num_workers)
-        chunks = [trajectory_bundle.trajectories[ii * chunk_size: min(len(trajectory_bundle.trajectories),
-                                                                      (ii+1)*chunk_size)] for ii in range(0, self._num_workers)]
+        if self._multiproc:
+            # with multiprocessing
+            # divide trajectory_bundle.trajectories into chunks
+            chunk_size = math.ceil(len(trajectory_bundle.trajectories) / self._num_workers)
+            chunks = [trajectory_bundle.trajectories[ii * chunk_size: min(len(trajectory_bundle.trajectories),
+                                                                          (ii+1)*chunk_size)] for ii in range(0, self._num_workers)]
 
-        # initialize list of Processes and Queues
-        list_processes = []
-        feasible_trajectories = []
-        queue_1 = multiprocessing.Queue()
-        infeasible_trajectories = []
-        queue_2 = multiprocessing.Queue()
-        for chunk in chunks:
-            p = Process(target=self._check_kinematics, args=(chunk, queue_1, queue_2))
-            list_processes.append(p)
-            p.start()
+            # initialize list of Processes and Queues
+            list_processes = []
+            feasible_trajectories = []
+            queue_1 = multiprocessing.Queue()
+            infeasible_trajectories = []
+            queue_2 = multiprocessing.Queue()
+            for chunk in chunks:
+                p = Process(target=self._check_kinematics, args=(chunk, queue_1, queue_2))
+                list_processes.append(p)
+                p.start()
 
-        # get return values from queue
-        for p in list_processes:
-            feasible_trajectories.extend(queue_1.get())
-            if self._draw_traj_set:
-                infeasible_trajectories.extend(queue_2.get())
+            # get return values from queue
+            for p in list_processes:
+                feasible_trajectories.extend(queue_1.get())
+                if self._draw_traj_set:
+                    infeasible_trajectories.extend(queue_2.get())
 
-        # wait for all processes to finish
-        for p in list_processes:
-            p.join()
+            # wait for all processes to finish
+            for p in list_processes:
+                p.join()
+        else:
+            # without multiprocessing
+            feasible_trajectories, infeasible_trajectories = self._check_kinematics(trajectory_bundle.trajectories)
 
         # update number of infeasible trajectories
         self._infeasible_count_kinematics = len(trajectory_bundle.trajectories) - len(feasible_trajectories)
