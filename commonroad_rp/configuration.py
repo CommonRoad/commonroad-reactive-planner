@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import Union
 from omegaconf import OmegaConf, ListConfig, DictConfig
 
@@ -89,7 +90,7 @@ def build_configuration(name_scenario: str = None, dir_config: str = "configurat
     :param name_scenario
     :param dir_config
     """
-    conf_default = OmegaConf.load('configurations/default.yaml')
+    conf_default = OmegaConf.load(Path(__file__).parents[1] / "configurations" / "default.yaml")
 
     path_scenario_config = dir_config + f"/{name_scenario}.yaml"
     if os.path.exists(path_scenario_config):
