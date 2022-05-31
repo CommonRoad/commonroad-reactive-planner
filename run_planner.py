@@ -29,6 +29,8 @@ from commonroad_rp.utility.evaluation import create_planning_problem_solution, r
     plot_inputs, reconstruct_states
 from commonroad_rp.configuration import build_configuration
 
+from commonroad_rp.utility.utils_coordinate_system import preprocess_ref_path, extrapolate_ref_path
+
 
 # *************************************
 # Open CommonRoad scenario
@@ -87,6 +89,8 @@ planner.set_collision_checker(scenario)
 # initialize route planner and set reference path
 route_planner = RoutePlanner(scenario, planning_problem)
 ref_path = route_planner.plan_routes().retrieve_first_route().reference_path
+
+ref_path = extrapolate_ref_path(ref_path)
 planner.set_reference_path(ref_path)
 
 
@@ -196,6 +200,8 @@ while not goal.is_reached(x_0):
                                       traj_set=sampled_trajectory_bundle, ref_path=ref_path,
                                       timestep=current_count, config=config)
 
+# plot  final ego vehicle trajectory
+plot_final_trajectory(scenario, planning_problem, record_state_list, config)
 
 # remove first element
 record_input_list.pop(0)
@@ -208,9 +214,6 @@ if evaluate:
     from commonroad_dc.feasibility.solution_checker import valid_solution
     from commonroad_dc.feasibility.vehicle_dynamics import VehicleDynamics
     from commonroad.common.solution import VehicleType
-
-    # plot  final ego vehicle trajectory
-    plot_final_trajectory(scenario, planning_problem, record_state_list, config)
 
     # create CR solution
     solution = create_planning_problem_solution(config, record_state_list, scenario, planning_problem)

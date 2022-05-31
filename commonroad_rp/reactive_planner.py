@@ -821,8 +821,8 @@ class ReactivePlanner(object):
             pos1 = trajectory.curvilinear.s if self._collision_check_in_cl else trajectory.cartesian.x
             pos2 = trajectory.curvilinear.d if self._collision_check_in_cl else trajectory.cartesian.y
             theta = trajectory.curvilinear.theta if self._collision_check_in_cl else trajectory.cartesian.theta
-            # check each pose for collisions
             collide = False
+            # check each pose for collisions
             for i in range(len(pos1)):
                 ego = pycrcc.TimeVariantCollisionObject(self.x_0.time_step + i * self._factor)
                 ego.append_obstacle(pycrcc.RectOBB(0.5 * self.vehicle_params.length, 0.5 * self.vehicle_params.width,
@@ -831,6 +831,17 @@ class ReactivePlanner(object):
                     self._infeasible_count_collision += 1
                     collide = True
                     break
+
+            # continuous collision check if not collision has been detected before already
+            if self._continuous_cc and not collide:
+                ego_tvo = pycrcc.TimeVariantCollisionObject(self.x_0.time_step)
+                [ego_tvo.append_obstacle(pycrcc.RectOBB(0.5 * self.vehicle_params.length, 0.5 * self.vehicle_params.width,
+                                                   theta[i], pos1[i], pos2[i])) for i in range(len(pos1))]
+                ego_tvo, err = trajectory_preprocess_obb_sum(ego_tvo)
+                if self._cc.collide(ego_tvo):
+                    self._infeasible_count_collision += 1
+                    collide = True
+
             if not collide:
                 return trajectory
         return None

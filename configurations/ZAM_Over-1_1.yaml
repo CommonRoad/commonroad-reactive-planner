@@ -11,5 +11,5 @@ debug:
   show_plots: False
   save_plots: False
   draw_traj_set: False
-  multiproc: False
+  multiproc: True
   num_workers: 6

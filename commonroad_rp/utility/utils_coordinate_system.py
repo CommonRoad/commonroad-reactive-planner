@@ -6,11 +6,12 @@ __maintainer__ = "Gerald Würsching"
 __email__ = "commonroad@lists.lrz.de"
 __status__ = "Alpha"
 
+from copy import deepcopy
 import numpy as np
 
 from commonroad_dc.pycrccosy import CurvilinearCoordinateSystem
 from commonroad_dc.geometry.util import compute_pathlength_from_polyline,compute_curvature_from_polyline, \
-    compute_orientation_from_polyline, resample_polyline
+    compute_orientation_from_polyline, resample_polyline, chaikins_corner_cutting
 
 from commonroad.common.util import make_valid_orientation
 
@@ -48,6 +49,20 @@ def extrapolate_ref_path(reference_path: np.ndarray, resample_step: float = 2.0)
     x = 2.3*reference_path[-1, 0] - reference_path[-2, 0]
     new_polyline = np.concatenate((reference_path, np.array([[x, p(x)]])), axis=0)
     return resample_polyline(new_polyline, step=resample_step)
+
+
+def preprocess_ref_path(ref_path: np.ndarray, resample_step: float = 1.0, max_curv_desired: float = 0.01):
+    """
+    Function to preprocess the reference path for maximum curvature and sampling distance
+    """
+    ref_path_preprocessed = deepcopy(ref_path)
+    max_curv = max_curv_desired + 0.2
+    while max_curv > max_curv_desired:
+        ref_path_preprocessed = np.array(chaikins_corner_cutting(ref_path_preprocessed))
+        ref_path_preprocessed = resample_polyline(ref_path_preprocessed, resample_step)
+        abs_curv = compute_curvature_from_polyline(ref_path_preprocessed)
+        max_curv = max(abs_curv)
+    return ref_path_preprocessed
 
 
 class CoordinateSystem:
