@@ -536,7 +536,7 @@ class ReactivePlanner(object):
                 d_acceleration[:traj_len] = trajectory.trajectory_lat.calc_acceleration(t, t2, t3)  # lat acceleration
             else:
                 # compute normalized travelled distance for low velocity mode of lateral planning
-                s1 = s - s[0]
+                s1 = s[:traj_len] - s[0]
                 s2 = np.square(s1)
                 s3 = s2 * s1
                 s4 = np.square(s2)
