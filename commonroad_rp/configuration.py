@@ -26,7 +26,8 @@ class PlanningConfiguration:
     """Class to store all planning configurations"""
     def __init__(self, config: Union[ListConfig, DictConfig]):
         self.dt = config.dt
-        self.planning_horizon = config.planning_horizon
+        self.time_steps_computation = config.time_steps_computation
+        self.planning_horizon = config.dt * config.time_steps_computation
         self.replanning_frequency = config.replanning_frequency
         self.mode = config.mode
         self.continuous_cc = config.continuous_cc
