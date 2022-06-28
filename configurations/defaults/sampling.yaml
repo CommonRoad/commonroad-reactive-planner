@@ -1,0 +1,8 @@
+# minimum time sampling in s (t_max is given by planning horizon)
+t_min: 0.4
+# velocity sampling interval
+v_min: 0
+v_max: 0
+# lateral sampling interval
+d_min: -3
+d_max: 3

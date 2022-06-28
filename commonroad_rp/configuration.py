@@ -20,6 +20,7 @@ class Configuration:
         self.vehicle: VehicleConfiguration = VehicleConfiguration(config.vehicle)
         self.sampling: SamplingConfiguration = SamplingConfiguration(config.sampling)
         self.debug: DebugConfiguration = DebugConfiguration(config.debug)
+        self.general: GeneralConfiguration = GeneralConfiguration(config.general)
 
 
 class PlanningConfiguration:
@@ -83,6 +84,14 @@ class DebugConfiguration:
         self.debug_mode = config.debug_mode
         self.multiproc = config.multiproc
         self.num_workers = config.num_workers
+
+
+class GeneralConfiguration:
+    def __init__(self, config: Union[ListConfig, DictConfig]):
+        name_scenario = config.name_scenario
+
+        self.path_scenarios = config.path_scenarios
+        self.path_scenario = config.path_scenarios + name_scenario + ".xml"
 
 
 def build_configuration(name_scenario: str = None, dir_config: str = "configurations") -> Configuration:
