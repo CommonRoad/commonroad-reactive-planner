@@ -27,7 +27,7 @@ from commonroad_rp.reactive_planner import ReactivePlanner
 from commonroad_rp.utility.visualization import visualize_planner_at_timestep, plot_final_trajectory
 from commonroad_rp.utility.evaluation import create_planning_problem_solution, reconstruct_inputs, plot_states, \
     plot_inputs, reconstruct_states
-from commonroad_rp.configutation_builder import ConfigurationBuilder
+from commonroad_rp.configuration_builder import ConfigurationBuilder
 
 from commonroad_rp.utility.utils_coordinate_system import preprocess_ref_path, extrapolate_ref_path
 from commonroad_rp.utility.general import load_scenario_and_planning_problem
