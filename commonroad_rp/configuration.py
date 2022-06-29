@@ -84,13 +84,18 @@ class DebugConfiguration:
         self.num_workers = config.num_workers
 
 
-def build_configuration(name_scenario: str = None, dir_config: str = "configurations") -> Configuration:
+def build_configuration(name_scenario: str = None, dir_default_config=None, dir_config: str = "configurations") \
+        -> Configuration:
     """
     Builds configuration object by merging default, scenario-specific and commandline (CLI) configurations.
-    :param name_scenario
-    :param dir_config
+    :param name_scenario: name of CommonRoad scenario
+    :param dir_default_config: directory where default config is stored
+    :param dir_config: directory where scenario-specfic configurations are stored
     """
-    conf_default = OmegaConf.load(Path(__file__).parents[1] / "configurations" / "default.yaml")
+    if dir_default_config is None:
+        conf_default = OmegaConf.load(Path(__file__).parents[1] / "configurations" / "default.yaml")
+    else:
+        conf_default = OmegaConf.load(dir_default_config + "default.yaml")
 
     path_scenario_config = dir_config + f"/{name_scenario}.yaml"
     if os.path.exists(path_scenario_config):
