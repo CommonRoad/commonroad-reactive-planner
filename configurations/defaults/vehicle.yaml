@@ -1,0 +1,18 @@
+# CR vehicle type (see commonroad-vehicle-models): #1: Ford Escort, #2: BMW 320i, 3 = VW Vanagon
+cr_vehicle_id: 2
+
+# explicitly provide one of the following parameters to overwrite the default parameters of CR vehicle type
+# vehicle dimensions
+length: !!null
+width: !!null
+wheelbase: !!null
+# acceleration
+a_max: !!null
+# switching velocity
+v_switch: !!null
+#steering angle
+delta_min: !!null
+delta_max: !!null
+# steering velocity
+v_delta_min: !!null
+v_delta_max: !!null
