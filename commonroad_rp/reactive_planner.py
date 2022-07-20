@@ -54,7 +54,7 @@ class ReactivePlanner(object):
         # Set horizon variables
         self.horizon = config.planning.planning_horizon
         self.dT = config.planning.dt
-        self.N = int(self.horizon / self.dT)
+        self.N = config.planning.time_steps_computation
         self._factor = config.planning.factor
         self._check_valid_settings()
 
@@ -128,33 +128,39 @@ class ReactivePlanner(object):
         """Number of kinematically infeasible trajectories"""
         return self._infeasible_count_kinematics
 
-    def set_collision_checker(self, scenario: Scenario):
+    def set_collision_checker(self, scenario: Scenario = None, collision_checker: pycrcc.CollisionChecker = None):
         """
         Creates the road boundary and creates a collision checker object for a given scenario
         :param scenario: CommonRoad Scenario object
         """
-        cc_scenario = pycrcc.CollisionChecker()
-        for co in scenario.static_obstacles:
-            obs = create_collision_object(co)
-            cc_scenario.add_collision_object(obs)
-        for co in scenario.dynamic_obstacles:
-            tvo = create_collision_object(co)
-            if self._continuous_cc:
-                tvo, err = trajectory_preprocess_obb_sum(tvo)
-                if err == -1:
-                    raise Exception("Invalid input for trajectory_preprocess_obb_sum: dynamic "
-                                    "obstacle elements overlap")
-            cc_scenario.add_collision_object(tvo)
-        _, road_boundary_sg_obb = create_road_boundary_obstacle(scenario)
-        cc_scenario.add_collision_object(road_boundary_sg_obb)
-        self._cc: pycrcc.CollisionChecker = cc_scenario
+        if collision_checker is None:
+            cc_scenario = pycrcc.CollisionChecker()
+            for co in scenario.static_obstacles:
+                obs = create_collision_object(co)
+                cc_scenario.add_collision_object(obs)
+            for co in scenario.dynamic_obstacles:
+                tvo = create_collision_object(co)
+                if self._continuous_cc:
+                    tvo, err = trajectory_preprocess_obb_sum(tvo)
+                    if err == -1:
+                        raise Exception("Invalid input for trajectory_preprocess_obb_sum: dynamic "
+                                        "obstacle elements overlap")
+                cc_scenario.add_collision_object(tvo)
+            _, road_boundary_sg_obb = create_road_boundary_obstacle(scenario)
+            cc_scenario.add_collision_object(road_boundary_sg_obb)
+            self._cc: pycrcc.CollisionChecker = cc_scenario
+        else:
+            self._cc: pycrcc.CollisionChecker = collision_checker
 
-    def set_reference_path(self, reference_path: np.ndarray):
+    def set_reference_path(self, reference_path: np.ndarray = None, coordinate_system: CoordinateSystem = None):
         """
         Sets the reference path and automatically creates a coordinate system
         :param reference_path: reference path as polyline
         """
-        self._co: CoordinateSystem = CoordinateSystem(reference_path)
+        if coordinate_system is None:
+            self._co: CoordinateSystem = CoordinateSystem(reference_path)
+        else:
+            self._co: CoordinateSystem = coordinate_system
 
     def set_t_sampling_parameters(self, t_min, dt, horizon):
         """
