@@ -13,6 +13,7 @@ import os
 # third party
 import matplotlib.pyplot as plt
 import numpy as np
+import imageio
 
 # commonroad-io
 from commonroad.scenario.scenario import Scenario
@@ -161,3 +162,17 @@ def plot_final_trajectory(scenario: Scenario, planning_problem: PlanningProblem,
     # show plot
     if config.debug.show_plots:
         plt.show(block=True)
+
+
+def make_gif(path: str, prefix: str, steps, file_save_name="animation", duration: float = 0.1):
+    images = []
+    filenames = []
+
+    for step in steps:
+        im_path = os.path.join(path, prefix + "_{}.png".format(step))
+        filenames.append(im_path)
+
+    for filename in filenames:
+        images.append(imageio.imread(filename))
+
+    imageio.mimsave(os.path.join(path, file_save_name + ".gif"), images, duration=duration)
