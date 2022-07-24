@@ -74,7 +74,7 @@ class CoordinateSystem:
         # initialize reference state vectors
         self._ref_pos = compute_pathlength_from_polyline(self.reference)
         self._ref_curv = compute_curvature_from_polyline(self.reference)
-        self._ref_theta = compute_orientation_from_polyline(self.reference)
+        self._ref_theta = np.unwrap(compute_orientation_from_polyline(self.reference))
         self._ref_curv_d = np.gradient(self._ref_curv, self._ref_pos)
 
     @property

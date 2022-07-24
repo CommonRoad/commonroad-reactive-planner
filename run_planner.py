@@ -24,7 +24,7 @@ from commonroad_route_planner.route_planner import RoutePlanner
 
 # reactive planner
 from commonroad_rp.reactive_planner import ReactivePlanner
-from commonroad_rp.utility.visualization import visualize_planner_at_timestep, plot_final_trajectory
+from commonroad_rp.utility.visualization import visualize_planner_at_timestep, plot_final_trajectory, make_gif
 from commonroad_rp.utility.evaluation import create_planning_problem_solution, reconstruct_inputs, plot_states, \
     plot_inputs, reconstruct_states
 from commonroad_rp.configuration import build_configuration
@@ -37,6 +37,8 @@ from commonroad_rp.utility.utils_coordinate_system import preprocess_ref_path, e
 # *************************************
 base_dir = "./example_scenarios"
 filename = "ZAM_Over-1_1.xml"
+# filename = "ZAM_105222-1_1_T-1.xml"
+# filename = "cr2autoware_output_obs.xml"
 
 scenario_path = os.path.join(base_dir, filename)
 files = sorted(glob.glob(scenario_path))
@@ -90,7 +92,8 @@ planner.set_collision_checker(scenario)
 route_planner = RoutePlanner(scenario, planning_problem)
 ref_path = route_planner.plan_routes().retrieve_first_route().reference_path
 
-ref_path = extrapolate_ref_path(ref_path)
+
+# ref_path = extrapolate_ref_path(ref_path)
 planner.set_reference_path(ref_path)
 
 
@@ -202,6 +205,10 @@ while not goal.is_reached(x_0):
 
 # plot  final ego vehicle trajectory
 plot_final_trajectory(scenario, planning_problem, record_state_list, config)
+
+# make gif
+# make_gif("/home/gerald/Documents/CommonRoad/cps/reactive-planner/plots/"+str(scenario.scenario_id),
+#          str(scenario.scenario_id), range(0, current_count))
 
 # remove first element
 record_input_list.pop(0)
