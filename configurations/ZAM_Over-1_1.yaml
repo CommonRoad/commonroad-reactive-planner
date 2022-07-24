@@ -1,6 +1,5 @@
 planning:
   dt: 0.1
-  planning_horizon: 2
   replanning_frequency: 3
 
 vehicle:

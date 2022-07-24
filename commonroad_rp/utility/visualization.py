@@ -108,9 +108,9 @@ def visualize_planner_at_timestep(scenario: Scenario, planning_problem: Planning
 
     # save as .png file
     if config.debug.save_plots:
-        os.makedirs(os.path.join(os.path.dirname(__file__), "../../plots/", str(scenario.scenario_id)),
+        os.makedirs(os.path.join(config.general.path_output, str(scenario.scenario_id)),
                     exist_ok=True)
-        plot_dir = os.path.join(os.path.dirname(__file__), "../../plots/", str(scenario.scenario_id))
+        plot_dir = os.path.join(config.general.path_output, str(scenario.scenario_id))
         plt.savefig(f"{plot_dir}/{scenario.scenario_id}_{timestep}.png", format='png', dpi=300,
                     bbox_inches='tight')
 
@@ -153,9 +153,9 @@ def plot_final_trajectory(scenario: Scenario, planning_problem: PlanningProblem,
 
     # save as .png file
     if config.debug.save_plots:
-        os.makedirs(os.path.join(os.path.dirname(__file__), "../../plots/", str(scenario.scenario_id)),
+        os.makedirs(os.path.join(config.general.path_output, str(scenario.scenario_id)),
                     exist_ok=True)
-        plot_dir = os.path.join(os.path.dirname(__file__), "../../plots/", str(scenario.scenario_id))
+        plot_dir = os.path.join(config.general.path_output, str(scenario.scenario_id))
         plt.savefig(f"{plot_dir}/{scenario.scenario_id}_final_trajectory.png", format='png', dpi=300,
                     bbox_inches='tight')
 
