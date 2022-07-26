@@ -130,10 +130,16 @@ class ReactivePlanner(object):
 
     def set_collision_checker(self, scenario: Scenario = None, collision_checker: pycrcc.CollisionChecker = None):
         """
-        Creates the road boundary and creates a collision checker object for a given scenario
+        Sets the collision checker used by the planner using either of the two options:
+        If a collision_checker object is passed, then it is used directly by the planner.
+        If no collision checker object is passed, then a CommonRoad scenario must be provided from which the collision
+        checker is created and set.
         :param scenario: CommonRoad Scenario object
+        :param collision_checker: pycrcc.CollisionChecker object
         """
         if collision_checker is None:
+            assert scenario is not None, '<set collision checker>: Please provide a CommonRoad scenario OR a ' \
+                                         'CollisionChecker object to the planner.'
             cc_scenario = pycrcc.CollisionChecker()
             for co in scenario.static_obstacles:
                 obs = create_collision_object(co)
@@ -150,16 +156,24 @@ class ReactivePlanner(object):
             cc_scenario.add_collision_object(road_boundary_sg_obb)
             self._cc: pycrcc.CollisionChecker = cc_scenario
         else:
+            assert scenario is None, '<set collision checker>: Please provide a CommonRoad scenario OR a ' \
+                                     'CollisionChecker object to the planner.'
             self._cc: pycrcc.CollisionChecker = collision_checker
 
     def set_reference_path(self, reference_path: np.ndarray = None, coordinate_system: CoordinateSystem = None):
         """
-        Sets the reference path and automatically creates a coordinate system
+        Automatically creates a curvilinear coordinate system from a given reference path or sets a given
+        curvilinear coordinate system for the planner to use
         :param reference_path: reference path as polyline
+        :param coordinate_system: given CoordinateSystem object which is used by the planner
         """
         if coordinate_system is None:
+            assert reference_path is not None, '<set reference path>: Please provide a reference path OR a ' \
+                                               'CoordinateSystem object to the planner.'
             self._co: CoordinateSystem = CoordinateSystem(reference_path)
         else:
+            assert reference_path is None, '<set reference path>: Please provide a reference path OR a ' \
+                                           'CoordinateSystem object to the planner.'
             self._co: CoordinateSystem = coordinate_system
 
     def set_t_sampling_parameters(self, t_min, dt, horizon):

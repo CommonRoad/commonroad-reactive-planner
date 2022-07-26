@@ -9,7 +9,7 @@ vehicle:
 
 debug:
   show_plots: False
-  save_plots: True
-  draw_traj_set: True
+  save_plots: False
+  draw_traj_set: False
   multiproc: True
   num_workers: 6
