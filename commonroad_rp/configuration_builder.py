@@ -88,7 +88,7 @@ class ConfigurationBuilder:
         """Constructs scenario-specific configuration."""
         config_scenario = OmegaConf.create()
 
-        path_config_scenario = cls.path_config + f" /{name_scenario}.yaml"
+        path_config_scenario = cls.path_config + f"/{name_scenario}.yaml"
         if os.path.exists(path_config_scenario):
             with open(path_config_scenario, "r") as file_config:
                 try:
