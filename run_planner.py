@@ -197,8 +197,7 @@ while not goal.is_reached(x_0):
 plot_final_trajectory(scenario, planning_problem, record_state_list, config)
 
 # make gif
-# make_gif("/home/gerald/Documents/CommonRoad/cps/reactive-planner/plots/"+str(scenario.scenario_id),
-#          str(scenario.scenario_id), range(0, current_count))
+make_gif(config, scenario, range(0, current_count+1))
 
 # remove first element
 record_input_list.pop(0)

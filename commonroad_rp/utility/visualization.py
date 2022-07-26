@@ -7,7 +7,7 @@ __status__ = "Beta"
 
 
 # standard imports
-from typing import List, Tuple
+from typing import List, Tuple, Union
 import os
 
 # third party
@@ -164,15 +164,31 @@ def plot_final_trajectory(scenario: Scenario, planning_problem: PlanningProblem,
         plt.show(block=True)
 
 
-def make_gif(path: str, prefix: str, steps, file_save_name="animation", duration: float = 0.1):
-    images = []
-    filenames = []
+def make_gif(config: Configuration, scenario: Scenario, time_steps: Union[range, List[int]], duration: float = 0.1):
+    """
+    Function to create from single images of planning results at each time step
+    Images are saved in output path specified in config.general.path_output
+    :param config Configuration object
+    :param scenario CommonRoad scenario object
+    :param time_steps list or range of time steps to create the GIF
+    :param duration
+    """
+    if not config.debug.save_plots:
+        # only create GIF when saving of plots is enabled
+        pass
+    else:
+        images = []
+        filenames = []
 
-    for step in steps:
-        im_path = os.path.join(path, prefix + "_{}.png".format(step))
-        filenames.append(im_path)
+        # directory, where single images are outputted (see visualize_planner_at_timestep())
+        path_images = os.path.join(config.general.path_output, str(scenario.scenario_id))
 
-    for filename in filenames:
-        images.append(imageio.imread(filename))
+        for step in time_steps:
+            im_path = os.path.join(path_images, str(scenario.scenario_id) + "_{}.png".format(step))
+            filenames.append(im_path)
 
-    imageio.mimsave(os.path.join(path, file_save_name + ".gif"), images, duration=duration)
+        for filename in filenames:
+            images.append(imageio.imread(filename))
+
+        imageio.mimsave(os.path.join(config.general.path_output, str(scenario.scenario_id) + ".gif"),
+                        images, duration=duration)
