@@ -27,32 +27,22 @@ from commonroad_rp.reactive_planner import ReactivePlanner
 from commonroad_rp.utility.visualization import visualize_planner_at_timestep, plot_final_trajectory, make_gif
 from commonroad_rp.utility.evaluation import create_planning_problem_solution, reconstruct_inputs, plot_states, \
     plot_inputs, reconstruct_states
-from commonroad_rp.configuration import build_configuration
+from commonroad_rp.configuration_builder import ConfigurationBuilder
 
 from commonroad_rp.utility.utils_coordinate_system import preprocess_ref_path, extrapolate_ref_path
-
-
-# *************************************
-# Open CommonRoad scenario
-# *************************************
-base_dir = "./example_scenarios"
-filename = "ZAM_Over-1_1.xml"
-# filename = "ZAM_105222-1_1_T-1.xml"
-# filename = "cr2autoware_output_obs.xml"
-
-scenario_path = os.path.join(base_dir, filename)
-files = sorted(glob.glob(scenario_path))
-
-# open scenario and panning problem
-crfr = CommonRoadFileReader(files[0])
-scenario, problem_set = crfr.open()
-planning_problem = list(problem_set.planning_problem_dict.values())[0]
-
+from commonroad_rp.utility.general import load_scenario_and_planning_problem
 
 # *************************************
 # Set Configurations
 # *************************************
-config = build_configuration(filename[:-4])
+filename = "ZAM_Over-1_1.xml"
+# filename = "ZAM_105222-1_1_T-1.xml"
+# filename = "cr2autoware_output_obs.xml"
+
+config = ConfigurationBuilder.build_configuration(filename[:-4])
+
+scenario, planning_problem, planning_problem_set = load_scenario_and_planning_problem(config)
+
 DT = config.planning.dt            # planning time step
 
 
