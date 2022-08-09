@@ -215,13 +215,12 @@ class PolynomialTrajectory(ABC):
             tau4 = tau2 * tau2
             tau5 = tau3 * tau2
 
-            p = (self.coeffs[0] + self.coeffs[1] * tau + self.coeffs[2] * tau2 + self.coeffs[3] * tau3 + self.coeffs[
-                4] * tau4 +
-                 self.coeffs[5] * tau5)
-            p_d = (self.coeffs[1] + 2 * self.coeffs[2] * tau + 3 * self.coeffs[3] * tau2 + 4 * self.coeffs[4] * tau3 +
-                   5 * self.coeffs[5] * tau4)
-            p_dd = 2 * self.coeffs[2] + 6 * self.coeffs[3] * tau + 12 * self.coeffs[4] * tau2 + 20 * self.coeffs[
-                5] * tau3
+            # position
+            p = self.calc_position(tau, tau2, tau3, tau4, tau5)
+            # velocity
+            p_d = self.calc_velocity(tau, tau2, tau3, tau4)
+            # acceleration
+            p_dd = self.calc_acceleration(tau, tau2, tau3)
 
             result = np.array([p, p_d, p_dd])
             self._db[tau] = result
