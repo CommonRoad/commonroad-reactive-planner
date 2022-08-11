@@ -307,37 +307,55 @@ class ReactivePlanner(object):
             self.set_reference_path(reference_path)
             s, d = self._co.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
 
+        # factor for interpolation
+        s_idx = np.argmax(self._co.ref_pos > s)
+        s_lambda = (self._co.ref_pos[s_idx] - s) / (
+                self._co.ref_pos[s_idx + 1] - self._co.ref_pos[s_idx])
+
         # compute orientation in curvilinear coordinate frame
         ref_theta = np.unwrap(self._co.ref_theta)
-        theta_cl = x_0.orientation - np.interp(s, self._co.ref_pos, ref_theta)
+        theta_cl = x_0.orientation - interpolate_angle(s, self._co.ref_pos[s_idx], self._co.ref_pos[s_idx + 1],
+                                                       ref_theta[s_idx], ref_theta[s_idx + 1])
 
-        # compute curvatures
-        kr = np.interp(s, self._co.ref_pos, self._co.ref_curv)
-        kr_d = np.interp(s, self._co.ref_pos, self._co.ref_curv_d)
+        # compute reference curvature
+        kr = (self._co.ref_curv[s_idx + 1] - self._co.ref_curv[s_idx]) * s_lambda + self._co.ref_curv[
+                    s_idx]
+        # compute reference curvature change
+        kr_d = (self._co.ref_curv_d[s_idx + 1] - self._co.ref_curv_d[s_idx]) * s_lambda + \
+                        self._co.ref_curv_d[s_idx]
 
-        # compute d prime and d prime prime -> derivation after arclength (s)
+        # compute initial ego curvature from initial steering angle
+        kappa_0 = np.tan(x_0.steering_angle) / self.vehicle_params.wheelbase
+
+        # compute d' and d'' -> derivation after arclength (s): see Eq. (A.3) and (A.5) in Diss. Werling
         d_p = (1 - kr * d) * np.tan(theta_cl)
         d_pp = -(kr_d * d + kr * d_p) * np.tan(theta_cl) + ((1 - kr * d) / (math.cos(theta_cl) ** 2)) * (
-                x_0.yaw_rate * (1 - kr * d) / math.cos(theta_cl) - kr)
+                kappa_0 * (1 - kr * d) / math.cos(theta_cl) - kr)
 
-        # compute s dot and s dot dot -> derivation after time
-        s_d = x_0.velocity * math.cos(theta_cl) / (1 - kr * d)
-        if s_d < 0:
+        # compute s dot (s_velocity) and s dot dot (s_acceleration) -> derivation after time
+        s_velocity = x_0.velocity * math.cos(theta_cl) / (1 - kr * d)
+        if s_velocity < 0:
             raise Exception("Initial state or reference incorrect! Curvilinear velocity is negative which indicates"
                             "that the ego vehicle is not driving in the same direction as specified by the reference")
 
-        s_dd = x_0.acceleration
-        s_dd -= (s_d ** 2 / math.cos(theta_cl)) * (
-                (1 - kr * d) * np.tan(theta_cl) * (x_0.yaw_rate * (1 - kr * d) / (math.cos(theta_cl)) - kr) -
+        s_acceleration = x_0.acceleration
+        s_acceleration -= (s_velocity ** 2 / math.cos(theta_cl)) * (
+                (1 - kr * d) * np.tan(theta_cl) * (kappa_0 * (1 - kr * d) / (math.cos(theta_cl)) - kr) -
                 (kr_d * d + kr * d_p))
-        s_dd /= ((1 - kr * d) / (math.cos(theta_cl)))
+        s_acceleration /= ((1 - kr * d) / (math.cos(theta_cl)))
 
-        # compute d dot and d dot dot
-        d_d = x_0.velocity * math.sin(theta_cl)
-        d_dd = s_dd * d_p + s_d ** 2 * d_pp
+        # compute d dot (d_velocity) and d dot dot (d_acceleration)
+        if self._LOW_VEL_MODE:
+            # in LOW_VEL_MODE: d_velocity and d_acceleration are derivatives w.r.t arclength (s)
+            d_velocity= d_p
+            d_acceleration = d_pp
+        else:
+            # in HIGH VEL MODE: d_velocity and d_acceleration are derivatives w.r.t time
+            d_velocity = x_0.velocity * math.sin(theta_cl)
+            d_acceleration = s_acceleration * d_p + s_velocity ** 2 * d_pp
 
-        x_0_lon: List[float] = [s, s_d, s_dd]
-        x_0_lat: List[float] = [d, d_d, d_dd]
+        x_0_lon: List[float] = [s, s_velocity, s_acceleration]
+        x_0_lat: List[float] = [d, d_velocity, d_acceleration]
 
         if self.debug_mode >= 1:
             print("<ReactivePlanner>: Starting planning with: \n#################")
@@ -532,7 +550,6 @@ class ReactivePlanner(object):
             t4 = np.square(t2)
             t5 = t4 * t
 
-
             # initialize long. (s) and lat. (d) state vectors
             s = np.zeros(self.N + 1)
             s_velocity = np.zeros(self.N + 1)
@@ -605,10 +622,11 @@ class ReactivePlanner(object):
                     if s_velocity[i] > 0.001:
                         dp = d_velocity[i] / s_velocity[i]
                     else:
-                        if d_velocity[i] > 0.001:
+                        if abs(d_velocity[i]) > 0.001:
                             dp = None
                         else:
                             dp = 0.
+                    # see Eq. (A.8) from Moritz Werling's Diss
                     ddot = d_acceleration[i] - dp * s_acceleration[i]
 
                     if s_velocity[i] > 0.001:
@@ -622,38 +640,46 @@ class ReactivePlanner(object):
                     dp = d_velocity[i]
                     dpp = d_acceleration[i]
 
+                # factor for interpolation
                 s_idx = np.argmax(self._co.ref_pos > s[i])
                 if s_idx + 1 >= len(self._co.ref_pos):
                     feasible = False
                     break
+                s_lambda = (self._co.ref_pos[s_idx] - s[i]) / (self._co.ref_pos[s_idx + 1] - self._co.ref_pos[s_idx])
 
-                # factor for interpolation
-                s_lambda = (self._co.ref_pos[s_idx] - s[i]) / (
-                        self._co.ref_pos[s_idx + 1] - self._co.ref_pos[s_idx])
+                # compute curvilinear (theta_cl) and global Cartesian (theta_gl) orientation
+                if s_velocity[i] > 0.001:
+                    # LOW VELOCITY MODE: dp = d_velocity[i]
+                    # HIGH VELOCITY MODE: dp = d_velocity[i]/s_velocity[i]
+                    theta_cl[i] = np.arctan2(dp, 1.0)
 
-                # compute curvilinear and (global) Cartesian orientation
-                if s_velocity[i] > 0.005:
-                    # compute curvilinear orientation
-                    if self._LOW_VEL_MODE:
-                        theta_cl[i] = np.arctan2(dp, 1.0)
-                    else:
-                        theta_cl[i] = np.arctan2(d_velocity[i], s_velocity[i])
                     theta_gl[i] = theta_cl[i] + interpolate_angle(
                         s[i],
                         self._co.ref_pos[s_idx],
                         self._co.ref_pos[s_idx + 1],
                         self._co.ref_theta[s_idx],
-                        self._co.ref_theta[s_idx + 1]
-                    )
+                        self._co.ref_theta[s_idx + 1])
                 else:
-                    theta_cl[i] = interpolate_angle(
-                        s[i],
-                        self._co.ref_pos[s_idx],
-                        self._co.ref_pos[s_idx + 1],
-                        self._co.ref_theta[s_idx],
-                        self._co.ref_theta[s_idx + 1]
-                    )
-                    theta_gl[i] = theta_cl[i]
+                    if self._LOW_VEL_MODE:
+                        # dp = velocity w.r.t. to travelled arclength (s)
+                        theta_cl[i] = np.arctan2(dp, 1.0)
+
+                        theta_gl[i] = theta_cl[i] + interpolate_angle(
+                            s[i],
+                            self._co.ref_pos[s_idx],
+                            self._co.ref_pos[s_idx + 1],
+                            self._co.ref_theta[s_idx],
+                            self._co.ref_theta[s_idx + 1])
+                    else:
+                        # in stillstand (s_velocity~0) and High velocity mode: assume vehicle keeps global orientation
+                        theta_gl[i] = self.x_0.orientation if i == 0 else theta_gl[i-1]
+
+                        theta_cl[i] = theta_gl[i] - interpolate_angle(
+                            s[i],
+                            self._co.ref_pos[s_idx],
+                            self._co.ref_pos[s_idx + 1],
+                            self._co.ref_theta[s_idx],
+                            self._co.ref_theta[s_idx + 1])
 
                 # Interpolate curvature of reference path k_r at current position
                 k_r = (self._co.ref_curv[s_idx + 1] - self._co.ref_curv[s_idx]) * s_lambda + self._co.ref_curv[
@@ -666,21 +692,21 @@ class ReactivePlanner(object):
                 oneKrD = (1 - k_r * d[i])
                 cosTheta = math.cos(theta_cl[i])
                 tanTheta = np.tan(theta_cl[i])
-                kappa_gl[i] = (dpp + k_r * dp * tanTheta) * cosTheta * (cosTheta / oneKrD) ** 2 + (
+                kappa_gl[i] = (dpp + (k_r * dp + k_r_d * d[i]) * tanTheta) * cosTheta * (cosTheta / oneKrD) ** 2 + (
                         cosTheta / oneKrD) * k_r
                 kappa_cl[i] = kappa_gl[i] - k_r
 
                 # compute (global) Cartesian velocity
-                v[i] = s_velocity[i] * (oneKrD / (math.cos(theta_cl[i])))
+                v[i] = abs(s_velocity[i] * (oneKrD / (math.cos(theta_cl[i]))))
 
                 # compute (global) Cartesian acceleration
                 a[i] = s_acceleration[i] * oneKrD / cosTheta + ((s_velocity[i] ** 2) / cosTheta) * (
                         oneKrD * tanTheta * (kappa_gl[i] * oneKrD / cosTheta - k_r) - (
-                        k_r_d * d[i] + k_r * d_velocity[i]))
+                        k_r_d * d[i] + k_r * dp))
 
                 # CHECK KINEMATIC CONSTRAINTS (remove infeasible trajectories)
                 # velocity constraint
-                if abs(v[i]) < -0.1:
+                if v[i] < -0.1:
                     feasible = False
                     if not self._draw_traj_set:
                         break
@@ -698,9 +724,9 @@ class ReactivePlanner(object):
                     if not self._draw_traj_set:
                         break
                 # curvature rate constraint
-                steering_angle = np.arctan2(self.vehicle_params.wheelbase * yaw_rate, v[i])
-                kappa_dot_max = self.vehicle_params.v_delta_max / self.vehicle_params.wheelbase * \
-                                math.cos(steering_angle) ** 2
+                steering_angle = np.arctan2(self.vehicle_params.wheelbase * kappa_gl[i], 1.0)
+                kappa_dot_max = self.vehicle_params.v_delta_max / (self.vehicle_params.wheelbase *
+                                                                   math.cos(steering_angle) ** 2)
                 if abs((kappa_gl[i] - kappa_gl[i - 1]) / self.dT if i > 0 else 0.) > kappa_dot_max:
                     feasible = False
                     if not self._draw_traj_set:

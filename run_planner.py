@@ -7,8 +7,6 @@ __status__ = "Beta"
 
 
 # standard imports
-import os
-import glob
 import time
 from copy import deepcopy
 
@@ -16,7 +14,6 @@ from copy import deepcopy
 import numpy as np
 
 # commonroad-io
-from commonroad.common.file_reader import CommonRoadFileReader
 from commonroad.scenario.trajectory import State
 
 # commonroad-route-planner
@@ -35,9 +32,9 @@ from commonroad_rp.utility.general import load_scenario_and_planning_problem
 # *************************************
 # Set Configurations
 # *************************************
-filename = "ZAM_Over-1_1.xml"
+# filename = "ZAM_Over-1_1.xml"
 # filename = "ZAM_105222-1_1_T-1.xml"
-# filename = "cr2autoware_output_obs.xml"
+filename = "ZAM_OpenDrive-123.xml"
 
 config = ConfigurationBuilder.build_configuration(filename[:-4])
 

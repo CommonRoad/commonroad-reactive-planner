@@ -177,6 +177,7 @@ def make_gif(config: Configuration, scenario: Scenario, time_steps: Union[range,
         # only create GIF when saving of plots is enabled
         pass
     else:
+        print("...Generating GIF")
         images = []
         filenames = []
 
