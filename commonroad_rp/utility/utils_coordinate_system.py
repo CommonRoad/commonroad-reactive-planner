@@ -67,9 +67,17 @@ def preprocess_ref_path(ref_path: np.ndarray, resample_step: float = 1.0, max_cu
 
 class CoordinateSystem:
 
-    def __init__(self, reference: np.ndarray):
-        # initialize reference and CCosy
-        self.reference = reference
+    def __init__(self, reference: np.ndarray = None, ccosy: CurvilinearCoordinateSystem = None):
+        if ccosy is None:
+            assert reference is not None, '<CoordinateSystem>: Please provide a reference path OR a ' \
+                                          'CurvilinearCoordinateSystem object.'
+            # set reference and create ccosy from given reference
+            self.reference = reference
+        else:
+            assert reference is not None, '<CoordinateSystem>: Please provide a reference path OR a ' \
+                                          'CurvilinearCoordinateSystem object.'
+            # set ccosy and use reference from given ccosy
+            self.ccosy = ccosy
 
         # initialize reference state vectors
         self._ref_pos = compute_pathlength_from_polyline(self.reference)
@@ -80,18 +88,24 @@ class CoordinateSystem:
     @property
     def reference(self) -> np.ndarray:
         """returns reference path used by CCosy due to slight modifications within the CCosy module"""
-        return np.asarray(self.ccosy.reference_path())
+        return self._reference
 
     @reference.setter
     def reference(self, reference):
-        """set reference path and Curvilinear Coordinate System"""
-        self._reference = reference
+        """set reference path and creates Curvilinear Coordinate System from given reference"""
         self._ccosy = CurvilinearCoordinateSystem(reference)
+        self._reference = np.asarray(self.ccosy.reference_path())
 
     @property
     def ccosy(self) -> CurvilinearCoordinateSystem:
         """return Curvlinear Coordinate System"""
         return self._ccosy
+
+    @ccosy.setter
+    def ccosy(self, ccosy: CurvilinearCoordinateSystem):
+        """set ccosy and use reference from given ccosy object"""
+        self._ccosy = ccosy
+        self._reference = np.asarray(self.ccosy.reference_path())
 
     @property
     def ref_pos(self) -> np.ndarray:
