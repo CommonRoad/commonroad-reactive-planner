@@ -74,7 +74,7 @@ class CoordinateSystem:
             # set reference and create ccosy from given reference
             self.reference = reference
         else:
-            assert reference is not None, '<CoordinateSystem>: Please provide a reference path OR a ' \
+            assert ccosy is not None, '<CoordinateSystem>: Please provide a reference path OR a ' \
                                           'CurvilinearCoordinateSystem object.'
             # set ccosy and use reference from given ccosy
             self.ccosy = ccosy
