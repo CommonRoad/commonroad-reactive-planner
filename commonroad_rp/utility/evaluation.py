@@ -82,6 +82,8 @@ def plot_states(config: Configuration, state_list: List[CartesianState], reconst
     state_list must contain the following states: steering_angle, velocity, orientation and yaw_rate
     """
     plt.figure(figsize=(7, 7.5))
+
+    # x, y position
     plt.subplot(5, 1, 1)
     plt.plot([state.position[0] for state in state_list],
              [state.position[1] for state in state_list], color="black", label="planned")
@@ -90,6 +92,8 @@ def plot_states(config: Configuration, state_list: List[CartesianState], reconst
                  [state.position[1] for state in reconstructed_states], color="blue", label="reconstructed")
     plt.xlabel("x")
     plt.ylabel("y")
+
+    # steering angle
     plt.subplot(5, 1, 2)
     plt.plot(list(range(len(state_list))),
              [state.steering_angle for state in state_list], color="black", label="planned")
@@ -102,6 +106,8 @@ def plot_states(config: Configuration, state_list: List[CartesianState], reconst
         plt.plot([0, len(state_list)], [config.vehicle.delta_max, config.vehicle.delta_max],
                  color="red")
     plt.ylabel("delta")
+
+    # velocity
     plt.subplot(5, 1, 3)
     plt.plot(list(range(len(state_list))),
              [state.velocity for state in state_list], color="black", label="planned")
@@ -110,6 +116,8 @@ def plot_states(config: Configuration, state_list: List[CartesianState], reconst
                  [state.velocity for state in reconstructed_states], color="blue", label="reconstructed")
     plt.legend()
     plt.ylabel("v")
+
+    # orientation
     plt.subplot(5, 1, 4)
     plt.plot(list(range(len(state_list))),
              [state.orientation for state in state_list], color="black", label="planned")
@@ -117,14 +125,15 @@ def plot_states(config: Configuration, state_list: List[CartesianState], reconst
         plt.plot(list(range(len(reconstructed_states))),
                  [state.orientation for state in reconstructed_states], color="blue", label="reconstructed")
     plt.ylabel("theta")
-    plt.tight_layout()
+
+    # yaw rate
     plt.subplot(5, 1, 5)
     plt.plot(list(range(len(state_list))),
              [state.yaw_rate for state in state_list], color="black", label="planned")
-    reconstructed_yaw = np.diff(np.array([state.orientation for state in reconstructed_states]))
-    reconstructed_yaw = np.insert(reconstructed_yaw, 0, 0.0, axis=0)
+    reconstructed_yaw_rate = np.diff(np.array([state.orientation for state in reconstructed_states])) / config.planning.dt
+    reconstructed_yaw_rate = np.insert(reconstructed_yaw_rate, 0, state_list[0].yaw_rate, axis=0)
     plt.plot(list(range(len(state_list))),
-             reconstructed_yaw, color="blue", label="reconstructed")
+             reconstructed_yaw_rate, color="blue", label="reconstructed")
     plt.ylabel("theta_dot")
     plt.tight_layout()
     plt.show()
