@@ -10,19 +10,21 @@ from typing import List
 from matplotlib import pyplot as plt
 import numpy as np
 
-from commonroad.scenario.trajectory import Trajectory, State
+from commonroad.scenario.trajectory import Trajectory
+from commonroad.scenario.state import InputState
 from commonroad.planning.planning_problem import PlanningProblem
 from commonroad.scenario.scenario import Scenario
 from commonroad.common.solution import Solution, PlanningProblemSolution, VehicleModel, \
     VehicleType, CostFunction
 
-from commonroad_dc.feasibility.feasibility_checker import trajectory_feasibility, VehicleDynamics, \
+from commonroad_dc.feasibility.feasibility_checker import VehicleDynamics, \
     state_transition_feasibility, position_orientation_objective, position_orientation_feasibility_criteria, _angle_diff
 
 from commonroad_rp.configuration import Configuration
+from commonroad_rp.reactive_planner import CartesianState
 
 
-def create_planning_problem_solution(config: Configuration, state_list: List[State], scenario: Scenario,
+def create_planning_problem_solution(config: Configuration, state_list: List[CartesianState], scenario: Scenario,
                                      planning_problem: PlanningProblem):
     """
     Creates CommonRoad Solution object
@@ -39,7 +41,7 @@ def create_planning_problem_solution(config: Configuration, state_list: List[Sta
     return solution
 
 
-def reconstruct_states(config: Configuration, states: List[State], inputs: List[State]):
+def reconstruct_states(config: Configuration, states: List[CartesianState], inputs: List[InputState]):
     """reconstructs states from a given list of inputs by forward simulation"""
     vehicle_dynamics = VehicleDynamics.from_model(VehicleModel.KS, VehicleType(config.vehicle.cr_vehicle_id))
 
@@ -74,7 +76,7 @@ def reconstruct_inputs(config: Configuration, pps: PlanningProblemSolution):
     return feasible_state_list, reconstructed_inputs
 
 
-def plot_states(config: Configuration, state_list: List[State], reconstructed_states=None, plot_bounds=False):
+def plot_states(config: Configuration, state_list: List[CartesianState], reconstructed_states=None, plot_bounds=False):
     """
     Plots states of trajectory from a given state_list
     state_list must contain the following states: steering_angle, velocity, orientation and yaw_rate
@@ -119,6 +121,10 @@ def plot_states(config: Configuration, state_list: List[State], reconstructed_st
     plt.subplot(5, 1, 5)
     plt.plot(list(range(len(state_list))),
              [state.yaw_rate for state in state_list], color="black", label="planned")
+    reconstructed_yaw = np.diff(np.array([state.orientation for state in reconstructed_states]))
+    reconstructed_yaw = np.insert(reconstructed_yaw, 0, 0.0, axis=0)
+    plt.plot(list(range(len(state_list))),
+             reconstructed_yaw, color="blue", label="reconstructed")
     plt.ylabel("theta_dot")
     plt.tight_layout()
     plt.show()
@@ -143,7 +149,7 @@ def plot_states(config: Configuration, state_list: List[State], reconstructed_st
         plt.show()
 
 
-def plot_inputs(config: Configuration, input_list: List[State], reconstructed_inputs=None, plot_bounds=False):
+def plot_inputs(config: Configuration, input_list: List[InputState], reconstructed_inputs=None, plot_bounds=False):
     """
     Plots inputs of trajectory from a given input_list
     input_list must contain the following states: steering_angle_speed, acceleration

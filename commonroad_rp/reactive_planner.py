@@ -10,7 +10,8 @@ __status__ = "Beta"
 import math
 import time
 import numpy as np
-from typing import List
+from typing import List, Union
+from dataclasses import dataclass
 import multiprocessing
 from multiprocessing.context import Process
 
@@ -19,7 +20,8 @@ from commonroad.common.validity import *
 from commonroad.geometry.shape import Rectangle
 from commonroad.prediction.prediction import TrajectoryPrediction
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
-from commonroad.scenario.trajectory import Trajectory, State
+from commonroad.scenario.trajectory import Trajectory
+from commonroad.scenario.state import KSState, FloatExactOrInterval, InitialState, CustomState
 from commonroad.scenario.scenario import Scenario
 
 # commonroad_dc
@@ -38,8 +40,16 @@ from commonroad_rp.utility.utils_coordinate_system import CoordinateSystem, inte
 from commonroad_rp.configuration import Configuration, VehicleConfiguration
 
 
-# TODO: use mode parameter for longitudinal planning (point following, velocity following, stopping)
-# TODO: acceleration-based sampling
+@dataclass(eq=False)
+class CartesianState(KSState):
+    """
+    State class used for output trajectory of reactive-planner: Extends KS State attributes by acceleration and
+    yaw rate
+    """
+
+    acceleration: FloatExactOrInterval = None
+    yaw_rate: FloatExactOrInterval = None
+
 
 class ReactivePlanner(object):
     """
@@ -287,7 +297,7 @@ class ReactivePlanner(object):
             print('<ReactivePlanner>: %s trajectories sampled' % len(trajectory_bundle._trajectory_bundle))
         return trajectory_bundle
 
-    def _compute_initial_states(self, x_0: State) -> (np.ndarray, np.ndarray):
+    def _compute_initial_states(self, x_0: Union[CartesianState, InitialState]) -> (np.ndarray, np.ndarray):
         """
         Computes the curvilinear initial states for the polynomial planner based on a Cartesian CommonRoad state
         :param x_0: The CommonRoad state object representing the initial state of the vehicle
@@ -383,16 +393,16 @@ class ReactivePlanner(object):
             cart_states = dict()
             cart_states['time_step'] = self.x_0.time_step+self._factor*i
             cart_states['position'] = np.array([trajectory.cartesian.x[i], trajectory.cartesian.y[i]])
+            cart_states['orientation'] = trajectory.cartesian.theta[i]
             cart_states['velocity'] = trajectory.cartesian.v[i]
             cart_states['acceleration'] = trajectory.cartesian.a[i]
-            cart_states['orientation'] = trajectory.cartesian.theta[i]
             if i > 0:
                 cart_states['yaw_rate'] = (trajectory.cartesian.theta[i] - trajectory.cartesian.theta[i-1]) / self.dT
             else:
                 cart_states['yaw_rate'] = self.x_0.yaw_rate
             cart_states['steering_angle'] = np.arctan2(self.vehicle_params.wheelbase * cart_states['yaw_rate'],
                                                        cart_states['velocity'])
-            cart_list.append(State(**cart_states))
+            cart_list.append(CartesianState(**cart_states))
 
             # create curvilinear state
             # TODO: This is not correct
@@ -403,7 +413,7 @@ class ReactivePlanner(object):
             cl_states['acceleration'] = trajectory.cartesian.a[i]
             cl_states['orientation'] = trajectory.cartesian.theta[i]
             cl_states['yaw_rate'] = trajectory.cartesian.kappa[i]
-            cl_list.append(State(**cl_states))
+            cl_list.append(CustomState(**cl_states))
 
             lon_list.append(
                 [trajectory.curvilinear.s[i], trajectory.curvilinear.s_dot[i], trajectory.curvilinear.s_ddot[i]])
@@ -416,7 +426,7 @@ class ReactivePlanner(object):
 
         return cartTraj, cvlnTraj, lon_list, lat_list
 
-    def plan(self, x_0: State, cl_states=None) -> tuple:
+    def plan(self, x_0: Union[CartesianState, InitialState], cl_states=None) -> tuple:
         """
         Plans an optimal trajectory
         :param x_0: Initial state as CR state
@@ -599,6 +609,10 @@ class ReactivePlanner(object):
             kappa_gl = np.zeros(self.N + 1)
             kappa_cl = np.zeros(self.N + 1)
 
+            # TODO Debug stuff
+            kr_list = []
+            krd_list = []
+
             # Initialize Feasibility boolean
             feasible = True
 
@@ -688,6 +702,10 @@ class ReactivePlanner(object):
                 k_r_d = (self._co.ref_curv_d[s_idx + 1] - self._co.ref_curv_d[s_idx]) * s_lambda + \
                         self._co.ref_curv_d[s_idx]
 
+                # TODO Debug stuff
+                kr_list.append(k_r)
+                krd_list.append(k_r_d)
+
                 # compute global curvature (see appendix A of Moritz Werling's PhD thesis)
                 oneKrD = (1 - k_r * d[i])
                 cosTheta = math.cos(theta_cl[i])
@@ -727,7 +745,8 @@ class ReactivePlanner(object):
                 steering_angle = np.arctan2(self.vehicle_params.wheelbase * kappa_gl[i], 1.0)
                 kappa_dot_max = self.vehicle_params.v_delta_max / (self.vehicle_params.wheelbase *
                                                                    math.cos(steering_angle) ** 2)
-                if abs((kappa_gl[i] - kappa_gl[i - 1]) / self.dT if i > 0 else 0.) > kappa_dot_max:
+                kappa_dot = (kappa_gl[i] - kappa_gl[i - 1]) / self.dT if i > 0 else 0.
+                if abs(kappa_dot) > kappa_dot_max:
                     feasible = False
                     if not self._draw_traj_set:
                         break
