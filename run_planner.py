@@ -24,7 +24,7 @@ from commonroad_route_planner.route_planner import RoutePlanner
 from commonroad_rp.reactive_planner import ReactivePlanner, CartesianState
 from commonroad_rp.utility.visualization import visualize_planner_at_timestep, plot_final_trajectory, make_gif
 from commonroad_rp.utility.evaluation import create_planning_problem_solution, reconstruct_inputs, plot_states, \
-    plot_inputs, reconstruct_states
+    plot_inputs, reconstruct_states, create_full_solution_trajectory
 from commonroad_rp.configuration_builder import ConfigurationBuilder
 
 from commonroad_rp.utility.general import load_scenario_and_planning_problem
@@ -97,17 +97,14 @@ planning_times = list()
 ego_vehicle = None
 
 # convert initial state from planning problem to reactive planner (Cartesian) state type
-x_0_cartesian = CartesianState()
-x_0 = x_0.convert_state_to_state(x_0_cartesian)
-x_0.steering_angle = np.arctan2(config.vehicle.wheelbase * x_0_cartesian.yaw_rate,
-                                x_0_cartesian.velocity)
+x_0 = planner.process_initial_state_from_pp(x0_pp=x_0)
 record_state_list.append(x_0)
 
-record_input_state = InputState(
+# add initial inputs to recorded input list
+record_input_list.append(InputState(
         acceleration=x_0.acceleration,
         time_step=x_0.time_step,
-        steering_angle_speed=0.)
-record_input_list.append(record_input_state)
+        steering_angle_speed=0.))
 
 # Run planner
 while not goal.is_reached(x_0):
@@ -162,7 +159,7 @@ while not goal.is_reached(x_0):
 
         # create CommonRoad Obstacle for the ego Vehicle
         if config.debug.show_plots or config.debug.save_plots:
-            ego_vehicle = planner.convert_cr_trajectory_to_object(optimal[0])
+            ego_vehicle = planner.shift_and_convert_trajectory_to_object(optimal[0])
     else:
         # not a planning cycle -> no trajectories sampled -> set sampled_trajectory_bundle to None
         sampled_trajectory_bundle = None
@@ -195,29 +192,38 @@ while not goal.is_reached(x_0):
                                       traj_set=sampled_trajectory_bundle, ref_path=ref_path,
                                       timestep=current_count, config=config)
 
-# plot  final ego vehicle trajectory
-plot_final_trajectory(scenario, planning_problem, record_state_list, config)
-
 # make gif
 # if goal.is_reached(x_0):
 #     make_gif(config, scenario, range(0, current_count+1))
-
-# remove first element
-record_input_list.pop(0)
 
 # **************************
 # Evaluate results
 # **************************
 evaluate = True
 if evaluate:
+    from commonroad_dc.feasibility.solution_checker import valid_solution
+    # create full solution trajectory
+    ego_solution_trajectory = create_full_solution_trajectory(config, record_state_list)
+
+    # plot full ego vehicle trajectory
+    plot_final_trajectory(scenario, planning_problem, ego_solution_trajectory.state_list, config)
+
     # create CR solution
-    solution = create_planning_problem_solution(config, record_state_list, scenario, planning_problem)
+    solution = create_planning_problem_solution(config, ego_solution_trajectory, scenario, planning_problem)
 
     # check feasibility
     # reconstruct inputs (state transition optimizations)
     feasible, reconstructed_inputs = reconstruct_inputs(config, solution.planning_problem_solutions[0])
+
     # reconstruct states from inputs
-    reconstructed_states = reconstruct_states(config, record_state_list, reconstructed_inputs)
-    # evaluate
-    plot_states(config, record_state_list, reconstructed_states, plot_bounds=False)
+    reconstructed_states = reconstruct_states(config, ego_solution_trajectory.state_list, reconstructed_inputs)
+
+    # remove first element from input list
+    record_input_list.pop(0)
+
+    # plot
+    plot_states(config, ego_solution_trajectory.state_list, reconstructed_states, plot_bounds=False)
     plot_inputs(config, record_input_list, reconstructed_inputs, plot_bounds=True)
+
+    # CR validity check
+    print(valid_solution(scenario, planning_problem_set, solution))

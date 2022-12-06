@@ -21,7 +21,7 @@ from commonroad.geometry.shape import Rectangle
 from commonroad.prediction.prediction import TrajectoryPrediction
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 from commonroad.scenario.trajectory import Trajectory
-from commonroad.scenario.state import KSState, FloatExactOrInterval, InitialState, CustomState
+from commonroad.scenario.state import KSState, FloatExactOrInterval, CustomState, InitialState
 from commonroad.scenario.scenario import Scenario
 
 # commonroad_dc
@@ -297,7 +297,7 @@ class ReactivePlanner(object):
             print('<ReactivePlanner>: %s trajectories sampled' % len(trajectory_bundle._trajectory_bundle))
         return trajectory_bundle
 
-    def _compute_initial_states(self, x_0: Union[CartesianState, InitialState]) -> (np.ndarray, np.ndarray):
+    def _compute_initial_states(self, x_0: CartesianState) -> (np.ndarray, np.ndarray):
         """
         Computes the curvilinear initial states for the polynomial planner based on a Cartesian CommonRoad state
         :param x_0: The CommonRoad state object representing the initial state of the vehicle
@@ -426,7 +426,7 @@ class ReactivePlanner(object):
 
         return cartTraj, cvlnTraj, lon_list, lat_list
 
-    def plan(self, x_0: Union[CartesianState, InitialState], cl_states=None) -> tuple:
+    def plan(self, x_0: CartesianState, cl_states=None) -> tuple:
         """
         Plans an optimal trajectory
         :param x_0: Initial state as CR state
@@ -911,17 +911,24 @@ class ReactivePlanner(object):
                 return trajectory
         return None
 
-    def convert_cr_trajectory_to_object(self, trajectory: Trajectory):
+    def shift_and_convert_trajectory_to_object(self, trajectory: Trajectory):
         """
         Converts a CR trajectory to a CR dynamic obstacle with given dimensions
         :param trajectory: The trajectory of the vehicle
         :return: CR dynamic obstacles representing the ego vehicle
         """
+        # shift trajectory positions to center
+        new_state_list = list()
+        for state in trajectory.state_list:
+            new_state_list.append(state.translate_rotate(np.array([self.vehicle_params.rear_ax_distance * np.cos(state.orientation),
+                                                                   self.vehicle_params.rear_ax_distance * np.sin(state.orientation)]), 0.0))
+
+        new_trajectory = Trajectory(initial_time_step=new_state_list[0].time_step, state_list=new_state_list)
         # get shape of vehicle
         shape = Rectangle(self.vehicle_params.length, self.vehicle_params.width)
         # get trajectory prediction
-        prediction = TrajectoryPrediction(trajectory, shape)
-        return DynamicObstacle(42, ObstacleType.CAR, shape, trajectory.state_list[0], prediction)
+        prediction = TrajectoryPrediction(new_trajectory, shape)
+        return DynamicObstacle(42, ObstacleType.CAR, shape, new_trajectory.state_list[0], prediction)
 
     @staticmethod
     def shift_orientation(trajectory: Trajectory, interval_start=-np.pi, interval_end=np.pi):
@@ -931,3 +938,30 @@ class ReactivePlanner(object):
             while state.orientation > interval_end:
                 state.orientation -= 2 * np.pi
         return trajectory
+
+    @classmethod
+    def shift_state_to_rear_axle(cls):
+        # TODO required ?
+        pass
+
+    @classmethod
+    def shift_state_to_vehicle_center(cls):
+        # TODO required ?
+        pass
+
+    def process_initial_state_from_pp(self, x0_pp: InitialState):
+        """
+        Function converts the initial state from the CommonRoad planning problem to the reactive planner state:
+        - initial positions (x, y) from planning problem are shifted from vehicle center to rear axle
+        - initial steering angle is computed from initial yaw rate and velocity
+        """
+        # shift initial position to rear axle
+        x0_shifted = x0_pp.translate_rotate(np.array([-self.vehicle_params.rear_ax_distance * np.cos(x0_pp.orientation),
+                                                      -self.vehicle_params.rear_ax_distance * np.sin(x0_pp.orientation)])
+                                            , 0.0)
+
+        # create initial state for planner and compute initial steering angle
+        x0_planner = CartesianState()
+        x0_planner = x0_shifted.convert_state_to_state(x0_planner)
+        x0_planner.steering_angle = np.arctan2(self.vehicle_params.wheelbase * x0_planner.yaw_rate, x0_planner.velocity)
+        return x0_planner
