@@ -883,9 +883,13 @@ class ReactivePlanner(object):
         # go through sorted list of trajectories and check for collisions
         for trajectory in trajectory_bundle.get_sorted_list():
             # compute position and orientation
-            pos1 = trajectory.curvilinear.s if self._collision_check_in_cl else trajectory.cartesian.x
-            pos2 = trajectory.curvilinear.d if self._collision_check_in_cl else trajectory.cartesian.y
+            # TODO remove collision check in CL frame?
+            pos1 = trajectory.curvilinear.s if self._collision_check_in_cl else \
+                trajectory.cartesian.x + self.vehicle_params.rear_ax_distance * np.cos(trajectory.cartesian.theta)
+            pos2 = trajectory.curvilinear.d if self._collision_check_in_cl else \
+                trajectory.cartesian.y + self.vehicle_params.rear_ax_distance * np.sin(trajectory.cartesian.theta)
             theta = trajectory.curvilinear.theta if self._collision_check_in_cl else trajectory.cartesian.theta
+
             collide = False
             # check each pose for collisions
             for i in range(len(pos1)):
@@ -938,16 +942,6 @@ class ReactivePlanner(object):
             while state.orientation > interval_end:
                 state.orientation -= 2 * np.pi
         return trajectory
-
-    @classmethod
-    def shift_state_to_rear_axle(cls):
-        # TODO required ?
-        pass
-
-    @classmethod
-    def shift_state_to_vehicle_center(cls):
-        # TODO required ?
-        pass
 
     def process_initial_state_from_pp(self, x0_pp: InitialState):
         """
