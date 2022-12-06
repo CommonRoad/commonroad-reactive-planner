@@ -169,7 +169,7 @@ def plot_final_trajectory(scenario: Scenario, planning_problem: PlanningProblem,
                     label='reference path')
 
     # save as .png file
-    if True:
+    if config.debug.save_plots:
         os.makedirs(os.path.join(config.general.path_output, str(scenario.scenario_id)),
                     exist_ok=True)
         plot_dir = os.path.join(config.general.path_output, str(scenario.scenario_id))
