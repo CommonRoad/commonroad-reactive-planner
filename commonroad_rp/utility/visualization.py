@@ -177,7 +177,7 @@ def plot_final_trajectory(scenario: Scenario, planning_problem: PlanningProblem,
                     bbox_inches='tight')
 
     # show plot
-    if config.debug.show_plots:
+    if True:
         plt.show(block=True)
 
 

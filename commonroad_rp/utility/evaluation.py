@@ -93,7 +93,8 @@ def plot_states(config: Configuration, state_list: List[Union[CartesianState, Tr
     Plots states of trajectory from a given state_list
     state_list must contain the following states: steering_angle, velocity, orientation and yaw_rate
     """
-    plt.figure(figsize=(7, 7.5))
+    plt.figure(figsize=(7, 8.0))
+    plt.suptitle("States")
 
     # x, y position
     plt.subplot(5, 1, 1)
@@ -152,18 +153,29 @@ def plot_states(config: Configuration, state_list: List[Union[CartesianState, Tr
 
     # plot errors in position, velocity, orientation
     if reconstructed_states:
-        plt.figure(figsize=(7, 7.5))
-        plt.subplot(3, 1, 1)
+        plt.figure(figsize=(7, 8.0))
+        plt.suptitle("State Errors (planned vs. forward simulated)")
+
+        plt.subplot(5, 1, 1)
         plt.plot(list(range(len(state_list))), [abs(state_list[i].position[0] - reconstructed_states[i].position[0])
                                                 for i in range(len(state_list))], color="black")
-        plt.ylabel("pos_x error")
-        plt.subplot(3, 1, 2)
+        plt.ylabel("x error")
+        plt.subplot(5, 1, 2)
         plt.plot(list(range(len(state_list))), [abs(state_list[i].position[1] - reconstructed_states[i].position[1])
                                                 for i in range(len(state_list))], color="black")
-        plt.ylabel("pos_y error")
-        plt.subplot(3, 1, 3)
+        plt.ylabel("y error")
+        plt.subplot(5, 1, 3)
         plt.plot(list(range(len(state_list))), [abs(_angle_diff(state_list[i].orientation,
                                                                 reconstructed_states[i].orientation))
+                                                for i in range(len(state_list))], color="black")
+        plt.ylabel("delta error")
+        plt.subplot(5, 1, 4)
+        plt.plot(list(range(len(state_list))), [abs(state_list[i].velocity - reconstructed_states[i].velocity)
+                                                for i in range(len(state_list))], color="black")
+        plt.ylabel("velocity error")
+        plt.subplot(5, 1, 5)
+        plt.plot(list(range(len(state_list))), [abs(_angle_diff(state_list[i].steering_angle,
+                                                                reconstructed_states[i].steering_angle))
                                                 for i in range(len(state_list))], color="black")
         plt.ylabel("theta error")
         plt.tight_layout()
@@ -177,6 +189,7 @@ def plot_inputs(config: Configuration, input_list: List[InputState], reconstruct
     optionally plots reconstructed_inputs
     """
     plt.figure()
+    plt.suptitle("Inputs")
 
     # steering angle speed
     plt.subplot(2, 1, 1)
