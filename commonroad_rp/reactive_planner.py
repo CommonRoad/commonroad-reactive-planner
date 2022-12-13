@@ -318,8 +318,8 @@ class ReactivePlanner(object):
             s, d = self._co.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
 
         # factor for interpolation
-        s_idx = np.argmax(self._co.ref_pos > s)
-        s_lambda = (self._co.ref_pos[s_idx] - s) / (
+        s_idx = np.argmax(self._co.ref_pos > s) - 1
+        s_lambda = (s - self._co.ref_pos[s_idx]) / (
                 self._co.ref_pos[s_idx + 1] - self._co.ref_pos[s_idx])
 
         # compute orientation in curvilinear coordinate frame
@@ -400,8 +400,9 @@ class ReactivePlanner(object):
                 cart_states['yaw_rate'] = (trajectory.cartesian.theta[i] - trajectory.cartesian.theta[i-1]) / self.dT
             else:
                 cart_states['yaw_rate'] = self.x_0.yaw_rate
-            cart_states['steering_angle'] = np.arctan2(self.vehicle_params.wheelbase * cart_states['yaw_rate'],
-                                                       cart_states['velocity'])
+            # TODO Check why computation with yaw rate was faulty ??
+            cart_states['steering_angle'] = np.arctan2(self.vehicle_params.wheelbase *
+                                                       trajectory.cartesian.kappa[i], 1.0)
             cart_list.append(CartesianState(**cart_states))
 
             # create curvilinear state
@@ -609,10 +610,6 @@ class ReactivePlanner(object):
             kappa_gl = np.zeros(self.N + 1)
             kappa_cl = np.zeros(self.N + 1)
 
-            # TODO Debug stuff
-            kr_list = []
-            krd_list = []
-
             # Initialize Feasibility boolean
             feasible = True
 
@@ -655,11 +652,11 @@ class ReactivePlanner(object):
                     dpp = d_acceleration[i]
 
                 # factor for interpolation
-                s_idx = np.argmax(self._co.ref_pos > s[i])
+                s_idx = np.argmax(self._co.ref_pos > s[i]) - 1
                 if s_idx + 1 >= len(self._co.ref_pos):
                     feasible = False
                     break
-                s_lambda = (self._co.ref_pos[s_idx] - s[i]) / (self._co.ref_pos[s_idx + 1] - self._co.ref_pos[s_idx])
+                s_lambda = (s[i] - self._co.ref_pos[s_idx]) / (self._co.ref_pos[s_idx + 1] - self._co.ref_pos[s_idx])
 
                 # compute curvilinear (theta_cl) and global Cartesian (theta_gl) orientation
                 if s_velocity[i] > 0.001:
@@ -702,10 +699,6 @@ class ReactivePlanner(object):
                 k_r_d = (self._co.ref_curv_d[s_idx + 1] - self._co.ref_curv_d[s_idx]) * s_lambda + \
                         self._co.ref_curv_d[s_idx]
 
-                # TODO Debug stuff
-                kr_list.append(k_r)
-                krd_list.append(k_r_d)
-
                 # compute global curvature (see appendix A of Moritz Werling's PhD thesis)
                 oneKrD = (1 - k_r * d[i])
                 cosTheta = math.cos(theta_cl[i])
@@ -742,6 +735,7 @@ class ReactivePlanner(object):
                     if not self._draw_traj_set:
                         break
                 # curvature rate constraint
+                # TODO: chck if kappa_gl[i-1] ??
                 steering_angle = np.arctan2(self.vehicle_params.wheelbase * kappa_gl[i], 1.0)
                 kappa_dot_max = self.vehicle_params.v_delta_max / (self.vehicle_params.wheelbase *
                                                                    math.cos(steering_angle) ** 2)
