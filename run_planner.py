@@ -14,14 +14,13 @@ from copy import deepcopy
 import numpy as np
 
 # commonroad-io
-from commonroad.scenario.trajectory import State
-from commonroad.scenario.state import CustomState, InputState
+from commonroad.scenario.state import InputState
 
 # commonroad-route-planner
 from commonroad_route_planner.route_planner import RoutePlanner
 
 # reactive planner
-from commonroad_rp.reactive_planner import ReactivePlanner, CartesianState
+from commonroad_rp.reactive_planner import ReactivePlanner
 from commonroad_rp.utility.visualization import visualize_planner_at_timestep, plot_final_trajectory, make_gif
 from commonroad_rp.utility.evaluation import create_planning_problem_solution, reconstruct_inputs, plot_states, \
     plot_inputs, reconstruct_states, create_full_solution_trajectory
@@ -32,10 +31,10 @@ from commonroad_rp.utility.general import load_scenario_and_planning_problem
 # *************************************
 # Set Configurations
 # *************************************
-filename = "ZAM_Over-1_1.xml"
+# filename = "ZAM_Over-1_1.xml"
 # filename = "ZAM_105222-1_1_T-1.xml"
 # filename = "ZAM_OpenDrive-123.xml"
-# filename = "ZAM_Tjunction-1_42_T-1.xml"
+filename = "ZAM_Tjunction-1_42_T-1.xml"
 # filename = "C-DEU_B471-2_1.xml"
 
 config = ConfigurationBuilder.build_configuration(filename[:-4])
@@ -62,7 +61,7 @@ if hasattr(planning_problem.goal.state_list[0], 'velocity'):
     if planning_problem.goal.state_list[0].velocity.start > 0:
         desired_velocity = (planning_problem.goal.state_list[0].velocity.start + planning_problem.goal.state_list[0].velocity.end) / 2
     else:
-        desired_velocity = (planning_problem.goal.state_list[0].velocity.end)
+        desired_velocity = (planning_problem.goal.state_list[0].velocity.end) / 2
 else:
     desired_velocity = x_0.velocity
 
@@ -137,7 +136,8 @@ while not goal.is_reached(x_0):
             sampled_trajectory_bundle = deepcopy(planner.stored_trajectories)
 
         # correct orientation angle
-        new_state_list = planner.shift_orientation(optimal[0])
+        new_state_list = planner.shift_orientation(optimal[0], interval_start=x_0.orientation-np.pi,
+                                                   interval_end=x_0.orientation+np.pi)
 
         # get next state from state list of planned trajectory
         new_state = new_state_list.state_list[1]
@@ -199,6 +199,10 @@ while not goal.is_reached(x_0):
 # **************************
 # Evaluate results
 # **************************
+# Optional: solutions can be evaluated via input reconstruction from commonroad_dc.feasibility.feasibility_checker
+# For each state transition the inputs are reconstructed. To check feasibility, the reconstructed input is used for
+# forward simulation and the error between the forward simulated (reconstructed) state and the planned state is
+# evaluated
 evaluate = True
 if evaluate:
     from commonroad_dc.feasibility.solution_checker import valid_solution
