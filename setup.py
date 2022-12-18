@@ -28,9 +28,9 @@ setup(
         'omegaconf>=2.1.1',
         'pytest>=6.2.5',
         'scipy>=1.5.2',
-        'commonroad-route-planner>=2022.1',
-        'commonroad-io>=2021.4',
-        'commonroad-drivability-checker>=2021.4',
+        'commonroad-route-planner>=2022.3',
+        'commonroad-io>=>=2022.2',
+        'commonroad-drivability-checker>=2022.2.1',
         ],
     classifiers=[
         "Programming Language :: Python :: 3.8",

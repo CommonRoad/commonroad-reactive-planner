@@ -14,7 +14,7 @@ from copy import deepcopy
 import numpy as np
 
 # commonroad-io
-from commonroad.scenario.trajectory import State
+from commonroad.scenario.state import InputState
 
 # commonroad-route-planner
 from commonroad_route_planner.route_planner import RoutePlanner
@@ -23,10 +23,9 @@ from commonroad_route_planner.route_planner import RoutePlanner
 from commonroad_rp.reactive_planner import ReactivePlanner
 from commonroad_rp.utility.visualization import visualize_planner_at_timestep, plot_final_trajectory, make_gif
 from commonroad_rp.utility.evaluation import create_planning_problem_solution, reconstruct_inputs, plot_states, \
-    plot_inputs, reconstruct_states
+    plot_inputs, reconstruct_states, create_full_solution_trajectory
 from commonroad_rp.configuration_builder import ConfigurationBuilder
 
-from commonroad_rp.utility.utils_coordinate_system import preprocess_ref_path, extrapolate_ref_path
 from commonroad_rp.utility.general import load_scenario_and_planning_problem
 
 # *************************************
@@ -34,7 +33,9 @@ from commonroad_rp.utility.general import load_scenario_and_planning_problem
 # *************************************
 # filename = "ZAM_Over-1_1.xml"
 # filename = "ZAM_105222-1_1_T-1.xml"
-filename = "ZAM_OpenDrive-123.xml"
+# filename = "ZAM_OpenDrive-123.xml"
+filename = "ZAM_Tjunction-1_42_T-1.xml"
+# filename = "C-DEU_B471-2_1.xml"
 
 config = ConfigurationBuilder.build_configuration(filename[:-4])
 
@@ -52,15 +53,15 @@ current_velocity = problem_init_state.velocity
 if not hasattr(problem_init_state, 'acceleration'):
     problem_init_state.acceleration = 0.
 x_0 = deepcopy(problem_init_state)
+delattr(x_0, "slip_angle")
 
 # goal state configuration
 goal = planning_problem.goal
 if hasattr(planning_problem.goal.state_list[0], 'velocity'):
-    if planning_problem.goal.state_list[0].velocity.start != 0:
+    if planning_problem.goal.state_list[0].velocity.start > 0:
         desired_velocity = (planning_problem.goal.state_list[0].velocity.start + planning_problem.goal.state_list[0].velocity.end) / 2
     else:
-        desired_velocity = (planning_problem.goal.state_list[0].velocity.start
-                            + planning_problem.goal.state_list[0].velocity.end) / 2
+        desired_velocity = (planning_problem.goal.state_list[0].velocity.end) / 2
 else:
     desired_velocity = x_0.velocity
 
@@ -77,10 +78,9 @@ planner.set_t_sampling_parameters(config.sampling.t_min, config.planning.dt, con
 planner.set_collision_checker(scenario)
 # initialize route planner and set reference path
 route_planner = RoutePlanner(scenario, planning_problem)
-ref_path = route_planner.plan_routes().retrieve_first_route().reference_path
+route = route_planner.plan_routes().retrieve_first_route()
+ref_path = route.reference_path
 
-
-# ref_path = extrapolate_ref_path(ref_path)
 planner.set_reference_path(ref_path)
 
 
@@ -95,17 +95,15 @@ current_count = 0
 planning_times = list()
 ego_vehicle = None
 
-# add initial state to recorded state list
+# convert initial state from planning problem to reactive planner (Cartesian) state type
+x_0 = planner.process_initial_state_from_pp(x0_pp=x_0)
 record_state_list.append(x_0)
-delattr(record_state_list[0], "slip_angle")
-record_state_list[0].steering_angle = np.arctan2(config.vehicle.wheelbase * record_state_list[0].yaw_rate,
-                                                 record_state_list[0].velocity)
-record_input_state = State(
-        steering_angle=np.arctan2(config.vehicle.wheelbase * x_0.yaw_rate, x_0.velocity),
+
+# add initial inputs to recorded input list
+record_input_list.append(InputState(
         acceleration=x_0.acceleration,
         time_step=x_0.time_step,
-        steering_angle_speed=0.)
-record_input_list.append(record_input_state)
+        steering_angle_speed=0.))
 
 # Run planner
 while not goal.is_reached(x_0):
@@ -138,27 +136,30 @@ while not goal.is_reached(x_0):
             sampled_trajectory_bundle = deepcopy(planner.stored_trajectories)
 
         # correct orientation angle
-        new_state_list = planner.shift_orientation(optimal[0])
+        new_state_list = planner.shift_orientation(optimal[0], interval_start=x_0.orientation-np.pi,
+                                                   interval_end=x_0.orientation+np.pi)
 
-        # add new state to recorded state list
+        # get next state from state list of planned trajectory
         new_state = new_state_list.state_list[1]
         new_state.time_step = current_count + 1
-        record_state_list.append(new_state)
 
         # add input to recorded input list
-        record_input_list.append(State(
-            steering_angle=new_state.steering_angle,
+        record_input_list.append(InputState(
             acceleration=new_state.acceleration,
-            steering_angle_speed=(new_state.steering_angle - record_input_list[-1].steering_angle) / DT,
+            steering_angle_speed=(new_state.steering_angle - record_state_list[-1].steering_angle) / DT,
             time_step=new_state.time_step
         ))
+
+        # add new state to recorded state list
+        record_state_list.append(new_state)
 
         # update init state and curvilinear state
         x_0 = deepcopy(record_state_list[-1])
         x_cl = (optimal[2][1], optimal[3][1])
 
         # create CommonRoad Obstacle for the ego Vehicle
-        ego_vehicle = planner.convert_cr_trajectory_to_object(optimal[0])
+        if config.debug.show_plots or config.debug.save_plots:
+            ego_vehicle = planner.shift_and_convert_trajectory_to_object(optimal[0])
     else:
         # not a planning cycle -> no trajectories sampled -> set sampled_trajectory_bundle to None
         sampled_trajectory_bundle = None
@@ -166,18 +167,19 @@ while not goal.is_reached(x_0):
         # continue on optimal trajectory
         temp = current_count % config.planning.replanning_frequency
 
-        # add new state to recorded state list
+        # get next state from state list of planned trajectory
         new_state = new_state_list.state_list[1 + temp]
         new_state.time_step = current_count + 1
-        record_state_list.append(new_state)
 
         # add input to recorded input list
-        record_input_list.append(State(
-            steering_angle=new_state.steering_angle,
+        record_input_list.append(InputState(
             acceleration=new_state.acceleration,
-            steering_angle_speed=(new_state.steering_angle - record_input_list[-1].steering_angle) / DT,
+            steering_angle_speed=(new_state.steering_angle - record_state_list[-1].steering_angle) / DT,
             time_step=new_state.time_step
         ))
+
+        # add new state to recorded state list
+        record_state_list.append(new_state)
 
         # update init state and curvilinear state
         x_0 = deepcopy(record_state_list[-1])
@@ -190,32 +192,42 @@ while not goal.is_reached(x_0):
                                       traj_set=sampled_trajectory_bundle, ref_path=ref_path,
                                       timestep=current_count, config=config)
 
-# plot  final ego vehicle trajectory
-plot_final_trajectory(scenario, planning_problem, record_state_list, config)
-
 # make gif
-make_gif(config, scenario, range(0, current_count+1))
-
-# remove first element
-record_input_list.pop(0)
+# if goal.is_reached(x_0):
+#     make_gif(config, scenario, range(0, current_count+1))
 
 # **************************
 # Evaluate results
 # **************************
-evaluate = False
+# Optional: solutions can be evaluated via input reconstruction from commonroad_dc.feasibility.feasibility_checker
+# For each state transition the inputs are reconstructed. To check feasibility, the reconstructed input is used for
+# forward simulation and the error between the forward simulated (reconstructed) state and the planned state is
+# evaluated
+evaluate = True
 if evaluate:
     from commonroad_dc.feasibility.solution_checker import valid_solution
-    from commonroad_dc.feasibility.vehicle_dynamics import VehicleDynamics
-    from commonroad.common.solution import VehicleType
+    # create full solution trajectory
+    ego_solution_trajectory = create_full_solution_trajectory(config, record_state_list)
+
+    # plot full ego vehicle trajectory
+    plot_final_trajectory(scenario, planning_problem, ego_solution_trajectory.state_list, config)
 
     # create CR solution
-    solution = create_planning_problem_solution(config, record_state_list, scenario, planning_problem)
+    solution = create_planning_problem_solution(config, ego_solution_trajectory, scenario, planning_problem)
 
     # check feasibility
     # reconstruct inputs (state transition optimizations)
     feasible, reconstructed_inputs = reconstruct_inputs(config, solution.planning_problem_solutions[0])
+
     # reconstruct states from inputs
-    reconstructed_states = reconstruct_states(config, record_state_list, reconstructed_inputs)
-    # evaluate
-    plot_states(config, record_state_list, reconstructed_states, plot_bounds=True)
+    reconstructed_states = reconstruct_states(config, ego_solution_trajectory.state_list, reconstructed_inputs)
+
+    # remove first element from input list
+    record_input_list.pop(0)
+
+    # plot
+    plot_states(config, ego_solution_trajectory.state_list, reconstructed_states, plot_bounds=False)
     plot_inputs(config, record_input_list, reconstructed_inputs, plot_bounds=True)
+
+    # CR validity check
+    print(valid_solution(scenario, planning_problem_set, solution))
