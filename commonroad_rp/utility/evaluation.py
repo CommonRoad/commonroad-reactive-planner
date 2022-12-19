@@ -88,6 +88,36 @@ def reconstruct_inputs(config: Configuration, pps: PlanningProblemSolution):
     return feasible_state_list, reconstructed_inputs
 
 
+def check_acceleration(config: Configuration, state_list:  List[Union[CartesianState, TraceState]], plot=False):
+    """Checks whether the computed acceleration the trajectory matches the velocity difference (dv/dt), i.e., assuming
+    piecewise constant acceleration input"""
+    # computed acceleration of trajectory
+    a_planned = np.array([state.acceleration for state in state_list])
+    a_piecewise_constant = np.array([(a_planned[i] + a_planned[i+1]) / 2 for i in range(len(a_planned)-1)])
+    # recalculated acceleration via velocity
+    v = np.array([state.velocity for state in state_list])
+    a_recalculated = np.diff(v) / config.planning.dt
+    # check
+    diff = np.abs(a_piecewise_constant-a_recalculated)
+    acc_correct = np.all(diff < 1e-01)
+    print("Acceleration correct: %s, with max deviation %s" % (acc_correct, np.max(diff)))
+
+    if plot:
+        plt.figure(figsize=(7, 3.5))
+        plt.suptitle("Acceleration check")
+        plt.plot(list(range(len(a_planned[1:]))),
+                 a_planned[1:], color="black", label="planned acceleration")
+        plt.plot(list(range(len(a_piecewise_constant))),
+                 a_piecewise_constant, color="green", label="planned (piecewise constant)")
+        plt.plot(list(range(len(a_recalculated))),
+                 a_recalculated, color="orange", label="recomputed (dv/dt)")
+        plt.xlabel("t in s")
+        plt.ylabel("a_long in m/s^2")
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
+
+
 def plot_states(config: Configuration, state_list: List[Union[CartesianState, TraceState]], reconstructed_states=None, plot_bounds=False):
     """
     Plots states of trajectory from a given state_list
@@ -205,11 +235,11 @@ def plot_inputs(config: Configuration, input_list: List[InputState], reconstruct
         plt.plot([0, len(input_list)], [config.vehicle.v_delta_max, config.vehicle.v_delta_max],
                  color="red")
     plt.legend()
-    plt.ylabel("v_delta")
+    plt.ylabel("v_delta in rad/s")
 
     # acceleration
     plt.subplot(2, 1, 2)
-    plt.plot(list(range(len(input_list))),
+    plt.plot(np.array(list(range(len(input_list)))),
              [state.acceleration for state in input_list], color="black", label="planned")
     if reconstructed_inputs:
         plt.plot(list(range(len(reconstructed_inputs))),
@@ -219,6 +249,6 @@ def plot_inputs(config: Configuration, input_list: List[InputState], reconstruct
                  color="red", label="bounds")
         plt.plot([0, len(input_list)], [config.vehicle.a_max, config.vehicle.a_max],
                  color="red")
-    plt.ylabel("a_long")
+    plt.ylabel("a_long in m/s^2")
     plt.tight_layout()
     plt.show()
