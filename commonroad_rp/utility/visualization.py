@@ -31,6 +31,31 @@ from commonroad_rp.trajectories import TrajectorySample
 from commonroad_rp.configuration import Configuration
 
 
+def visualize_scenario_and_pp(scenario: Scenario, planning_problem: PlanningProblem, cosy=None):
+    """Visualizes scenario, planning problem and (optionally) the reference path"""
+    plot_limits = None
+    ref_path = None
+    if cosy is not None:
+        ref_path = cosy.reference
+        x_min = np.min(ref_path[:, 0]) - 50
+        x_max = np.max(ref_path[:, 0]) + 50
+        y_min = np.min(ref_path[:, 1]) - 50
+        y_max = np.max(ref_path[:, 1]) + 50
+        plot_limits = [x_min, x_max, y_min, y_max]
+
+    rnd = MPRenderer(figsize=(20, 10), plot_limits=plot_limits)
+    rnd.draw_params.time_begin = 0
+    scenario.draw(rnd)
+    planning_problem.draw(rnd)
+    rnd.render()
+    if ref_path is not None:
+        rnd.ax.plot(ref_path[:, 0], ref_path[:, 1], color='g', marker='.', markersize=1, zorder=19,
+                    linewidth=0.8, label='reference path')
+        proj_domain_border = np.array(cosy.ccosy.projection_domain())
+        rnd.ax.plot(proj_domain_border[:, 0], proj_domain_border[:, 1], color="orange", linewidth=0.8)
+    plt.show(block=True)
+
+
 def visualize_collision_checker(scenario: Scenario, cc: pycrcc.CollisionChecker):
     """
     Visualizes the collision checker, i.e., all collision objects and, if applicable, the road boundary.
@@ -192,6 +217,7 @@ def make_gif(config: Configuration, scenario: Scenario, time_steps: Union[range,
     """
     if not config.debug.save_plots:
         # only create GIF when saving of plots is enabled
+        print("...GIF not created: Enable config.debug.save_plots to generate GIF.")
         pass
     else:
         print("...Generating GIF")
