@@ -21,9 +21,10 @@ from commonroad_route_planner.route_planner import RoutePlanner
 
 # reactive planner
 from commonroad_rp.reactive_planner import ReactivePlanner
-from commonroad_rp.utility.visualization import visualize_planner_at_timestep, plot_final_trajectory, make_gif
+from commonroad_rp.utility.visualization import visualize_planner_at_timestep, plot_final_trajectory, make_gif, \
+    visualize_scenario_and_pp
 from commonroad_rp.utility.evaluation import create_planning_problem_solution, reconstruct_inputs, plot_states, \
-    plot_inputs, reconstruct_states, create_full_solution_trajectory
+    plot_inputs, reconstruct_states, create_full_solution_trajectory, check_acceleration
 from commonroad_rp.configuration_builder import ConfigurationBuilder
 
 from commonroad_rp.utility.general import load_scenario_and_planning_problem
@@ -31,10 +32,10 @@ from commonroad_rp.utility.general import load_scenario_and_planning_problem
 # *************************************
 # Set Configurations
 # *************************************
-# filename = "ZAM_Over-1_1.xml"
+filename = "ZAM_Over-1_1.xml"
 # filename = "ZAM_105222-1_1_T-1.xml"
 # filename = "ZAM_OpenDrive-123.xml"
-filename = "ZAM_Tjunction-1_42_T-1.xml"
+# filename = "ZAM_Tjunction-1_42_T-1.xml"
 # filename = "C-DEU_B471-2_1.xml"
 
 config = ConfigurationBuilder.build_configuration(filename[:-4])
@@ -115,7 +116,7 @@ while not goal.is_reached(x_0):
         comp_time_start = time.time()
         # set desired velocity
         current_velocity = x_0.velocity
-        planner.set_desired_velocity(desired_velocity)
+        planner.set_desired_velocity(desired_velocity, current_velocity)
 
         # plan trajectory
         optimal = planner.plan(x_0, x_cl)     # returns the planned (i.e., optimal) trajectory
@@ -222,6 +223,9 @@ if evaluate:
     # reconstruct states from inputs
     reconstructed_states = reconstruct_states(config, ego_solution_trajectory.state_list, reconstructed_inputs)
 
+    # check acceleration correctness
+    check_acceleration(config, ego_solution_trajectory.state_list, plot=True)
+
     # remove first element from input list
     record_input_list.pop(0)
 
@@ -230,4 +234,5 @@ if evaluate:
     plot_inputs(config, record_input_list, reconstructed_inputs, plot_bounds=True)
 
     # CR validity check
+    print("Feasibility Check Result: ")
     print(valid_solution(scenario, planning_problem_set, solution))

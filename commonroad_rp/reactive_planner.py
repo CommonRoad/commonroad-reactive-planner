@@ -308,6 +308,7 @@ class ReactivePlanner(object):
             s, d = self._co.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
         except ValueError:
             print('<Reactive_planner>: Value Error for curvilinear transformation')
+            # TODO: Remove this fix from the reactive planner -> fix in CCosy
             tmp = np.array([x_0.position])
             print(x_0.position)
             if self._co.reference[0][0] > x_0.position[0]:
