@@ -75,14 +75,9 @@ class CoordinateSystem:
                                           'CurvilinearCoordinateSystem object.'
             # set reference and create ccosy from given reference
 
-            smoothing_scipy_splines = True
-            if smoothing_scipy_splines:
-                print("Smoothing via spline interpolation...")
-                tck, u = splprep(reference.T, u=None, k=3, s=0.0)
-                u_new = np.linspace(u.min(), u.max(), 200)
-                x_new, y_new = splev(u_new, tck, der=0)
-                ref_path = np.array([x_new, y_new]).transpose()
-                reference = resample_polyline(ref_path, 1)
+            # remove duplicated vertices in reference path
+            _, idx = np.unique(reference, axis=0, return_index=True)
+            reference = reference[np.sort(idx)]
 
             self.reference = reference
         else:
@@ -158,6 +153,7 @@ class CoordinateSystem:
         from matplotlib import pyplot as plt
 
         plt.figure(figsize=(7, 7.5))
+        plt.suptitle("Reference path states")
 
         # orientation theta
         plt.subplot(3, 1, 1)
