@@ -92,8 +92,6 @@ class CoordinateSystem:
         self._ref_theta = np.unwrap(compute_orientation_from_polyline(self.reference))
         self._ref_curv_d = np.gradient(self._ref_curv, self._ref_pos)
 
-        self.plot_reference_states()
-
     @property
     def reference(self) -> np.ndarray:
         """returns reference path used by CCosy due to slight modifications within the CCosy module"""
