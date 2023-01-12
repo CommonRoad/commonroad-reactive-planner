@@ -48,6 +48,8 @@ class VehicleConfiguration:
         # get dimensions from given vehicle ID
         self.length = vehicle_parameters.l
         self.width = vehicle_parameters.w
+        self.front_ax_distance = vehicle_parameters.a
+        self.rear_ax_distance = vehicle_parameters.b
         self.wheelbase = vehicle_parameters.a + vehicle_parameters.b
 
         # get constraints from given vehicle ID

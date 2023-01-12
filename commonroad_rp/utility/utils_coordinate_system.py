@@ -8,6 +8,7 @@ __status__ = "Alpha"
 
 from copy import deepcopy
 import numpy as np
+from scipy.interpolate import splprep, splev
 
 from commonroad_dc.pycrccosy import CurvilinearCoordinateSystem
 from commonroad_dc.geometry.util import compute_pathlength_from_polyline,compute_curvature_from_polyline, \
@@ -65,6 +66,7 @@ def preprocess_ref_path(ref_path: np.ndarray, resample_step: float = 1.0, max_cu
     return ref_path_preprocessed
 
 
+# TODO use wrapper class of CCosy in commonroad_dc instead
 class CoordinateSystem:
 
     def __init__(self, reference: np.ndarray = None, ccosy: CurvilinearCoordinateSystem = None):
@@ -72,6 +74,11 @@ class CoordinateSystem:
             assert reference is not None, '<CoordinateSystem>: Please provide a reference path OR a ' \
                                           'CurvilinearCoordinateSystem object.'
             # set reference and create ccosy from given reference
+
+            # remove duplicated vertices in reference path
+            _, idx = np.unique(reference, axis=0, return_index=True)
+            reference = reference[np.sort(idx)]
+
             self.reference = reference
         else:
             assert ccosy is not None, '<CoordinateSystem>: Please provide a reference path OR a ' \
@@ -139,3 +146,29 @@ class CoordinateSystem:
     def convert_to_curvilinear_coords(self, x: float, y: float) -> np.ndarray:
         """convert Cartesian (x,y) point to curviinear (s,d) point"""
         return self._ccosy.convert_to_curvilinear_coords(x, y)
+
+    def plot_reference_states(self):
+        from matplotlib import pyplot as plt
+
+        plt.figure(figsize=(7, 7.5))
+        plt.suptitle("Reference path states")
+
+        # orientation theta
+        plt.subplot(3, 1, 1)
+        plt.plot(self.ref_pos, self.ref_theta, color="k")
+        plt.xlabel("s")
+        plt.ylabel("theta_ref")
+
+        # curvature kappa
+        plt.subplot(3, 1, 2)
+        plt.plot(self.ref_pos, self.ref_curv, color="k")
+        plt.xlabel("s")
+        plt.ylabel("kappa_ref")
+
+        # curvature rate kappa_dot
+        plt.subplot(3, 1, 3)
+        plt.plot(self.ref_pos, self.ref_curv_d, color="k")
+        plt.xlabel("s")
+        plt.ylabel("kappa_dot_ref")
+        plt.tight_layout()
+        plt.show()

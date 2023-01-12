@@ -28,21 +28,30 @@ from commonroad_rp.utility.evaluation import create_planning_problem_solution, r
 from commonroad_rp.configuration_builder import ConfigurationBuilder
 
 from commonroad_rp.utility.general import load_scenario_and_planning_problem
+from commonroad_rp.utility.spot_helpers import spot_setup_scenario, spot_compute_occupancy_prediction, \
+    spot_remove_scenario, spot_update_init_state_obstacles
 
 # *************************************
 # Set Configurations
 # *************************************
-filename = "ZAM_Over-1_1.xml"
-# filename = "ZAM_105222-1_1_T-1.xml"
-# filename = "ZAM_OpenDrive-123.xml"
-# filename = "ZAM_Tjunction-1_42_T-1.xml"
-# filename = "C-DEU_B471-2_1.xml"
+filename = "DEU_Test-1_1_T-1.xml"
 
 config = ConfigurationBuilder.build_configuration(filename[:-4])
 
 scenario, planning_problem, planning_problem_set = load_scenario_and_planning_problem(config)
 
 DT = config.planning.dt            # planning time step
+
+# SPOT configurations
+spot_update_dict = {'Vehicle': {
+    0: {
+        'a_max': 4.0,
+        'compute_occ_m1': True,
+        'compute_occ_m2': True,
+        'compute_occ_m3': False,
+        'onlyInLane': True
+    }}}
+spot_scenario_id = 1
 
 
 # *************************************
@@ -81,7 +90,6 @@ planner.set_collision_checker(scenario)
 route_planner = RoutePlanner(scenario, planning_problem)
 route = route_planner.plan_routes().retrieve_first_route()
 ref_path = route.reference_path
-
 planner.set_reference_path(ref_path)
 
 
@@ -111,6 +119,22 @@ while not goal.is_reached(x_0):
     current_count = len(record_state_list) - 1
     if current_count % config.planning.replanning_frequency == 0:
         # new planning cycle -> plan a new optimal trajectory
+
+        # do SPOT prediction for new planning cycle
+        scenario_spot = deepcopy(scenario)
+        scenario_spot = spot_update_init_state_obstacles(scenario_spot, current_count)
+        # Register Spot Scenario
+        spot_setup_scenario(scenario_spot, planning_problem, spot_scenario_id, spot_update_dict)
+        spot_compute_occupancy_prediction(scenario_spot, spot_scenario_id,
+                                          start_time_step=current_count,
+                                          end_time_step=current_count + config.planning.time_steps_computation,
+                                          dt=config.planning.dt,
+                                          num_threads=4)
+        # Deregister Spot Scenario
+        spot_remove_scenario(spot_scenario_id)
+
+        # update collision checker of planner
+        planner.set_collision_checker(scenario_spot)
 
         # START TIMER
         comp_time_start = time.time()
@@ -189,7 +213,7 @@ while not goal.is_reached(x_0):
     print(f"current time step: {current_count}")
     # draw scenario + planning solution
     if config.debug.show_plots or config.debug.save_plots:
-        visualize_planner_at_timestep(scenario=scenario, planning_problem=planning_problem, ego=ego_vehicle,
+        visualize_planner_at_timestep(scenario=scenario_spot, planning_problem=planning_problem, ego=ego_vehicle,
                                       traj_set=sampled_trajectory_bundle, ref_path=ref_path,
                                       timestep=current_count, config=config)
 
@@ -231,7 +255,7 @@ if evaluate:
 
     # plot
     plot_states(config, ego_solution_trajectory.state_list, reconstructed_states, plot_bounds=False)
-    plot_inputs(config, record_input_list, reconstructed_inputs, plot_bounds=True)
+    plot_inputs(config, record_input_list, reconstructed_inputs, plot_bounds=False)
 
     # CR validity check
     print("Feasibility Check Result: ")

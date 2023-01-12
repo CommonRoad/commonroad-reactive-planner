@@ -9,7 +9,7 @@ vehicle:
 
 debug:
   show_plots: False
-  save_plots: False
+  save_plots: True
   draw_traj_set: False
   draw_icons: True
   multiproc: True

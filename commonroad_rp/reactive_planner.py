@@ -10,7 +10,8 @@ __status__ = "Beta"
 import math
 import time
 import numpy as np
-from typing import List
+from typing import List, Union
+from dataclasses import dataclass
 import multiprocessing
 from multiprocessing.context import Process
 
@@ -19,7 +20,8 @@ from commonroad.common.validity import *
 from commonroad.geometry.shape import Rectangle
 from commonroad.prediction.prediction import TrajectoryPrediction
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
-from commonroad.scenario.trajectory import Trajectory, State
+from commonroad.scenario.trajectory import Trajectory
+from commonroad.scenario.state import KSState, FloatExactOrInterval, CustomState, InitialState
 from commonroad.scenario.scenario import Scenario
 
 # commonroad_dc
@@ -38,8 +40,16 @@ from commonroad_rp.utility.utils_coordinate_system import CoordinateSystem, inte
 from commonroad_rp.configuration import Configuration, VehicleConfiguration
 
 
-# TODO: use mode parameter for longitudinal planning (point following, velocity following, stopping)
-# TODO: acceleration-based sampling
+@dataclass(eq=False)
+class CartesianState(KSState):
+    """
+    State class used for output trajectory of reactive-planner: Extends KS State attributes by acceleration and
+    yaw rate
+    """
+
+    acceleration: FloatExactOrInterval = None
+    yaw_rate: FloatExactOrInterval = None
+
 
 class ReactivePlanner(object):
     """
@@ -287,7 +297,7 @@ class ReactivePlanner(object):
             print('<ReactivePlanner>: %s trajectories sampled' % len(trajectory_bundle._trajectory_bundle))
         return trajectory_bundle
 
-    def _compute_initial_states(self, x_0: State) -> (np.ndarray, np.ndarray):
+    def _compute_initial_states(self, x_0: CartesianState) -> (np.ndarray, np.ndarray):
         """
         Computes the curvilinear initial states for the polynomial planner based on a Cartesian CommonRoad state
         :param x_0: The CommonRoad state object representing the initial state of the vehicle
@@ -298,6 +308,7 @@ class ReactivePlanner(object):
             s, d = self._co.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
         except ValueError:
             print('<Reactive_planner>: Value Error for curvilinear transformation')
+            # TODO: Remove this fix from the reactive planner -> fix in CCosy
             tmp = np.array([x_0.position])
             print(x_0.position)
             if self._co.reference[0][0] > x_0.position[0]:
@@ -308,8 +319,8 @@ class ReactivePlanner(object):
             s, d = self._co.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
 
         # factor for interpolation
-        s_idx = np.argmax(self._co.ref_pos > s)
-        s_lambda = (self._co.ref_pos[s_idx] - s) / (
+        s_idx = np.argmax(self._co.ref_pos > s) - 1
+        s_lambda = (s - self._co.ref_pos[s_idx]) / (
                 self._co.ref_pos[s_idx + 1] - self._co.ref_pos[s_idx])
 
         # compute orientation in curvilinear coordinate frame
@@ -383,16 +394,17 @@ class ReactivePlanner(object):
             cart_states = dict()
             cart_states['time_step'] = self.x_0.time_step+self._factor*i
             cart_states['position'] = np.array([trajectory.cartesian.x[i], trajectory.cartesian.y[i]])
+            cart_states['orientation'] = trajectory.cartesian.theta[i]
             cart_states['velocity'] = trajectory.cartesian.v[i]
             cart_states['acceleration'] = trajectory.cartesian.a[i]
-            cart_states['orientation'] = trajectory.cartesian.theta[i]
             if i > 0:
                 cart_states['yaw_rate'] = (trajectory.cartesian.theta[i] - trajectory.cartesian.theta[i-1]) / self.dT
             else:
                 cart_states['yaw_rate'] = self.x_0.yaw_rate
-            cart_states['steering_angle'] = np.arctan2(self.vehicle_params.wheelbase * cart_states['yaw_rate'],
-                                                       cart_states['velocity'])
-            cart_list.append(State(**cart_states))
+            # TODO Check why computation with yaw rate was faulty ??
+            cart_states['steering_angle'] = np.arctan2(self.vehicle_params.wheelbase *
+                                                       trajectory.cartesian.kappa[i], 1.0)
+            cart_list.append(CartesianState(**cart_states))
 
             # create curvilinear state
             # TODO: This is not correct
@@ -403,7 +415,7 @@ class ReactivePlanner(object):
             cl_states['acceleration'] = trajectory.cartesian.a[i]
             cl_states['orientation'] = trajectory.cartesian.theta[i]
             cl_states['yaw_rate'] = trajectory.cartesian.kappa[i]
-            cl_list.append(State(**cl_states))
+            cl_list.append(CustomState(**cl_states))
 
             lon_list.append(
                 [trajectory.curvilinear.s[i], trajectory.curvilinear.s_dot[i], trajectory.curvilinear.s_ddot[i]])
@@ -416,7 +428,7 @@ class ReactivePlanner(object):
 
         return cartTraj, cvlnTraj, lon_list, lat_list
 
-    def plan(self, x_0: State, cl_states=None) -> tuple:
+    def plan(self, x_0: CartesianState, cl_states=None) -> tuple:
         """
         Plans an optimal trajectory
         :param x_0: Initial state as CR state
@@ -482,9 +494,12 @@ class ReactivePlanner(object):
                     sum([self._get_no_of_samples(i) for i in range(self._sampling_level)])))
         else:
             if self.debug_mode >= 1:
-                print('<ReactivePlanner>: Found optimal trajectory with costs = {}, which corresponds to {} percent '
-                      'of seen costs'.format(optimal_trajectory.cost, ((optimal_trajectory.cost - bundle.min_costs().cost) / (
-                                bundle.max_costs().cost - bundle.min_costs().cost))))
+                if bundle:
+                    print('<ReactivePlanner>: Found optimal trajectory with costs = {}, which corresponds to {} percent '
+                        'of seen costs'.format(optimal_trajectory.cost, ((optimal_trajectory.cost - bundle.min_costs().cost) / 
+                        (bundle.max_costs().cost - bundle.min_costs().cost))))
+                else:
+                    print('<ReactivePlanner>: Found optimal trajectory with costs = {}'.format(optimal_trajectory.cost))
 
             self._optimal_cost = optimal_trajectory.cost
 
@@ -641,11 +656,11 @@ class ReactivePlanner(object):
                     dpp = d_acceleration[i]
 
                 # factor for interpolation
-                s_idx = np.argmax(self._co.ref_pos > s[i])
+                s_idx = np.argmax(self._co.ref_pos > s[i]) - 1
                 if s_idx + 1 >= len(self._co.ref_pos):
                     feasible = False
                     break
-                s_lambda = (self._co.ref_pos[s_idx] - s[i]) / (self._co.ref_pos[s_idx + 1] - self._co.ref_pos[s_idx])
+                s_lambda = (s[i] - self._co.ref_pos[s_idx]) / (self._co.ref_pos[s_idx + 1] - self._co.ref_pos[s_idx])
 
                 # compute curvilinear (theta_cl) and global Cartesian (theta_gl) orientation
                 if s_velocity[i] > 0.001:
@@ -724,10 +739,12 @@ class ReactivePlanner(object):
                     if not self._draw_traj_set:
                         break
                 # curvature rate constraint
+                # TODO: chck if kappa_gl[i-1] ??
                 steering_angle = np.arctan2(self.vehicle_params.wheelbase * kappa_gl[i], 1.0)
                 kappa_dot_max = self.vehicle_params.v_delta_max / (self.vehicle_params.wheelbase *
                                                                    math.cos(steering_angle) ** 2)
-                if abs((kappa_gl[i] - kappa_gl[i - 1]) / self.dT if i > 0 else 0.) > kappa_dot_max:
+                kappa_dot = (kappa_gl[i] - kappa_gl[i - 1]) / self.dT if i > 0 else 0.
+                if abs(kappa_dot) > kappa_dot_max:
                     feasible = False
                     if not self._draw_traj_set:
                         break
@@ -864,9 +881,13 @@ class ReactivePlanner(object):
         # go through sorted list of trajectories and check for collisions
         for trajectory in trajectory_bundle.get_sorted_list():
             # compute position and orientation
-            pos1 = trajectory.curvilinear.s if self._collision_check_in_cl else trajectory.cartesian.x
-            pos2 = trajectory.curvilinear.d if self._collision_check_in_cl else trajectory.cartesian.y
+            # TODO remove collision check in CL frame?
+            pos1 = trajectory.curvilinear.s if self._collision_check_in_cl else \
+                trajectory.cartesian.x + self.vehicle_params.rear_ax_distance * np.cos(trajectory.cartesian.theta)
+            pos2 = trajectory.curvilinear.d if self._collision_check_in_cl else \
+                trajectory.cartesian.y + self.vehicle_params.rear_ax_distance * np.sin(trajectory.cartesian.theta)
             theta = trajectory.curvilinear.theta if self._collision_check_in_cl else trajectory.cartesian.theta
+
             collide = False
             # check each pose for collisions
             for i in range(len(pos1)):
@@ -892,17 +913,24 @@ class ReactivePlanner(object):
                 return trajectory
         return None
 
-    def convert_cr_trajectory_to_object(self, trajectory: Trajectory):
+    def shift_and_convert_trajectory_to_object(self, trajectory: Trajectory):
         """
         Converts a CR trajectory to a CR dynamic obstacle with given dimensions
         :param trajectory: The trajectory of the vehicle
         :return: CR dynamic obstacles representing the ego vehicle
         """
+        # shift trajectory positions to center
+        new_state_list = list()
+        for state in trajectory.state_list:
+            new_state_list.append(state.translate_rotate(np.array([self.vehicle_params.rear_ax_distance * np.cos(state.orientation),
+                                                                   self.vehicle_params.rear_ax_distance * np.sin(state.orientation)]), 0.0))
+
+        new_trajectory = Trajectory(initial_time_step=new_state_list[0].time_step, state_list=new_state_list)
         # get shape of vehicle
         shape = Rectangle(self.vehicle_params.length, self.vehicle_params.width)
         # get trajectory prediction
-        prediction = TrajectoryPrediction(trajectory, shape)
-        return DynamicObstacle(42, ObstacleType.CAR, shape, trajectory.state_list[0], prediction)
+        prediction = TrajectoryPrediction(new_trajectory, shape)
+        return DynamicObstacle(42, ObstacleType.CAR, shape, new_trajectory.state_list[0], prediction)
 
     @staticmethod
     def shift_orientation(trajectory: Trajectory, interval_start=-np.pi, interval_end=np.pi):
@@ -912,3 +940,20 @@ class ReactivePlanner(object):
             while state.orientation > interval_end:
                 state.orientation -= 2 * np.pi
         return trajectory
+
+    def process_initial_state_from_pp(self, x0_pp: InitialState):
+        """
+        Function converts the initial state from the CommonRoad planning problem to the reactive planner state:
+        - initial positions (x, y) from planning problem are shifted from vehicle center to rear axle
+        - initial steering angle is computed from initial yaw rate and velocity
+        """
+        # shift initial position to rear axle
+        x0_shifted = x0_pp.translate_rotate(np.array([-self.vehicle_params.rear_ax_distance * np.cos(x0_pp.orientation),
+                                                      -self.vehicle_params.rear_ax_distance * np.sin(x0_pp.orientation)])
+                                            , 0.0)
+
+        # create initial state for planner and compute initial steering angle
+        x0_planner = CartesianState()
+        x0_planner = x0_shifted.convert_state_to_state(x0_planner)
+        x0_planner.steering_angle = np.arctan2(self.vehicle_params.wheelbase * x0_planner.yaw_rate, x0_planner.velocity)
+        return x0_planner
