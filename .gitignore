@@ -1,6 +1,11 @@
 .idea/
 .idea/**
 
+build/
+*.egg-info
+install/
+log/
+
 *.iml
 .DS_Store
 .ipynb_checkpoints
