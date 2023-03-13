@@ -175,7 +175,7 @@ def plot_states(config: Configuration, state_list: List[Union[CartesianState, Tr
              [state.yaw_rate for state in state_list], color="black", label="planned")
     reconstructed_yaw_rate = np.diff(np.array([state.orientation for state in reconstructed_states])) / config.planning.dt
     reconstructed_yaw_rate = np.insert(reconstructed_yaw_rate, 0, state_list[0].yaw_rate, axis=0)
-    plt.plot(list(range(len(state_list))),
+    plt.plot(list(range(len(reconstructed_yaw_rate))),
              reconstructed_yaw_rate, color="blue", label="reconstructed")
     plt.ylabel("theta_dot")
     plt.tight_layout()
@@ -195,8 +195,8 @@ def plot_states(config: Configuration, state_list: List[Union[CartesianState, Tr
                                                 for i in range(len(state_list))], color="black")
         plt.ylabel("y error")
         plt.subplot(5, 1, 3)
-        plt.plot(list(range(len(state_list))), [abs(_angle_diff(state_list[i].orientation,
-                                                                reconstructed_states[i].orientation))
+        plt.plot(list(range(len(state_list))), [abs(_angle_diff(state_list[i].steering_angle,
+                                                                reconstructed_states[i].steering_angle))
                                                 for i in range(len(state_list))], color="black")
         plt.ylabel("delta error")
         plt.subplot(5, 1, 4)
@@ -204,8 +204,8 @@ def plot_states(config: Configuration, state_list: List[Union[CartesianState, Tr
                                                 for i in range(len(state_list))], color="black")
         plt.ylabel("velocity error")
         plt.subplot(5, 1, 5)
-        plt.plot(list(range(len(state_list))), [abs(_angle_diff(state_list[i].steering_angle,
-                                                                reconstructed_states[i].steering_angle))
+        plt.plot(list(range(len(state_list))), [abs(_angle_diff(state_list[i].orientation,
+                                                                reconstructed_states[i].orientation))
                                                 for i in range(len(state_list))], color="black")
         plt.ylabel("theta error")
         plt.tight_layout()
