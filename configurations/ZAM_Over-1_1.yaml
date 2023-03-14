@@ -5,7 +5,7 @@ planning:
 
 vehicle:
   # CR vehicle type (see commonroad-vehicle-models): #1: Ford Escort, #2: BMW 320i, 3 = VW Vanagon
-  cr_vehicle_id: 2
+  id_type_vehicle: 2
 
 debug:
   show_plots: False
@@ -14,3 +14,6 @@ debug:
   draw_icons: True
   multiproc: True
   num_workers: 6
+
+sampling:
+  t_min: 0.2

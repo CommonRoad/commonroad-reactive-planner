@@ -32,8 +32,8 @@ def create_full_solution_trajectory(config: Configuration, state_list: List[Cart
     new_state_list = list()
     for state in state_list:
         new_state_list.append(
-            state.translate_rotate(np.array([config.vehicle.rear_ax_distance * np.cos(state.orientation),
-                                             config.vehicle.rear_ax_distance * np.sin(state.orientation)]), 0.0))
+            state.translate_rotate(np.array([config.vehicle.wb_rear_axle * np.cos(state.orientation),
+                                             config.vehicle.wb_rear_axle * np.sin(state.orientation)]), 0.0))
     return Trajectory(initial_time_step=new_state_list[0].time_step, state_list=new_state_list)
 
 
@@ -43,7 +43,7 @@ def create_planning_problem_solution(config: Configuration, solution_trajectory:
     Creates CommonRoad Solution object
     """
     pps = PlanningProblemSolution(planning_problem_id=planning_problem.planning_problem_id,
-                                  vehicle_type=VehicleType(config.vehicle.cr_vehicle_id),
+                                  vehicle_type=VehicleType(config.vehicle.id_type_vehicle),
                                   vehicle_model=VehicleModel.KS,
                                   cost_function=CostFunction.JB1,
                                   trajectory=solution_trajectory)
@@ -55,7 +55,7 @@ def create_planning_problem_solution(config: Configuration, solution_trajectory:
 
 def reconstruct_states(config: Configuration, states: List[Union[CartesianState, TraceState]], inputs: List[InputState]):
     """reconstructs states from a given list of inputs by forward simulation"""
-    vehicle_dynamics = VehicleDynamics.from_model(VehicleModel.KS, VehicleType(config.vehicle.cr_vehicle_id))
+    vehicle_dynamics = VehicleDynamics.from_model(VehicleModel.KS, VehicleType(config.vehicle.id_type_vehicle))
 
     x_sim_list = list()
     x_sim_list.append(states[0])

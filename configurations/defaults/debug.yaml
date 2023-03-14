@@ -1,6 +1,13 @@
-# show/save plots
-show_plots: False
+# show/save plots/config
 save_plots: False
+save_config: False
+show_plots: False
+
+# visualization settings
+# draw the reference path
+draw_ref_path: True
+# draw the planning problem
+draw_planning_problem: True
 # draw obstacles with vehicle icons
 draw_icons: False
 # draw sampled trajectory set

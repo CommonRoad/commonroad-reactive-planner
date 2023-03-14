@@ -9,6 +9,7 @@ __status__ = "Beta"
 # standard imports
 from typing import List, Union
 import os
+import logging
 
 # third party
 import matplotlib.pyplot as plt
@@ -29,6 +30,11 @@ from commonroad_dc import pycrcc
 # commonroad-rp
 from commonroad_rp.trajectories import TrajectorySample
 from commonroad_rp.configuration import Configuration
+
+
+logger = logging.getLogger(__name__)
+logging.getLogger('PIL').setLevel(logging.ERROR)
+logging.getLogger('matplotlib.font_manager').setLevel(logging.ERROR)
 
 
 def visualize_scenario_and_pp(scenario: Scenario, planning_problem: PlanningProblem, cosy=None):
@@ -106,7 +112,8 @@ def visualize_planner_at_timestep(scenario: Scenario, planning_problem: Planning
 
     # visualize scenario, planning problem, ego vehicle
     scenario.draw(rnd)
-    planning_problem.draw(rnd)
+    if config.debug.draw_planning_problem:
+        planning_problem.draw(rnd)
     ego.draw(rnd, draw_params=ego_params)
     rnd.render()
 
@@ -124,7 +131,7 @@ def visualize_planner_at_timestep(scenario: Scenario, planning_problem: Planning
                      color=color, zorder=20, linewidth=0.1, alpha=1.0)
 
     # visualize reference path
-    if ref_path is not None:
+    if ref_path is not None and config.debug.draw_ref_path:
         rnd.ax.plot(ref_path[:, 0], ref_path[:, 1], color='g', marker='.', markersize=1, zorder=19, linewidth=0.8,
                     label='reference path')
 
@@ -170,7 +177,8 @@ def plot_final_trajectory(scenario: Scenario, planning_problem: PlanningProblem,
     # visualize scenario
     scenario.draw(rnd)
     # visualize planning problem
-    planning_problem.draw(rnd)
+    if config.debug.draw_planning_problem:
+        planning_problem.draw(rnd)
     # visualize occupancies of trajectory
     for i in range(len(state_list)):
         state = state_list[i]
@@ -189,7 +197,7 @@ def plot_final_trajectory(scenario: Scenario, planning_problem: PlanningProblem,
                 linewidth=0.8)
 
     # visualize reference path
-    if ref_path is not None:
+    if ref_path is not None and config.debug.draw_ref_path:
         rnd.ax.plot(ref_path[:, 0], ref_path[:, 1], color='g', marker='.', markersize=1, zorder=19, linewidth=0.8,
                     label='reference path')
 
@@ -208,7 +216,7 @@ def plot_final_trajectory(scenario: Scenario, planning_problem: PlanningProblem,
 
 def make_gif(config: Configuration, scenario: Scenario, time_steps: Union[range, List[int]], duration: float = 0.1):
     """
-    Function to create from single images of planning results at each time step
+    Function to create GIF from single images of planning results at each time step
     Images are saved in output path specified in config.general.path_output
     :param config Configuration object
     :param scenario CommonRoad scenario object
