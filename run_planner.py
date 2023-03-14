@@ -9,6 +9,7 @@ __status__ = "Beta"
 # standard imports
 import time
 from copy import deepcopy
+import logging
 
 # third party
 import numpy as np
@@ -28,6 +29,7 @@ from commonroad_rp.utility.evaluation import create_planning_problem_solution, r
 from commonroad_rp.configuration_builder import ConfigurationBuilder
 
 from commonroad_rp.utility.general import load_scenario_and_planning_problem
+from commonroad_rp.utility.logger import initialize_logger
 
 # *************************************
 # Set Configurations
@@ -37,6 +39,7 @@ filename = "ZAM_Over-1_1.xml"
 # filename = "ZAM_OpenDrive-123.xml"
 # filename = "ZAM_Tjunction-1_42_T-1.xml"
 # filename = "C-DEU_B471-2_1.xml"
+# filename = "offline_sim.xml"
 
 config = ConfigurationBuilder.build_configuration(filename[:-4])
 
@@ -66,6 +69,11 @@ if hasattr(planning_problem.goal.state_list[0], 'velocity'):
 else:
     desired_velocity = x_0.velocity
 
+
+# TODO: init logger
+initialize_logger(config)
+
+logger = logging.getLogger(__name__)
 
 # *************************************
 # Initialize Planner
@@ -125,7 +133,7 @@ while not goal.is_reached(x_0):
 
         # store planning times
         planning_times.append(comp_time_end - comp_time_start)
-        print(f"***Total Planning Time: {planning_times[-1]}")
+        logger.info(f"Total planning time: {planning_times[-1]:.7f}")
 
         # if the planner fails to find an optimal trajectory -> terminate
         if not optimal:
@@ -206,33 +214,11 @@ while not goal.is_reached(x_0):
 # evaluated
 evaluate = True
 if evaluate:
-    from commonroad_dc.feasibility.solution_checker import valid_solution
+    from commonroad_rp.utility.evaluation import evaluate_results
     # create full solution trajectory
     ego_solution_trajectory = create_full_solution_trajectory(config, record_state_list)
 
     # plot full ego vehicle trajectory
     plot_final_trajectory(scenario, planning_problem, ego_solution_trajectory.state_list, config)
 
-    # create CR solution
-    solution = create_planning_problem_solution(config, ego_solution_trajectory, scenario, planning_problem)
-
-    # check feasibility
-    # reconstruct inputs (state transition optimizations)
-    feasible, reconstructed_inputs = reconstruct_inputs(config, solution.planning_problem_solutions[0])
-
-    # reconstruct states from inputs
-    reconstructed_states = reconstruct_states(config, ego_solution_trajectory.state_list, reconstructed_inputs)
-
-    # check acceleration correctness
-    check_acceleration(config, ego_solution_trajectory.state_list, plot=True)
-
-    # remove first element from input list
-    record_input_list.pop(0)
-
-    # plot
-    plot_states(config, ego_solution_trajectory.state_list, reconstructed_states, plot_bounds=False)
-    plot_inputs(config, record_input_list, reconstructed_inputs, plot_bounds=True)
-
-    # CR validity check
-    print("Feasibility Check Result: ")
-    print(valid_solution(scenario, planning_problem_set, solution))
+    evaluate_results(config, ego_solution_trajectory, record_input_list)
