@@ -43,7 +43,7 @@ filename = "ZAM_Over-1_1.xml"
 
 config = ConfigurationBuilder.build_configuration(filename[:-4])
 
-scenario, planning_problem, planning_problem_set = load_scenario_and_planning_problem(config)
+scenario, planning_problem, planning_problem_set = load_scenario_and_planning_problem(config.general.path_scenario)
 
 DT = config.planning.dt            # planning time step
 

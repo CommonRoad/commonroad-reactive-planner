@@ -6,15 +6,15 @@ from commonroad.scenario.lanelet import LaneletNetwork, Lanelet
 from commonroad.scenario.scenario import Scenario
 
 
-def load_scenario_and_planning_problem(config, idx_planning_problem: int = 0)\
+def load_scenario_and_planning_problem(path_scenario, idx_planning_problem: int = 0)\
         -> Tuple[Scenario, PlanningProblem, PlanningProblemSet]:
     """
     Loads a scenario and planning problem from the configuration.
-    :param config: configuration
+    :param path_scenario: full path to scenario XML file
     :param idx_planning_problem: index of the planning problem
     :return: scenario and planning problem and planning problem set
     """
-    scenario, planning_problem_set = CommonRoadFileReader(config.general.path_scenario).open()
+    scenario, planning_problem_set = CommonRoadFileReader(path_scenario).open()
     planning_problem = list(planning_problem_set.planning_problem_dict.values())[idx_planning_problem]
 
     return scenario, planning_problem, planning_problem_set

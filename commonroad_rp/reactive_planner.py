@@ -265,7 +265,7 @@ class ReactivePlanner(object):
         NOTE: Here, no collision or feasibility check is done!
         """
         if self.debug_mode >= 1:
-            logger.info("===== Sampling trajectories =====")
+            logger.info("===== Sampling trajectories ... =====")
             logger.info(f"Sampling density {samp_level + 1} of {self._sampling_level}")
 
         # reset cost statistic
@@ -379,9 +379,6 @@ class ReactivePlanner(object):
         x_0_lon: List[float] = [s, s_velocity, s_acceleration]
         x_0_lat: List[float] = [d, d_velocity, d_acceleration]
 
-        if self.debug_mode >= 1:
-            logger.info(f"Initial state: {x_0}")
-
         return x_0_lon, x_0_lat
 
     def _compute_trajectory_pair(self, trajectory: TrajectorySample) -> tuple:
@@ -458,10 +455,16 @@ class ReactivePlanner(object):
             x_0_lon, x_0_lat = self._compute_initial_states(x_0)
 
         if self.debug_mode >= 1:
+            logger.info("===============================================================")
             logger.info("=================== Starting Planning Cycle ===================")
-            logger.info(f"Initial state lon: {x_0_lon}")
-            logger.info(f"Initial state lat: {x_0_lat}")
-            logger.info(f"Desired velocity: {self._desired_speed} m/s")
+            logger.info(f"==== Initial state Cartesian ====")
+            logger.info(f"time_step={x_0.time_step}")
+            logger.info(f"position={x_0.position}, steering_angle={x_0.steering_angle}, velocity={x_0.velocity}")
+            logger.info(f"orientation={x_0.orientation}, acceleration={x_0.acceleration}, yaw_rate={x_0.yaw_rate}")
+            logger.info(f"==== Initial state Curvilinear ====")
+            logger.info(f"longitudinal state = {x_0_lon}")
+            logger.info(f"lateral state = {x_0_lat}")
+            logger.info(f"desired velocity: {self._desired_speed} m/s")
 
         # initialize optimal trajectory dummy
         optimal_trajectory = None
@@ -829,7 +832,7 @@ class ReactivePlanner(object):
         :param trajectory_bundle: The trajectory bundle
         :return: The optimal trajectory if exists (otherwise None)
         """
-        logger.info("===== Checking trajectories =====")
+        logger.info("===== Checking trajectories ... =====")
         # reset statistics
         self._infeasible_count_collision = 0
         self._infeasible_count_kinematics = 0
