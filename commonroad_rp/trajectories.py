@@ -312,7 +312,7 @@ class CurviLinearSample(Sample):
         # enlarge velocities by considering acceleration
         # TODO remove acceleration?
         d_dot_temp = self.d_dot[last_time_step] + t * self.d_ddot[-1]
-        self.d_dot = np.append(self.d_dot, d_dot_temp)
+        self.d_dot[self.current_time_step:] = d_dot_temp
 
         # enlarge accelerations
         self.s_ddot[self.current_time_step:] = np.repeat(self.s_ddot[last_time_step], steps)
