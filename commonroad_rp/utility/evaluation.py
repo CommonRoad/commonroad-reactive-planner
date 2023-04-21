@@ -23,9 +23,29 @@ from commonroad_dc.feasibility.solution_checker import valid_solution
 
 from commonroad_rp.configuration import Configuration
 from commonroad_rp.reactive_planner import ReactivePlannerState
+from commonroad_rp.utility.visualization import plot_final_trajectory
 
 
-def evaluate_results(config, ego_solution_trajectory, record_input_list):
+def run_evaluation(config: Configuration, state_list: List[ReactivePlannerState], input_list: List[InputState]):
+    """
+    Creates a CommonRoad solution Trajectory from the planning results, evaluates state and input feasibility, plots
+    solution Trajectory
+    Returns the planner solution as a CommonRoad solution object
+    """
+    ego_solution_trajectory = create_full_solution_trajectory(config, state_list)
+    cr_solution = evaluate_results(config, ego_solution_trajectory, input_list)
+    plot_final_trajectory(config.scenario, config.planning_problem, ego_solution_trajectory.state_list, config)
+
+    return cr_solution
+
+
+def evaluate_results(config: Configuration, ego_solution_trajectory, record_input_list):
+    """
+    Solution is evaluated via input reconstruction from commonroad_dc.feasibility.feasibility_checker
+    For each state transition the inputs are reconstructed. To check feasibility, the reconstructed input is used for
+    forward simulation and the error between the forward simulated (reconstructed) state and the planned state is
+    evaluated
+    """
     # create CR solution
     solution = create_planning_problem_solution(config, ego_solution_trajectory, config.scenario,
                                                 config.planning_problem)
@@ -40,16 +60,15 @@ def evaluate_results(config, ego_solution_trajectory, record_input_list):
     # check acceleration correctness
     check_acceleration(config, ego_solution_trajectory.state_list, plot=True)
 
-    # remove first element from input list
-    record_input_list.pop(0)
-
     # plot
     plot_states(config, ego_solution_trajectory.state_list, reconstructed_states, plot_bounds=False)
-    plot_inputs(config, record_input_list, reconstructed_inputs, plot_bounds=True)
+    plot_inputs(config, record_input_list[1:], reconstructed_inputs, plot_bounds=True)
 
     # CR validity check
     print("Feasibility Check Result: ")
     print(valid_solution(config.scenario, config.planning_problem_set, solution))
+
+    return solution
 
 
 def create_full_solution_trajectory(config: Configuration, state_list: List[ReactivePlannerState]) -> Trajectory:
@@ -59,9 +78,7 @@ def create_full_solution_trajectory(config: Configuration, state_list: List[Reac
     """
     new_state_list = list()
     for state in state_list:
-        new_state_list.append(
-            state.translate_rotate(np.array([config.vehicle.wb_rear_axle * np.cos(state.orientation),
-                                             config.vehicle.wb_rear_axle * np.sin(state.orientation)]), 0.0))
+        new_state_list.append(state.shift_positions_to_center(config.vehicle.wb_rear_axle))
     return Trajectory(initial_time_step=new_state_list[0].time_step, state_list=new_state_list)
 
 
