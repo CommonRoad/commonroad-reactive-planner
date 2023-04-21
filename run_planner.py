@@ -71,7 +71,6 @@ while not planner.goal_reached():
         optimal = planner.plan()
 
         if not optimal:
-            logger.info(f"Planner failed to find an optimal trajectory")
             break
 
         # record state and input

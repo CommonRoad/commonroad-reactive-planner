@@ -333,6 +333,7 @@ class ReactivePlanner(object):
         self._sampling_t = TimeSampling(t_min, horizon, self._sampling_level, dt)
         self.N = int(round(horizon / dt))
         self.horizon = horizon
+        logger.debug("Sampled interval of time: {} s - {} s".format(t_min, horizon))
 
     def set_d_sampling_parameters(self, delta_d_min, delta_d_max):
         """
@@ -341,6 +342,7 @@ class ReactivePlanner(object):
         :param delta_d_max: lateral distance higher than reference
         """
         self._sampling_d = PositionSampling(delta_d_min, delta_d_max, self._sampling_level)
+        logger.debug("Sampled interval of position: {} m - {} m".format(delta_d_min, delta_d_max))
 
     def set_v_sampling_parameters(self, v_min, v_max):
         """
@@ -349,6 +351,7 @@ class ReactivePlanner(object):
         :param v_max: maximal velocity sample bound
         """
         self._sampling_v = VelocitySampling(v_min, v_max, self._sampling_level)
+        logger.info("Sampled interval of velocity: {} m/s - {} m/s".format(v_min, v_max))
 
     def set_desired_velocity(self, desired_velocity: float, current_speed: float = None, stopping: bool = False):
         """
@@ -368,10 +371,9 @@ class ReactivePlanner(object):
             min_v = max(0, reference_speed - (0.125 * self.horizon * self.vehicle_params.a_max))
             # max_v = max(min_v + 5.0, reference_speed + (0.25 * self.horizon * self.constraints.a_max))
             max_v = max(min_v + 5.0, reference_speed + 2)
-            self._sampling_v = VelocitySampling(min_v, max_v, self._sampling_level)
+            self.set_v_sampling_parameters(min_v, max_v)
         else:
-            self._sampling_v = VelocitySampling(self._desired_speed, self._desired_speed, self._sampling_level)
-        logger.info("Sampled interval of velocity: {} m/s - {} m/s".format(min_v, max_v))
+            self.set_v_sampling_parameters(v_min=self._desired_speed, v_max=self._desired_speed)
 
     def record_state_and_input(self, state: ReactivePlannerState):
         """
@@ -570,8 +572,6 @@ class ReactivePlanner(object):
     def plan(self) -> tuple:
         """
         Plans an optimal trajectory
-        :param x_0: Initial state as CR state
-        :param cl_states: Curvilinear initial states if re-planning is used
         :return: Optimal trajectory as tuple
         """
         # start timer
@@ -635,7 +635,7 @@ class ReactivePlanner(object):
         else:
             self._optimal_cost = optimal_trajectory.cost
             relative_costs = None
-            if bundle:
+            if bundle is not None:
                 relative_costs = ((optimal_trajectory.cost - bundle.min_costs().cost) /
                                   (bundle.max_costs().cost - bundle.min_costs().cost))
             logger.info(f"Found optimal trajectory with costs = {self._optimal_cost:.3f} "
@@ -647,6 +647,9 @@ class ReactivePlanner(object):
         # end timer
         self._planning_times_list.append(time.time() - planning_start_time)
         logger.info(f"Total planning time: {self.planning_times[-1]:.7f}")
+
+        if planning_result is None:
+            logger.warning(f"Planner failed to find an optimal trajectory with given sampling configuration!")
 
         return planning_result
 
@@ -766,11 +769,11 @@ class ReactivePlanner(object):
             if not self._draw_traj_set:
                 # pre-filter with quick underapproximative check for feasibility
                 if np.any(np.abs(s_acceleration) > self.vehicle_params.a_max):
-                    # TODO add log statement
+                    logger.debug(f"Acceleration {np.max(np.abs(s_acceleration))}")
                     feasible = False
                     continue
                 if np.any(s_velocity < -0.1):
-                    # TODO add log statement
+                    logger.debug(f"Velocity {min(s_velocity)} at step")
                     feasible = False
                     continue
 
@@ -921,6 +924,7 @@ class ReactivePlanner(object):
                                                            current_time_step=traj_len)
 
                     # store Curvilinear trajectory
+                    # TODO: theta_cl?
                     trajectory.curvilinear = CurviLinearSample(s, d, theta_gl,
                                                                ss=s_velocity, sss=s_acceleration,
                                                                dd=d_velocity, ddd=d_acceleration,
@@ -1075,10 +1079,11 @@ class ReactivePlanner(object):
         # ==== Collision checking
         return self._check_collisions(trajectory_bundle)
 
-    def convert_state_list_to_commonroad_object(self, state_list: List[ReactivePlannerState]):
+    def convert_state_list_to_commonroad_object(self, state_list: List[ReactivePlannerState], obstacle_id: int = 42):
         """
         Converts a CR trajectory to a CR dynamic obstacle with given dimensions
         :param state_list: trajectory state list of reactive planner
+        :param obstacle_id: [optional] ID of ego vehicle dynamic obstacle
         :return: CR dynamic obstacle representing the ego vehicle
         """
         # shift trajectory positions to center
@@ -1091,4 +1096,4 @@ class ReactivePlanner(object):
         shape = Rectangle(self.vehicle_params.length, self.vehicle_params.width)
         # get trajectory prediction
         prediction = TrajectoryPrediction(trajectory, shape)
-        return DynamicObstacle(42, ObstacleType.CAR, shape, trajectory.state_list[0], prediction)
+        return DynamicObstacle(obstacle_id, ObstacleType.CAR, shape, trajectory.state_list[0], prediction)

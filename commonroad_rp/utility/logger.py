@@ -2,9 +2,10 @@ import logging
 import os
 from datetime import datetime
 import sys
+from commonroad_rp.configuration import Configuration
 
 
-def initialize_logger(config) -> logging.Logger:
+def initialize_logger(config: Configuration) -> logging.Logger:
     """
     Initializes the logging module and returns a logger.
     """
@@ -20,8 +21,9 @@ def initialize_logger(config) -> logging.Logger:
     file_handler = logging.FileHandler(path_log)
 
     # set logging levels
-    logger.setLevel(logging.DEBUG)
-    file_handler.setLevel(logging.DEBUG)
+    loglevel = config.debug.logging_level
+    logger.setLevel(loglevel)
+    file_handler.setLevel(loglevel)
 
     # create log formatter
     # formatter = logging.Formatter('%(asctime)s\t%(filename)s\t\t%(funcName)s@%(lineno)d\t%(levelname)s\t%(message)s')
@@ -31,7 +33,7 @@ def initialize_logger(config) -> logging.Logger:
 
     # create stream handler (prints to stdout)
     stream_handler = logging.StreamHandler(sys.stdout)
-    stream_handler.setLevel(logging.DEBUG)
+    stream_handler.setLevel(loglevel)
 
     # create stream formatter
     stream_formatter = logging.Formatter("%(levelname)-8s [ReactivePlanner]: %(message)s")

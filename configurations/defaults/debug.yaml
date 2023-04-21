@@ -1,4 +1,4 @@
-# show/save plots/config
+# show/save plots/config/logs
 save_plots: False
 save_config: False
 show_plots: False
@@ -12,6 +12,12 @@ draw_planning_problem: True
 draw_icons: False
 # draw sampled trajectory set
 draw_traj_set: False
+
+# logging settings
+# Options: NOTSET, DEBUG, INFO, WARNING, ERROR, CRITICAL
+logging_level: INFO
+
+# multiprocessing
 # use multiprocessing True/False
 multiproc: True
 # number of workers for multiprocessing

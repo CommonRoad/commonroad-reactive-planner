@@ -180,3 +180,4 @@ class DebugConfiguration(ConfigurationBase):
         self.draw_traj_set = config.draw_traj_set
         self.multiproc = config.multiproc
         self.num_workers = config.num_workers
+        self.logging_level = config.logging_level
