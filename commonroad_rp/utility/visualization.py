@@ -214,7 +214,7 @@ def plot_final_trajectory(scenario: Scenario, planning_problem: PlanningProblem,
         plt.show(block=True)
 
 
-def make_gif(config: Configuration, scenario: Scenario, time_steps: Union[range, List[int]], duration: float = 0.1):
+def make_gif(config: Configuration, time_steps: Union[range, List[int]], duration: float = 0.1):
     """
     Function to create GIF from single images of planning results at each time step
     Images are saved in output path specified in config.general.path_output
@@ -232,15 +232,17 @@ def make_gif(config: Configuration, scenario: Scenario, time_steps: Union[range,
         images = []
         filenames = []
 
+        scenario_id = config.scenario.scenario_id
+
         # directory, where single images are outputted (see visualize_planner_at_timestep())
-        path_images = os.path.join(config.general.path_output, str(scenario.scenario_id))
+        path_images = os.path.join(config.general.path_output, str(scenario_id))
 
         for step in time_steps:
-            im_path = os.path.join(path_images, str(scenario.scenario_id) + "_{}.png".format(step))
+            im_path = os.path.join(path_images, str(scenario_id) + "_{}.png".format(step))
             filenames.append(im_path)
 
         for filename in filenames:
             images.append(imageio.imread(filename))
 
-        imageio.mimsave(os.path.join(config.general.path_output, str(scenario.scenario_id) + ".gif"),
+        imageio.mimsave(os.path.join(config.general.path_output, str(scenario_id) + ".gif"),
                         images, duration=duration)

@@ -1,14 +1,23 @@
 import os
 from pathlib import Path
-from typing import Union
+from typing import Union, Optional
 from omegaconf import OmegaConf, ListConfig, DictConfig
 import numpy as np
 
 # commonroad-io
 from commonroad.common.solution import VehicleType
+from commonroad.scenario.scenario import Scenario
+from commonroad.planning.planning_problem import PlanningProblem, PlanningProblemSet
+from commonroad.scenario.state import InitialState
 
 # commonroad-dc
 from commonroad_dc.feasibility.vehicle_dynamics import VehicleParameterMapping
+
+# commonroad-route-planner
+from commonroad_route_planner.route import Route
+
+# commonroad_rp
+from commonroad_rp.utility.general import load_scenario_and_planning_problem
 
 
 class Configuration:
@@ -17,6 +26,9 @@ class Configuration:
     """
     def __init__(self, config: Union[ListConfig, DictConfig]):
         self.name_scenario = config.general.name_scenario
+        self.scenario: Optional[Scenario] = None
+        self.planning_problem: Optional[PlanningProblem] = None
+        self.planning_problem_set: Optional[PlanningProblemSet] = None
 
         # initialize subclasses
         self.general: GeneralConfiguration = GeneralConfiguration(config.general)
@@ -24,6 +36,44 @@ class Configuration:
         self.vehicle: VehicleConfiguration = VehicleConfiguration(config.vehicle)
         self.sampling: SamplingConfiguration = SamplingConfiguration(config.sampling)
         self.debug: DebugConfiguration = DebugConfiguration(config.debug)
+
+    def update(self, scenario: Scenario = None, planning_problem: PlanningProblem = None,
+               state_initial: InitialState = None):
+        """
+        Updates configuration based on the given attributes.
+        Function used to construct initial configuration before planner initialization and update configuration during
+        re-planning.
+
+        :param scenario: (initial or updated) Scenario object
+        :param planning_problem: (initial or updated) planning problem
+        :param state_initial: initial state (can be different from planning problem initial state during re-planning)
+        """
+        # update scenario and planning problem with explicitly given ones
+        if scenario:
+            self.scenario = scenario
+        if planning_problem:
+            self.planning_problem = planning_problem
+
+        # if scenario and planning problem not explicitly given
+        if scenario is None and planning_problem is None:
+            if self.scenario is None or self.planning_problem is None:
+                # read original scenario and pp from scenario file
+                scenario, planning_problem, planning_problem_set = load_scenario_and_planning_problem(self.general.path_scenario)
+                self.scenario = scenario
+                self.planning_problem = planning_problem
+                self.planning_problem_set = planning_problem_set
+            else:
+                # keep previously stored scenario and planning problem
+                pass
+        else:
+            raise Exception("Bla")
+
+        # Check that scenario and planning problem are set
+        assert self.scenario is not None, "<Configuration.update()>: no scenario has been specified"
+        assert self.planning_problem is not None, "<Configuration.update()>: no planning problem has been specified"
+
+        # update initial state for planning if explicitly given
+        self.planning.state_initial = state_initial if state_initial else self.planning_problem.initial_state
 
 
 class ConfigurationBase:
@@ -56,12 +106,19 @@ class PlanningConfiguration(ConfigurationBase):
     def __init__(self, config: Union[ListConfig, DictConfig]):
         self.dt = config.dt
         self.time_steps_computation = config.time_steps_computation
-        self.planning_horizon = config.dt * config.time_steps_computation
         self.replanning_frequency = config.replanning_frequency
         self.mode = config.mode
         self.continuous_collision_check = config.continuous_collision_check
         self.factor = config.factor
         self.low_vel_mode_threshold = config.low_vel_mode_threshold
+
+        # initial planning state set during init
+        # TODO: check if required and remove ?
+        self.state_initial: InitialState = Optional[None]
+
+        # global route and reference path is stored in planning config
+        self.route: Optional[Route] = None
+        self.reference_path: Optional[np.ndarray] = None
 
 
 class VehicleConfiguration(ConfigurationBase):
@@ -100,11 +157,15 @@ class VehicleConfiguration(ConfigurationBase):
 class SamplingConfiguration(ConfigurationBase):
     """Class to store sampling configurations"""
     def __init__(self, config: Union[ListConfig, DictConfig]):
+        # sampling intervals
         self.t_min = config.t_min
         self.v_min = config.v_min
         self.v_max = config.v_max
         self.d_min = config.d_min
         self.d_max = config.d_max
+
+        # sampling method
+        self.sampling_method = config.sampling_method
 
 
 class DebugConfiguration(ConfigurationBase):
@@ -117,6 +178,5 @@ class DebugConfiguration(ConfigurationBase):
         self.draw_planning_problem = config.draw_planning_problem
         self.draw_icons = config.draw_icons
         self.draw_traj_set = config.draw_traj_set
-        self.debug_mode = config.debug_mode
         self.multiproc = config.multiproc
         self.num_workers = config.num_workers

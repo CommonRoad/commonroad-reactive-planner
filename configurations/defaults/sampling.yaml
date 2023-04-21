@@ -1,3 +1,4 @@
+# sampling in fixed intervals
 # minimum time sampling in s (t_max is given by planning horizon)
 t_min: 0.4
 # velocity sampling interval
@@ -6,3 +7,8 @@ v_max: 0
 # lateral sampling interval
 d_min: -3
 d_max: 3
+
+# choose sampling method
+# 1: sampling in fixed intervals (see above)
+# 2: adaptive corridor sampling (requires CommonRoad-Reach)
+sampling_method: 1
