@@ -92,6 +92,8 @@ class TimeSampling(Sampling):
 
     def __init__(self, low: float, up: float, n_samples: int, dT: float):
         self.dT = dT
+        assert low >= 2 * self.dT, "<TimeSampling: lower bound of time sampling must be greater-equal than the given" \
+                                   "time step>"
         super(TimeSampling, self).__init__(low, up, n_samples)
 
     def _setup(self):
