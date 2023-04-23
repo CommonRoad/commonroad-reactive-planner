@@ -30,13 +30,14 @@ def run_evaluation(config: Configuration, state_list: List[ReactivePlannerState]
     """
     Creates a CommonRoad solution Trajectory from the planning results, evaluates state and input feasibility, plots
     solution Trajectory
-    Returns the planner solution as a CommonRoad solution object
+    :return cr_solution: Planner solution as CR solution object
+    :return feasibility_list: List[Bool] indicating feasibility of each state transition
     """
     ego_solution_trajectory = create_full_solution_trajectory(config, state_list)
-    cr_solution = evaluate_results(config, ego_solution_trajectory, input_list)
+    cr_solution, feasibility_list = evaluate_results(config, ego_solution_trajectory, input_list)
     plot_final_trajectory(config.scenario, config.planning_problem, ego_solution_trajectory.state_list, config)
 
-    return cr_solution
+    return cr_solution, feasibility_list
 
 
 def evaluate_results(config: Configuration, ego_solution_trajectory, record_input_list):
@@ -68,7 +69,7 @@ def evaluate_results(config: Configuration, ego_solution_trajectory, record_inpu
     print("Feasibility Check Result: ")
     print(valid_solution(config.scenario, config.planning_problem_set, solution))
 
-    return solution
+    return solution, feasible
 
 
 def create_full_solution_trajectory(config: Configuration, state_list: List[ReactivePlannerState]) -> Trajectory:

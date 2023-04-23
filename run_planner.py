@@ -119,4 +119,4 @@ while not planner.goal_reached():
 # **************************
 evaluate = True
 if evaluate:
-    cr_solution = run_evaluation(planner.config, planner.record_state_list, planner.record_input_list)
+    cr_solution, feasibility_list = run_evaluation(planner.config, planner.record_state_list, planner.record_input_list)

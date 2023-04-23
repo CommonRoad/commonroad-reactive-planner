@@ -6,7 +6,7 @@ __maintainer__ = "Gerald Würsching"
 __email__ = "commonroad@lists.lrz.de"
 __status__ = "Beta"
 
-from typing import Union, List
+from typing import Union, List, Optional
 import numpy as np
 from abc import ABC, abstractmethod
 import math
@@ -350,8 +350,8 @@ class TrajectorySample(Sample):
 
         self._cost = 0
         self._cost_function = None
-        self._cartesian: CartesianSample = None
-        self._curvilinear: CurviLinearSample = None
+        self._cartesian: Optional[CartesianSample] = None
+        self._curvilinear: Optional[CurviLinearSample] = None
         self._ext_cartesian = None
         self._ext_curvilinear = None
 

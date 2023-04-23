@@ -113,7 +113,6 @@ class PlanningConfiguration(ConfigurationBase):
         self.low_vel_mode_threshold = config.low_vel_mode_threshold
 
         # initial planning state set during init
-        # TODO: check if required and remove ?
         self.state_initial: InitialState = Optional[None]
 
         # global route and reference path is stored in planning config

@@ -33,7 +33,7 @@ from commonroad_dc.collision.trajectory_queries.trajectory_queries import trajec
 
 # commonroad_rp imports
 from commonroad_rp.cost_function import DefaultCostFunction
-from commonroad_rp.parameter import DefGymSampling, TimeSampling, VelocitySampling, PositionSampling
+from commonroad_rp.sampling import DefGymSampling, TimeSampling, VelocitySampling, PositionSampling
 from commonroad_rp.polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
 from commonroad_rp.trajectories import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample
 from commonroad_rp.utility.utils_coordinate_system import CoordinateSystem, interpolate_angle
@@ -607,6 +607,9 @@ class ReactivePlanner(object):
         # initial index of sampling set to use
         i = 1  # Time sampling is not used. To get more samples, start with level 1.
 
+        # initialize bundle
+        bundle = None
+
         # sample until trajectory has been found or sampling sets are empty
         while optimal_trajectory is None and i < self._sampling_level:
             # sample trajectory bundle
@@ -914,7 +917,7 @@ class ReactivePlanner(object):
                         y[i] = pos[1]
                     else:
                         feasible = False
-                        # TODO add log statement
+                        logger.debug("<ReactivePlanner.check_kinematics()> Out of projection domain")
                         break
 
                 if feasible:
@@ -924,8 +927,7 @@ class ReactivePlanner(object):
                                                            current_time_step=traj_len)
 
                     # store Curvilinear trajectory
-                    # TODO: theta_cl?
-                    trajectory.curvilinear = CurviLinearSample(s, d, theta_gl,
+                    trajectory.curvilinear = CurviLinearSample(s, d, theta_cl,
                                                                ss=s_velocity, sss=s_acceleration,
                                                                dd=d_velocity, ddd=d_acceleration,
                                                                current_time_step=traj_len)
@@ -947,7 +949,7 @@ class ReactivePlanner(object):
                                                            current_time_step=traj_len)
 
                     # store Curvilinear trajectory
-                    trajectory.curvilinear = CurviLinearSample(s, d, theta_gl,
+                    trajectory.curvilinear = CurviLinearSample(s, d, theta_cl,
                                                                ss=s_velocity, sss=s_acceleration,
                                                                dd=d_velocity, ddd=d_acceleration,
                                                                current_time_step=traj_len)
@@ -977,6 +979,7 @@ class ReactivePlanner(object):
         # collision object dimensions
         half_length = 0.5 * self.vehicle_params.length
         half_width = 0.5 * self.vehicle_params.width
+
         # go through sorted list of trajectories and check for collisions
         t0 = time.time()
         for trajectory in trajectory_bundle.get_sorted_list():
@@ -989,8 +992,7 @@ class ReactivePlanner(object):
             # check each pose for collisions
             for i in range(len(pos1)):
                 ego = pycrcc.TimeVariantCollisionObject(self.x_0.time_step + i * self.config.planning.factor)
-                ego.append_obstacle(pycrcc.RectOBB(0.5 * self.vehicle_params.length, 0.5 * self.vehicle_params.width,
-                                                   theta[i], pos1[i], pos2[i]))
+                ego.append_obstacle(pycrcc.RectOBB(half_length, half_width, theta[i], pos1[i], pos2[i]))
                 if self._cc.collide(ego):
                     self._infeasible_count_collision += 1
                     collide = True
@@ -1000,8 +1002,7 @@ class ReactivePlanner(object):
             if self.config.planning.continuous_collision_check and not collide:
                 ego_tvo = pycrcc.TimeVariantCollisionObject(self.x_0.time_step)
                 [ego_tvo.append_obstacle(
-                    pycrcc.RectOBB(0.5 * self.vehicle_params.length, 0.5 * self.vehicle_params.width,
-                                   theta[i], pos1[i], pos2[i])) for i in range(len(pos1))]
+                    pycrcc.RectOBB(half_length, half_width, theta[i], pos1[i], pos2[i])) for i in range(len(pos1))]
                 ego_tvo, err = trajectory_preprocess_obb_sum(ego_tvo)
                 if self._cc.collide(ego_tvo):
                     self._infeasible_count_collision += 1
