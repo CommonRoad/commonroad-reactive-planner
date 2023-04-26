@@ -11,7 +11,6 @@ import math
 import time
 import numpy as np
 from typing import List, Union, Optional, Tuple, Type
-from dataclasses import dataclass
 import multiprocessing
 from multiprocessing.context import Process
 import logging
@@ -22,7 +21,7 @@ from commonroad.geometry.shape import Rectangle
 from commonroad.prediction.prediction import TrajectoryPrediction
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 from commonroad.scenario.trajectory import Trajectory
-from commonroad.scenario.state import KSState, FloatExactOrInterval, CustomState, InitialState, InputState
+from commonroad.scenario.state import CustomState, InputState
 from commonroad.scenario.scenario import Scenario
 
 # commonroad_dc
@@ -91,7 +90,7 @@ class ReactivePlanner(object):
         # Debug setting: visualize trajectory set
         self._draw_traj_set = config.debug.draw_traj_set and (config.debug.save_plots or config.debug.save_plots)
 
-        # initialize and set configurations
+        # set/reset configuration
         self.config: Optional[Configuration] = None
         self.reset(config)
 
@@ -192,13 +191,12 @@ class ReactivePlanner(object):
             self.set_reference_path(coordinate_system=coordinate_system)
 
         # if planner init state is empty: Convert cartesian initial state from planning problem
-        # TODO check if this has to be or
         if self.x_0 is None and initial_state_cart is None:
             self.x_0 = ReactivePlannerState.create_from_initial_state(self.config.planning_problem.initial_state,
                                                                       self.vehicle_params.wheelbase,
                                                                       self.vehicle_params.wb_rear_axle)
         else:
-            self.x_0 = initial_state_cart
+            self.x_0 = initial_state_cart if initial_state_cart is not None else self.x_0
 
         # set low velocity mode given initial velocity in self.x_0
         self._low_vel_mode = True if self.x_0.velocity < self.config.planning.low_vel_mode_threshold else False
@@ -573,13 +571,12 @@ class ReactivePlanner(object):
         :return: The TrajectorySample for a standstill trajectory
         """
         # create artificial standstill trajectory
-        print('Adding standstill trajectory')
-        print("x_0 is {}".format(x_0))
-        print("x_0_lon is {}".format(x_0_lon))
-        print("x_0_lon is {}".format(type(x_0_lon)))
+        logger.info('Adding standstill trajectory')
+        logger.info("Initial state: x_0 is {}".format(x_0))
+        logger.info("Longitudinal initial state is x_0_lon is {}".format(x_0_lon))
+        logger.info("Lateral initial state is x_0_lat is {}".format(x_0_lat))
         for i in x_0_lon:
             print("The element {} of format {} is a real number? {}".format(i, type(i), is_real_number(i)))
-        print("x_0_lat is {}".format(x_0_lat))
 
         # create lon and lat polynomial
         traj_lon = QuarticTrajectory(tau_0=0, delta_tau=self.horizon, x_0=np.asarray(x_0_lon),

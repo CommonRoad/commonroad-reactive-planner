@@ -71,7 +71,6 @@ def preprocess_ref_path(ref_path: np.ndarray, resample_step: float = 1.0, max_cu
     return ref_path_preprocessed
 
 
-# TODO use wrapper class of CCosy in commonroad_dc instead
 class CoordinateSystem:
 
     def __init__(self, reference: np.ndarray = None, ccosy: CurvilinearCoordinateSystem = None):
