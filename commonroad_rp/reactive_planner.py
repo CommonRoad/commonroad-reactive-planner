@@ -32,6 +32,7 @@ from commonroad_dc.collision.collision_detection.pycrcc_collision_dispatch impor
 from commonroad_dc.collision.trajectory_queries.trajectory_queries import trajectory_preprocess_obb_sum
 
 # commonroad_rp imports
+from commonroad_rp.state import ReactivePlannerState
 from commonroad_rp.cost_function import CostFunction, DefaultCostFunction
 from commonroad_rp.sampling import TimeSampling, VelocitySampling, PositionSampling, SamplingSpace, \
     sampling_space_factory
@@ -43,69 +44,6 @@ from commonroad_rp.configuration import Configuration, VehicleConfiguration
 
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(eq=False)
-class ReactivePlannerState(KSState):
-    """
-    State class used for output trajectory of reactive planner with the following additions to KSState:
-    * Position is here defined w.r.t. rear-axle position (in KSState: position is defined w.r.t. vehicle center)
-    * Extends KSState attributes by acceleration and yaw rate
-    """
-    def __repr__(self):
-        return f"(time_step={self.time_step}, position={self.position},steering_angle={self.steering_angle}, " \
-               f"velocity={self.velocity}, orientation={self.orientation}, acceleration={self.acceleration}, " \
-               f"yaw_rate = {self.yaw_rate})"
-
-    acceleration: FloatExactOrInterval = None
-    yaw_rate: FloatExactOrInterval = None
-
-    def shift_positions_to_center(self, wb_rear_axle: float):
-        """
-        Shifts position from rear-axle to vehicle center
-        :param wb_rear_axle: distance between rear-axle and vehicle center
-        """
-        # shift positions from rear axle to center
-        orientation = self.orientation
-        state_shifted = self.translate_rotate(np.array([wb_rear_axle * np.cos(orientation),
-                                                        wb_rear_axle * np.sin(orientation)]), 0.0)
-        return state_shifted
-
-    @classmethod
-    def create_from_initial_state(cls, initial_state: InitialState, wheelbase: float, wb_rear_axle: float):
-        """
-        Converts InitialState object to ReactivePlannerState object by:
-        * adding initial acceleration (if not existing)
-        * adding initial steering angle
-        * removing initial slip angle
-        * shifting position from center to rear axle
-        :param initial_state: InitialState object
-        :param wheelbase: wheelbase of the vehicle
-        :param wb_rear_axle: distance between rear-axle and vehicle center
-        """
-        assert type(initial_state) == InitialState, "<ReactivePlannerState.create_from_initial_state()>: Input must be" \
-                                                    "of type InitialState"
-        # add acceleration (if not existing)
-        if not hasattr(initial_state, 'acceleration'):
-            initial_state.acceleration = 0.
-
-        # remove slip angle
-        if hasattr(initial_state, "slip_angle"):
-            delattr(initial_state, "slip_angle")
-
-        # shift initial position from center to rear axle
-        orientation = initial_state.orientation
-        initial_state_shifted = initial_state.translate_rotate(np.array([-wb_rear_axle * np.cos(orientation),
-                                                                         -wb_rear_axle * np.sin(orientation)]), 0.0)
-
-        # convert to ReactivePlannerState
-        x0_planner = ReactivePlannerState()
-        x0_planner = initial_state_shifted.convert_state_to_state(x0_planner)
-
-        # add steering angle
-        x0_planner.steering_angle = np.arctan2(wheelbase * x0_planner.yaw_rate, x0_planner.velocity)
-
-        return x0_planner
 
 
 class ReactivePlanner(object):
@@ -162,6 +100,10 @@ class ReactivePlanner(object):
         self.set_sampling_space()
         self._sampling_level = config.sampling.num_sampling_levels
 
+        # set cost function
+        self.cost_function: Optional[Type[CostFunction]] = None
+        self.set_cost_function()
+
     @property
     def collision_checker(self) -> pycrcc.CollisionChecker:
         return self._cc
@@ -203,11 +145,6 @@ class ReactivePlanner(object):
     def record_input_list(self) -> List:
         """List of recorded planner control inputs"""
         return self._record_input_list
-
-    def number_of_samples(self, samp_level: int):
-        """Returns the number of samples for a given sampling level"""
-        return len(self._sampling_v.samples_at_level(samp_level)) * len(self._sampling_d.samples_at_level(samp_level)) * len(
-            self._sampling_t.samples_at_level(samp_level))
 
     def goal_reached(self) -> bool:
         """Checks if the currently set initial state of the planner is within the goal configuration"""
@@ -345,7 +282,7 @@ class ReactivePlanner(object):
 
     def set_desired_velocity(self, desired_velocity: float, current_speed: float = None, stopping: bool = False):
         """
-        Sets desired velocity and calculates velocity for each sample
+        Sets desired velocity and re-calculates velocity samples
         :param desired_velocity: velocity in m/s
         :param current_speed: velocity in m/s
         :param stopping
@@ -365,9 +302,15 @@ class ReactivePlanner(object):
         else:
             self.set_v_sampling_parameters(v_min=self._desired_speed, v_max=self._desired_speed)
 
-    def set_cost_function(self, cost_function: Type[CostFunction]):
-        # TODO: add cost function setting via class attribute
-        pass
+        # Update desired velocity in cost function
+        if hasattr(self.cost_function, "desired_speed"):
+            self.cost_function.desired_speed = self._desired_speed
+
+    def set_cost_function(self, cost_function: Type[CostFunction] = None):
+        if cost_function:
+            self.cost_function = cost_function
+        else:
+            self.cost_function = DefaultCostFunction(self._desired_speed, desired_d=0)
 
     def set_sampling_space(self, sampling_space: Type[SamplingSpace] = None):
         if sampling_space:
@@ -409,11 +352,11 @@ class ReactivePlanner(object):
         logger.info("===== Sampling trajectories ... =====")
         logger.info(f"Sampling density {samp_level + 1} of {self._sampling_level}")
 
-        trajectories = self.sampling_space.generate_trajectories_at_level()
+        trajectories = self.sampling_space.generate_trajectories_at_level(samp_level, x_0_lon, x_0_lat,
+                                                                          self._low_vel_mode)
 
         # create trajectory bundle
-        # TODO: add cost function as class attribute?
-        trajectory_bundle = TrajectoryBundle(trajectories, cost_function=DefaultCostFunction(self._desired_speed, desired_d=0))
+        trajectory_bundle = TrajectoryBundle(trajectories, cost_function=self.cost_function)
 
         logger.info(f"Number of trajectory samples: {len(trajectory_bundle.trajectories)}")
         return trajectory_bundle
@@ -598,8 +541,7 @@ class ReactivePlanner(object):
 
         # check if feasible trajectory exists -> emergency mode
         if optimal_trajectory is None:
-            logger.info(f"Could not find any trajectory out of "
-                        f"{sum([self.number_of_samples(i) for i in range(self._sampling_level)])} trajectories")
+            logger.warning(f"Could not find a valid trajectory")
         else:
             self._optimal_cost = optimal_trajectory.cost
             relative_costs = None
