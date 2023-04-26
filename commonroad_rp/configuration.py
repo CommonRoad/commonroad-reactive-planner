@@ -163,6 +163,9 @@ class SamplingConfiguration(ConfigurationBase):
         self.d_min = config.d_min
         self.d_max = config.d_max
 
+        # number of sampling levels
+        self.num_sampling_levels = config.num_sampling_levels
+
         # sampling method
         self.sampling_method = config.sampling_method
 

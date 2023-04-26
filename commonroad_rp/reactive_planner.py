@@ -10,7 +10,7 @@ __status__ = "Beta"
 import math
 import time
 import numpy as np
-from typing import List, Union, Optional, Tuple
+from typing import List, Union, Optional, Tuple, Type
 from dataclasses import dataclass
 import multiprocessing
 from multiprocessing.context import Process
@@ -32,8 +32,9 @@ from commonroad_dc.collision.collision_detection.pycrcc_collision_dispatch impor
 from commonroad_dc.collision.trajectory_queries.trajectory_queries import trajectory_preprocess_obb_sum
 
 # commonroad_rp imports
-from commonroad_rp.cost_function import DefaultCostFunction
-from commonroad_rp.sampling import DefGymSampling, TimeSampling, VelocitySampling, PositionSampling
+from commonroad_rp.cost_function import CostFunction, DefaultCostFunction
+from commonroad_rp.sampling import TimeSampling, VelocitySampling, PositionSampling, SamplingSpace, \
+    sampling_space_factory
 from commonroad_rp.polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
 from commonroad_rp.trajectories import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample
 from commonroad_rp.utility.utils_coordinate_system import CoordinateSystem, interpolate_angle
@@ -149,21 +150,17 @@ class ReactivePlanner(object):
         # threshold for low velocity mode
         self._low_vel_mode = False
 
-        # Debug settings
-        # visualize trajectory set
+        # Debug setting: visualize trajectory set
         self._draw_traj_set = config.debug.draw_traj_set and (config.debug.save_plots or config.debug.save_plots)
-
-        # Default sampling
-        fs_sampling = DefGymSampling(self.dt, self.horizon)
-        self._sampling_d = fs_sampling.d_samples
-        self._sampling_t = fs_sampling.t_samples
-        self._sampling_v = fs_sampling.v_samples
-        # sampling levels
-        self._sampling_level = fs_sampling.max_iteration
 
         # initialize and set configurations
         self.config: Optional[Configuration] = None
         self.reset(config)
+
+        # set sampling space
+        self.sampling_space: Optional[Type[SamplingSpace]] = None
+        self.set_sampling_space()
+        self._sampling_level = config.sampling.num_sampling_levels
 
     @property
     def collision_checker(self) -> pycrcc.CollisionChecker:
@@ -209,8 +206,8 @@ class ReactivePlanner(object):
 
     def number_of_samples(self, samp_level: int):
         """Returns the number of samples for a given sampling level"""
-        return len(self._sampling_v.to_range(samp_level)) * len(self._sampling_d.to_range(samp_level)) * len(
-            self._sampling_t.to_range(samp_level))
+        return len(self._sampling_v.samples_at_level(samp_level)) * len(self._sampling_d.samples_at_level(samp_level)) * len(
+            self._sampling_t.samples_at_level(samp_level))
 
     def goal_reached(self) -> bool:
         """Checks if the currently set initial state of the planner is within the goal configuration"""
@@ -241,10 +238,6 @@ class ReactivePlanner(object):
         self._infeasible_count_kinematics = 0
         self._infeasible_count_collision = 0
 
-        # set sampling
-        self.set_d_sampling_parameters(self.config.sampling.d_min, self.config.sampling.d_max)
-        self.set_t_sampling_parameters(self.config.sampling.t_min, self.config.planning.dt, self.horizon)
-
         # reset collision checker
         if collision_checker is None:
             # create new collision checker from updated scenario
@@ -262,6 +255,7 @@ class ReactivePlanner(object):
             self.set_reference_path(coordinate_system=coordinate_system)
 
         # if planner init state is empty: Convert cartesian initial state from planning problem
+        # TODO check if this has to be or
         if self.x_0 is None and initial_state_cart is None:
             self.x_0 = ReactivePlannerState.create_from_initial_state(self.config.planning_problem.initial_state,
                                                                       self.vehicle_params.wheelbase,
@@ -269,11 +263,11 @@ class ReactivePlanner(object):
         else:
             self.x_0 = initial_state_cart
 
+        # set low velocity mode given initial velocity in self.x_0
+        self._low_vel_mode = True if self.x_0.velocity < self.config.planning.low_vel_mode_threshold else False
+
         # convert Cartesian initial state or pass given curvilinear initial state
-        if initial_state_curv is not None:
-            self.x_0_cl = initial_state_curv
-        else:
-            self.x_0_cl = self._compute_initial_states(self.x_0)
+        self.x_0_cl = initial_state_curv if initial_state_curv is not None else self._compute_initial_states(self.x_0)
 
     def set_collision_checker(self, scenario: Scenario = None, collision_checker: pycrcc.CollisionChecker = None):
         """
@@ -323,17 +317,13 @@ class ReactivePlanner(object):
                                            'CoordinateSystem object to the planner.'
             self._co: CoordinateSystem = coordinate_system
 
-    def set_t_sampling_parameters(self, t_min, dt, horizon):
+    def set_t_sampling_parameters(self, t_min):
         """
-        Sets sample parameters of time horizon
+        Sets sample parameters of time domain. Only t_min is set; maximum time sample is given by planner horizon
         :param t_min: minimum of sampled time horizon
-        :param dt: length of each sampled step
-        :param horizon: sampled time horizon
         """
-        self._sampling_t = TimeSampling(t_min, horizon, self._sampling_level, dt)
-        self.N = int(round(horizon / dt))
-        self.horizon = horizon
-        logger.debug("Sampled interval of time: {} s - {} s".format(t_min, horizon))
+        self.sampling_space.samples_t = TimeSampling(t_min, self.horizon, self._sampling_level, self.dt)
+        logger.debug("Sampled interval of time: {} s - {} s".format(t_min, self.horizon))
 
     def set_d_sampling_parameters(self, delta_d_min, delta_d_max):
         """
@@ -341,7 +331,7 @@ class ReactivePlanner(object):
         :param delta_d_min: lateral distance lower than reference
         :param delta_d_max: lateral distance higher than reference
         """
-        self._sampling_d = PositionSampling(delta_d_min, delta_d_max, self._sampling_level)
+        self.sampling_space.samples_d = PositionSampling(delta_d_min, delta_d_max, self._sampling_level)
         logger.debug("Sampled interval of position: {} m - {} m".format(delta_d_min, delta_d_max))
 
     def set_v_sampling_parameters(self, v_min, v_max):
@@ -350,7 +340,7 @@ class ReactivePlanner(object):
         :param v_min: minimal velocity sample bound
         :param v_max: maximal velocity sample bound
         """
-        self._sampling_v = VelocitySampling(v_min, v_max, self._sampling_level)
+        self.sampling_space.samples_v = VelocitySampling(v_min, v_max, self._sampling_level)
         logger.info("Sampled interval of velocity: {} m/s - {} m/s".format(v_min, v_max))
 
     def set_desired_velocity(self, desired_velocity: float, current_speed: float = None, stopping: bool = False):
@@ -375,6 +365,16 @@ class ReactivePlanner(object):
         else:
             self.set_v_sampling_parameters(v_min=self._desired_speed, v_max=self._desired_speed)
 
+    def set_cost_function(self, cost_function: Type[CostFunction]):
+        # TODO: add cost function setting via class attribute
+        pass
+
+    def set_sampling_space(self, sampling_space: Type[SamplingSpace] = None):
+        if sampling_space:
+            self.sampling_space = sampling_space
+        else:
+            self.sampling_space = sampling_space_factory(self.config)
+
     def record_state_and_input(self, state: ReactivePlannerState):
         """
         Adds state to list of recorded states
@@ -385,7 +385,7 @@ class ReactivePlanner(object):
 
         # compute control inputs and append to input list
         if len(self.record_state_list) > 1:
-            steering_angle_speed = (state.steering_angle - self.record_state_list[-1].steering_angle) / self.dt
+            steering_angle_speed = (state.steering_angle - self.record_state_list[-2].steering_angle) / self.dt
         else:
             steering_angle_speed = 0.0
 
@@ -409,39 +409,10 @@ class ReactivePlanner(object):
         logger.info("===== Sampling trajectories ... =====")
         logger.info(f"Sampling density {samp_level + 1} of {self._sampling_level}")
 
-        # reset cost statistic
-        self._min_cost = 10 ** 9
-        self._max_cost = 0
+        trajectories = self.sampling_space.generate_trajectories_at_level()
 
-        trajectories = list()
-        for t in self._sampling_t.to_range(samp_level):
-            # Longitudinal sampling for all possible velocities
-            for v in self._sampling_v.to_range(samp_level):
-                # end_state_lon = np.array([t * v + x_0_lon[0], v, 0.0])
-                # trajectory_long = QuinticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lon), x_d=end_state_lon)
-                trajectory_long = QuarticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lon), x_d=np.array([v, 0]))
-
-                # Sample lateral end states (add x_0_lat to sampled states)
-                if trajectory_long.coeffs is not None:
-                    for d in self._sampling_d.to_range(samp_level).union({x_0_lat[0]}):
-                        end_state_lat = np.array([d, 0.0, 0.0])
-                        # SWITCHING TO POSITION DOMAIN FOR LATERAL TRAJECTORY PLANNING
-                        if self._low_vel_mode:
-                            s_lon_goal = trajectory_long.evaluate_state_at_tau(t)[0] - x_0_lon[0]
-                            if s_lon_goal <= 0:
-                                s_lon_goal = t
-                            trajectory_lat = QuinticTrajectory(tau_0=0, delta_tau=s_lon_goal, x_0=np.array(x_0_lat),
-                                                               x_d=end_state_lat)
-
-                        # Switch to sampling over t for high velocities
-                        else:
-                            trajectory_lat = QuinticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lat),
-                                                               x_d=end_state_lat)
-                        if trajectory_lat.coeffs is not None:
-                            trajectory_sample = TrajectorySample(self.horizon, self.dt, trajectory_long, trajectory_lat)
-                            trajectories.append(trajectory_sample)
-
-        # perform pre check and order trajectories according their cost
+        # create trajectory bundle
+        # TODO: add cost function as class attribute?
         trajectory_bundle = TrajectoryBundle(trajectories, cost_function=DefaultCostFunction(self._desired_speed, desired_d=0))
 
         logger.info(f"Number of trajectory samples: {len(trajectory_bundle.trajectories)}")
@@ -580,12 +551,6 @@ class ReactivePlanner(object):
         # check if initial states are provided
         assert self.x_0 is not None, "<ReactivePlanner.plan(): Planner Cartesian initial state is empty!>"
         assert self.x_0_cl is not None, "<ReactivePlanner.plan(): Planner curvilinear initial state is empty!>"
-
-        # check for low velocity mode
-        if self.x_0.velocity < self.config.planning.low_vel_mode_threshold:
-            self._low_vel_mode = True
-        else:
-            self._low_vel_mode = False
 
         # get curvilinear initial states
         x_0_lon, x_0_lat = self.x_0_cl
@@ -1078,7 +1043,8 @@ class ReactivePlanner(object):
         logger.info(f"Sort trajectories took:  \t{time.time() - t0:.7f}s")
 
         # ==== Collision checking
-        return self._check_collisions(trajectory_bundle)
+        collision_free_trajectory: Optional[TrajectorySample] = self._check_collisions(trajectory_bundle)
+        return collision_free_trajectory
 
     def convert_state_list_to_commonroad_object(self, state_list: List[ReactivePlannerState], obstacle_id: int = 42):
         """
