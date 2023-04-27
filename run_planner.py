@@ -36,7 +36,7 @@ config.update()
 
 # initialize and get logger
 initialize_logger(config)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("RP_LOGGER")
 
 
 # *************************************

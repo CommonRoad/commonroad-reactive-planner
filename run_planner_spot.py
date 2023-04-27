@@ -34,7 +34,7 @@ config.update()
 
 # initialize and get logger
 initialize_logger(config)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("RP_LOGGER")
 
 # SPOT configurations
 spot_update_dict = {'Vehicle': {
@@ -133,7 +133,7 @@ while not planner.goal_reached():
                                       ref_path=planner.reference_path, timestep=current_count, config=config)
 
 # make gif
-# make_gif(config, range(0, planner.record_state_list[-1].time_step))
+make_gif(config, range(0, planner.record_state_list[-1].time_step))
 
 # **************************
 # Evaluate results

@@ -42,7 +42,7 @@ from commonroad_rp.utility.general import shift_orientation
 from commonroad_rp.configuration import Configuration, VehicleConfiguration
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("RP_LOGGER")
 
 
 class ReactivePlanner(object):

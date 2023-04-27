@@ -13,7 +13,7 @@ def initialize_logger(config: Configuration) -> logging.Logger:
     os.makedirs(config.general.path_logs, exist_ok=True)
 
     # create logger
-    logger = logging.getLogger()
+    logger = logging.getLogger("RP_LOGGER")
 
     # create file handler (outputs to file)
     string_date_time = datetime.now().strftime("_%Y_%m_%d_%H-%M-%S")

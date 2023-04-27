@@ -32,7 +32,7 @@ from commonroad_rp.trajectories import TrajectorySample
 from commonroad_rp.configuration import Configuration
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("RP_LOGGER")
 logging.getLogger('PIL').setLevel(logging.ERROR)
 logging.getLogger('matplotlib.font_manager').setLevel(logging.ERROR)
 

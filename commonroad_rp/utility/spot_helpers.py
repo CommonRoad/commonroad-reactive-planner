@@ -1,3 +1,10 @@
+__author__ = "Gerald Würsching"
+__copyright__ = "TUM Cyber-Physical Systems Group"
+__version__ = "1.0"
+__maintainer__ = "Gerald Würsching"
+__email__ = "commonroad@lists.lrz.de"
+__status__ = "Beta"
+
 from typing import Optional
 from copy import deepcopy
 
@@ -10,7 +17,10 @@ from commonroad.prediction.prediction import Occupancy, SetBasedPrediction, Traj
 
 from commonroad_rp.configuration import Configuration
 
-import spot
+try:
+    import spot
+except ImportError:
+    raise ImportError("SPOT not installed!")
 
 
 def spot_setup_scenario(scenario: Scenario, planning_problem: PlanningProblem, spot_scenario_id: int = 1,

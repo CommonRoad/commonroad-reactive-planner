@@ -18,7 +18,7 @@ from commonroad_dc.geometry.util import compute_pathlength_from_polyline,compute
 from commonroad.common.util import make_valid_orientation
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("RP_LOGGER")
 logging.getLogger('matplotlib.font_manager').setLevel(logging.ERROR)
 
 
