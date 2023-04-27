@@ -15,6 +15,14 @@ from commonroad_rp.configuration import Configuration
 from commonroad_rp.polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
 from commonroad_rp.trajectories import TrajectorySample
 
+try:
+    from commonroad_reach.data_structure.reach.driving_corridor import DrivingCorridor
+    import commonroad_reach.utility.reach_operation as util_reach_operation
+    cr_reach_installed = True
+except ImportError:
+    cr_reach_installed = False
+    pass
+
 
 class Sampling(ABC):
     """
@@ -30,7 +38,6 @@ class Sampling(ABC):
 
         self.low = low
         self.up = up
-        self.dict_level_to_num_of_samples: Dict[int, int] = dict()
         self._n_samples = num_sampling_levels
         self._dict_level_to_sample_set: Dict[int, set] = dict()
         self._sample()
@@ -154,7 +161,8 @@ class SamplingSpace(ABC):
         return self._num_sampling_levels
 
     @abstractmethod
-    def generate_trajectories_at_level(self, level_sampling, x_0_lon, x_0_lat, low_vel_mode: bool):
+    def generate_trajectories_at_level(self, level_sampling, x_0_lon, x_0_lat, low_vel_mode: bool) \
+            -> List[TrajectorySample]:
         """
         Abstract method to generate a set of trajectories within the sampling space for a given sampling level.
         Each sampling space implements it's own trajectory generation method.
@@ -226,14 +234,12 @@ class CorridorSampling(SamplingSpace):
     collision-free driving corridor.
     NOTE: CommonRoad-Reach is required (https://commonroad.in.tum.de/tools/commonroad-reach)
     """
-
     def __init__(self, config: Configuration):
-        try:
-            from commonroad_reach.data_structure.reach.driving_corridor import DrivingCorridor
-        except ImportError:
+        if not cr_reach_installed:
             raise ImportError("<CorridorSampling>: Please install CommonRoad-Reach to use adaptive corridor sampling!")
 
         num_sampling_levels = config.sampling.num_sampling_levels
+        super(CorridorSampling, self).__init__(num_sampling_levels)
 
         # time step and horizon
         self.dt = config.planning.dt
@@ -243,9 +249,12 @@ class CorridorSampling(SamplingSpace):
         self.samples_t = TimeSampling(config.sampling.t_min, self.horizon, num_sampling_levels, self.dt)
 
         # driving corridor: needs to be set with setter function
-        self.driving_corridor: Optional[DrivingCorridor] = None
+        self._corridor: Optional[DrivingCorridor] = None
+        self._velocity_constraints: Dict = dict()
 
-        super(CorridorSampling, self).__init__(num_sampling_levels)
+        # number of samples per level
+        self._dict_level_to_num_samples: Dict[int, int] = dict()
+        self.set_dict_number_of_samples()
 
     @property
     def driving_corridor(self):
@@ -254,23 +263,87 @@ class CorridorSampling(SamplingSpace):
     @driving_corridor.setter
     def driving_corridor(self, corridor):
         self._corridor = corridor
+        self._velocity_constraints = dict()
+        for time_idx, connected_reach_set in self._corridor.items():
+            velocity_interval = util_reach_operation.lon_velocity_interval_connected_set(connected_reach_set)
+            self._velocity_constraints[time_idx] = [velocity_interval[0], velocity_interval[1]]
 
     @SamplingSpace.samples_d.setter
     def samples_d(self, pos_sampling: PositionSampling):
-        warnings.warn("<CorridorSampling>: Lateral positions samples are determined from driving corridor and can not"
-                      "be set")
+        d_min = pos_sampling.low
+        d_max = pos_sampling.up
         pass
 
     @SamplingSpace.samples_v.setter
     def samples_v(self, vel_sampling: VelocitySampling):
-        warnings.warn("<CorridorSampling>: Velocity samples are determined from driving corridor and can not"
-                      "be set")
+        v_min = vel_sampling.low
+        v_max = vel_sampling.up
         pass
 
-    def generate_trajectories_at_level(self, level_sampling, x_0_lon, x_0_lat, low_vel_mode: bool):
+    def set_dict_number_of_samples(self, n_min: int = 3):
+        """store number of samples per sampling level"""
+        n = n_min
+        for i in range(self.num_sampling_levels):
+            self._dict_level_to_num_samples[i] = n
+            n = (n * 2) - 1
+
+    def generate_trajectories_at_level(self, level_sampling, x_0_lon, x_0_lat, low_vel_mode: bool) \
+            -> List[TrajectorySample]:
+        """
+        Implements trajectory generation method for sampling trajectories within driving corridor
+        """
         if self._corridor is None:
             raise AttributeError("<CorridorSampling>: Please set a driving corridor.")
-        pass
+
+        # initialize trajectory list
+        list_trajectories = list()
+
+        # get num samples for level
+        num_samples = self._dict_level_to_num_samples[level_sampling]
+
+        # Iterate over pre-stored time samples
+        for t in self.samples_t.samples_at_level(level_sampling):
+            # get corresponding time step of corridor
+            time_step = round(t / self.dt) + min(self._corridor.keys())
+            # Set sampling constraints for longitudinal velocity
+            # low = max(self._min_v_desired, self._lon_vel_constraints[time_step][0])
+            # up = min(self._max_v_desired, self._lon_vel_constraints[time_step][1])
+            low = self._velocity_constraints[time_step][0]
+            up = self._velocity_constraints[time_step][1]
+
+            # Iterate over velocity samples
+            for v in set(np.linspace(low, up, num_samples)):
+                trajectory_long = QuarticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lon), x_d=np.array([v, 0]))
+                end_pos_lon = trajectory_long.calc_position(t, t ** 2, t ** 3, t ** 4, t ** 5)
+
+                # Sample lateral end states
+                if trajectory_long.coeffs is not None:
+                    # Determine connected sets containing long end position by projection on longitudinal domain
+                    reachsets_overlap = util_reach_operation.determine_overlapping_nodes_with_lon_pos(
+                        self._corridor[time_step], end_pos_lon)
+                    if len(list(reachsets_overlap)) == 0:
+                        continue
+                    lat_connected_sets = util_reach_operation.determine_connected_components(list(reachsets_overlap))
+
+                    # Get lateral constraints from base sets
+                    for lat_con_set in lat_connected_sets:
+                        lat_interval = util_reach_operation.lat_interval_connected_set(lat_con_set)
+                        # Sample positions within lateral interval
+                        if lat_interval[0] < 0 < lat_interval[1]:
+                            # include sample on reference path
+                            d_samples = set(np.linspace(lat_interval[0], lat_interval[1], num_samples)).union({0})
+                        else:
+                            d_samples = set(np.linspace(lat_interval[0], lat_interval[1], num_samples))
+                        for d in d_samples:
+                            # Switch to position domain for lateral trajectory planning at low velocities
+                            # Switch to sampling over t for high velocities
+                            trajectory_lat = QuinticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lat),
+                                                               x_d=np.array([d, 0.0, 0.0]))
+                            if trajectory_lat.coeffs is not None:
+                                trajectory_sample = TrajectorySample(self.horizon, self.dt, trajectory_long,
+                                                                     trajectory_lat)
+                                list_trajectories.append(trajectory_sample)
+        return list_trajectories
 
 
 def sampling_space_factory(config: Configuration):

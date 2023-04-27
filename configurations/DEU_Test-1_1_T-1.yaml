@@ -7,10 +7,14 @@ vehicle:
   # CR vehicle type (see commonroad-vehicle-models): #1: Ford Escort, #2: BMW 320i, 3 = VW Vanagon
   id_type_vehicle: 2
 
+sampling:
+  sampling_method: 2
+  t_min: 0.4
+
 debug:
   show_plots: False
   save_plots: True
-  draw_traj_set: False
+  draw_traj_set: True
   draw_icons: True
   multiproc: True
   num_workers: 6
