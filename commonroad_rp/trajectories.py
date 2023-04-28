@@ -7,11 +7,19 @@ __email__ = "commonroad@lists.lrz.de"
 __status__ = "Beta"
 
 from typing import Union, List, Optional
+from enum import Enum
 import numpy as np
 from abc import ABC, abstractmethod
 import math
 
 from commonroad_rp.polynomial_trajectory import PolynomialTrajectory
+
+
+class FeasibilityStatus(Enum):
+    """Enum with types of feasibility status of a TrajectorySample after checking. (Can be extended)"""
+    FEASIBLE = 'feasible'
+    INFEASIBLE_KINEMATIC = 'infeasible_kinematic'
+    INFEASIBLE_COLLISION = "infeasible_collision"
 
 
 class Sample(ABC):
@@ -355,6 +363,8 @@ class TrajectorySample(Sample):
         self._ext_cartesian = None
         self._ext_curvilinear = None
 
+        self._label: Optional[FeasibilityStatus] = None
+
     @property
     def trajectory_long(self) -> PolynomialTrajectory:
         """
@@ -429,6 +439,16 @@ class TrajectorySample(Sample):
         """
         assert isinstance(cartesian, CartesianSample)
         self._cartesian = cartesian
+
+    @property
+    def feasibility_label(self):
+        """returns feasibility label of trajectory"""
+        return self._label
+
+    @feasibility_label.setter
+    def feasibility_label(self, feasbility_status: FeasibilityStatus):
+        """sets feasibility label according to status after checks"""
+        self._label = feasbility_status
 
     def length(self) -> int:
         """

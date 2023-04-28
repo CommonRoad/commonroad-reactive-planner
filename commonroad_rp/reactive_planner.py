@@ -36,7 +36,8 @@ from commonroad_rp.cost_function import CostFunction, DefaultCostFunction
 from commonroad_rp.sampling import TimeSampling, VelocitySampling, PositionSampling, SamplingSpace, \
     sampling_space_factory
 from commonroad_rp.polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
-from commonroad_rp.trajectories import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample
+from commonroad_rp.trajectories import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample, \
+    FeasibilityStatus
 from commonroad_rp.utility.utils_coordinate_system import CoordinateSystem, interpolate_angle
 from commonroad_rp.utility.general import shift_orientation, retrieve_desired_velocity_from_pp
 from commonroad_rp.configuration import Configuration, VehicleConfiguration
@@ -780,12 +781,14 @@ class ReactivePlanner(object):
                 # velocity constraint
                 if v[i] < -0.1:
                     feasible = False
+                    trajectory.feasibility_label = FeasibilityStatus.INFEASIBLE_KINEMATIC
                     if not self._draw_traj_set:
                         break
                 # curvature constraint
                 kappa_max = np.tan(self.vehicle_params.delta_max) / self.vehicle_params.wheelbase
                 if abs(kappa_gl[i]) > kappa_max:
                     feasible = False
+                    trajectory.feasibility_label = FeasibilityStatus.INFEASIBLE_KINEMATIC
                     if not self._draw_traj_set:
                         break
                 # yaw rate (orientation change) constraint
@@ -793,6 +796,7 @@ class ReactivePlanner(object):
                 theta_dot_max = kappa_max * v[i]
                 if abs(yaw_rate) > theta_dot_max:
                     feasible = False
+                    trajectory.feasibility_label = FeasibilityStatus.INFEASIBLE_KINEMATIC
                     if not self._draw_traj_set:
                         break
                 # curvature rate constraint
@@ -803,6 +807,7 @@ class ReactivePlanner(object):
                 kappa_dot = (kappa_gl[i] - kappa_gl[i - 1]) / self.dt if i > 0 else 0.
                 if abs(kappa_dot) > kappa_dot_max:
                     feasible = False
+                    trajectory.feasibility_label = FeasibilityStatus.INFEASIBLE_KINEMATIC
                     if not self._draw_traj_set:
                         break
                 # acceleration constraint (considering switching velocity, see vehicle models documentation)
@@ -811,6 +816,7 @@ class ReactivePlanner(object):
                 a_min = -self.vehicle_params.a_max
                 if not a_min <= a[i] <= a_max:
                     feasible = False
+                    trajectory.feasibility_label = FeasibilityStatus.INFEASIBLE_KINEMATIC
                     if not self._draw_traj_set:
                         break
 
@@ -828,6 +834,7 @@ class ReactivePlanner(object):
                         break
 
                 if feasible:
+                    trajectory.feasibility_label = FeasibilityStatus.FEASIBLE
                     # store Cartesian trajectory
                     trajectory.cartesian = CartesianSample(x, y, theta_gl, v, a, kappa_gl,
                                                            kappa_dot=np.append([0], np.diff(kappa_gl)),
@@ -850,6 +857,7 @@ class ReactivePlanner(object):
                     feasible_trajectories.append(trajectory)
 
                 if not feasible and self._draw_traj_set:
+                    trajectory.feasibility_label = FeasibilityStatus.INFEASIBLE_KINEMATIC
                     # store Cartesian trajectory
                     trajectory.cartesian = CartesianSample(x, y, theta_gl, v, a, kappa_gl,
                                                            kappa_dot=np.append([0], np.diff(kappa_gl)),
@@ -903,9 +911,10 @@ class ReactivePlanner(object):
                 if self._cc.collide(ego):
                     self._infeasible_count_collision += 1
                     collide = True
+                    trajectory.feasibility_label = FeasibilityStatus.INFEASIBLE_COLLISION
                     break
 
-            # continuous collision check if not collision has been detected before already
+            # additional continuous collision check if no collision has been detected before already
             if self.config.planning.continuous_collision_check and not collide:
                 ego_tvo = pycrcc.TimeVariantCollisionObject(self.x_0.time_step)
                 [ego_tvo.append_obstacle(
@@ -914,6 +923,8 @@ class ReactivePlanner(object):
                 if self._cc.collide(ego_tvo):
                     self._infeasible_count_collision += 1
                     collide = True
+                    trajectory.feasibility_label = FeasibilityStatus.INFEASIBLE_COLLISION
+                    break
 
             if not collide:
                 logger.info(f"Collision checks took:  \t{time.time() - t0:.7f}s")

@@ -28,13 +28,20 @@ from commonroad.geometry.shape import Rectangle
 from commonroad_dc import pycrcc
 
 # commonroad-rp
-from commonroad_rp.trajectories import TrajectorySample
+from commonroad_rp.trajectories import TrajectorySample, FeasibilityStatus
 from commonroad_rp.configuration import Configuration
 
 
 logger = logging.getLogger("RP_LOGGER")
 logging.getLogger('PIL').setLevel(logging.ERROR)
 logging.getLogger('matplotlib.font_manager').setLevel(logging.ERROR)
+
+# color dict of trajectories
+_dict_traj_status_to_color = {
+    FeasibilityStatus.FEASIBLE.name: 'blue',
+    FeasibilityStatus.INFEASIBLE_KINEMATIC.name: 'blue',
+    FeasibilityStatus.INFEASIBLE_COLLISION.name: 'blue'
+}
 
 
 def visualize_scenario_and_pp(scenario: Scenario, planning_problem: PlanningProblem, cosy=None):
@@ -126,7 +133,7 @@ def visualize_planner_at_timestep(scenario: Scenario, planning_problem: Planning
     step = 1  # draw every trajectory (step=2 would draw every second trajectory)
     if traj_set is not None:
         for i in range(0, len(traj_set), step):
-            color = 'blue'
+            color = _dict_traj_status_to_color[traj_set[i].feasibility_label.name]
             plt.plot(traj_set[i].cartesian.x, traj_set[i].cartesian.y,
                      color=color, zorder=20, linewidth=0.1, alpha=1.0)
 
