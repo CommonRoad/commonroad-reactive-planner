@@ -63,13 +63,11 @@ config_planner.planning.reference_path = route.reference_path
 # initialize reactive planner
 planner = ReactivePlanner(config_planner)
 
-desired_velocity = retrieve_desired_velocity_from_pp(config_planner.planning_problem)
 
 # *************************************
 # Initialize Reach Interface
 # *************************************
 # update reach config with planner attributes
-# TODO check this
 config_reach.update()
 config_reach.planning.steps_computation = config_planner.planning.time_steps_computation
 config_reach.planning_problem = planner.config.planning_problem
@@ -102,7 +100,7 @@ while not planner.goal_reached():
 
         # new planning cycle -> plan a new optimal trajectory
         planner.sampling_space.driving_corridor = corridor
-        planner.set_desired_velocity(desired_velocity=desired_velocity, current_speed=planner.x_0.velocity)
+        planner.set_desired_velocity(current_speed=planner.x_0.velocity)
         optimal = planner.plan()
         if not optimal:
             break
@@ -154,6 +152,6 @@ while not planner.goal_reached():
 # **************************
 # Evaluate results
 # **************************
-evaluate = False
+evaluate = True
 if evaluate:
     cr_solution, feasibility_list = run_evaluation(planner.config, planner.record_state_list, planner.record_input_list)

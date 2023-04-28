@@ -38,7 +38,7 @@ from commonroad_rp.sampling import TimeSampling, VelocitySampling, PositionSampl
 from commonroad_rp.polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
 from commonroad_rp.trajectories import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample
 from commonroad_rp.utility.utils_coordinate_system import CoordinateSystem, interpolate_angle
-from commonroad_rp.utility.general import shift_orientation
+from commonroad_rp.utility.general import shift_orientation, retrieve_desired_velocity_from_pp
 from commonroad_rp.configuration import Configuration, VehicleConfiguration
 
 
@@ -278,7 +278,7 @@ class ReactivePlanner(object):
         self.sampling_space.samples_v = VelocitySampling(v_min, v_max, self._sampling_level)
         logger.info("Sampled interval of velocity: {} m/s - {} m/s".format(v_min, v_max))
 
-    def set_desired_velocity(self, desired_velocity: float, current_speed: float = None, stopping: bool = False):
+    def set_desired_velocity(self, desired_velocity: float = None, current_speed: float = None, stopping: bool = False):
         """
         Sets desired velocity and re-calculates velocity samples
         :param desired_velocity: velocity in m/s
@@ -286,7 +286,10 @@ class ReactivePlanner(object):
         :param stopping
         :return: velocity in m/s
         """
-        self._desired_speed = desired_velocity
+        if desired_velocity is None and self._desired_speed is None:
+            self._desired_speed = retrieve_desired_velocity_from_pp(self.config.planning_problem)
+        else:
+            self._desired_speed = desired_velocity if desired_velocity is not None else self._desired_speed
         if not stopping:
             if current_speed is not None:
                 reference_speed = current_speed

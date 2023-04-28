@@ -9,7 +9,6 @@ __status__ = "Beta"
 import numpy as np
 from abc import ABC, abstractmethod
 from typing import Dict, Optional, List
-import warnings
 
 from commonroad_rp.configuration import Configuration
 from commonroad_rp.polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
@@ -20,6 +19,8 @@ try:
     import commonroad_reach.utility.reach_operation as util_reach_operation
     cr_reach_installed = True
 except ImportError:
+    DrivingCorridor = None
+    util_reach_operation = None
     cr_reach_installed = False
     pass
 
@@ -261,7 +262,7 @@ class CorridorSampling(SamplingSpace):
         return self._corridor
 
     @driving_corridor.setter
-    def driving_corridor(self, corridor):
+    def driving_corridor(self, corridor: DrivingCorridor):
         self._corridor = corridor
         self._velocity_constraints = dict()
         for time_idx, connected_reach_set in self._corridor.items():
@@ -270,15 +271,13 @@ class CorridorSampling(SamplingSpace):
 
     @SamplingSpace.samples_d.setter
     def samples_d(self, pos_sampling: PositionSampling):
-        d_min = pos_sampling.low
-        d_max = pos_sampling.up
-        pass
+        self._d_min = pos_sampling.low
+        self._d_max = pos_sampling.up
 
     @SamplingSpace.samples_v.setter
     def samples_v(self, vel_sampling: VelocitySampling):
-        v_min = vel_sampling.low
-        v_max = vel_sampling.up
-        pass
+        self._v_min = vel_sampling.low
+        self._v_max = vel_sampling.up
 
     def set_dict_number_of_samples(self, n_min: int = 3):
         """store number of samples per sampling level"""

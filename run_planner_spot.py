@@ -60,9 +60,6 @@ config.planning.reference_path = route.reference_path
 # initialize reactive planner
 planner = ReactivePlanner(config)
 
-desired_velocity = retrieve_desired_velocity_from_pp(config.planning_problem)
-
-
 # *************************************
 # Initialize SPOT Manager
 # *************************************
@@ -90,7 +87,7 @@ while not planner.goal_reached():
         planner.set_collision_checker(spot_manager.scenario_spot)
 
         # new planning cycle -> plan a new optimal trajectory
-        planner.set_desired_velocity(desired_velocity=desired_velocity, current_speed=planner.x_0.velocity)
+        planner.set_desired_velocity(current_speed=planner.x_0.velocity)
         optimal = planner.plan()
         if not optimal:
             break
