@@ -9,8 +9,6 @@ __status__ = "Beta"
 # standard imports
 from copy import deepcopy
 import logging
-import seaborn as sns
-
 
 # commonroad-io
 from commonroad.visualization.mp_renderer import MPRenderer
@@ -23,7 +21,6 @@ from commonroad_rp.reactive_planner import ReactivePlanner
 from commonroad_rp.utility.visualization import visualize_planner_at_timestep, make_gif
 from commonroad_rp.utility.evaluation import run_evaluation
 from commonroad_rp.configuration_builder import ConfigurationBuilder as ReactiveConfigurationBuilder
-from commonroad_rp.utility.general import retrieve_desired_velocity_from_pp
 import commonroad_rp.utility.logger as util_logger_rp
 
 # commonroad-reach

@@ -19,7 +19,6 @@ from commonroad_rp.utility.visualization import visualize_planner_at_timestep, m
 from commonroad_rp.utility.evaluation import run_evaluation
 from commonroad_rp.configuration_builder import ConfigurationBuilder
 
-from commonroad_rp.utility.general import retrieve_desired_velocity_from_pp
 from commonroad_rp.utility.logger import initialize_logger
 
 
