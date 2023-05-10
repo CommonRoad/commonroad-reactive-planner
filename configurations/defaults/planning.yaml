@@ -7,9 +7,7 @@ replanning_frequency: 3
 # planner mode TODO: modes not implemented yet
 mode: !!null
 # continuous collision checking
-continuous_cc: False
-# collision check in curvilinear coordinates
-collision_check_in_cl: False
+continuous_collision_check: False
 # time scaling factor for collision checking if planner time step and scenario time step deviate
 factor: 1
 # velocity threshold (in m/s) for switching to low velocity mode

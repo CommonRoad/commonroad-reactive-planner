@@ -1,6 +1,6 @@
 __author__ = "Gerald Würsching"
 __copyright__ = "TUM Cyber-Physical Systems Group"
-__version__ = "0.5"
+__version__ = "1.0"
 __maintainer__ = "Gerald Würsching"
 __email__ = "commonroad@lists.lrz.de"
 __status__ = "Beta"
@@ -9,6 +9,7 @@ __status__ = "Beta"
 # standard imports
 from typing import List, Union
 import os
+import logging
 
 # third party
 import matplotlib.pyplot as plt
@@ -27,8 +28,20 @@ from commonroad.geometry.shape import Rectangle
 from commonroad_dc import pycrcc
 
 # commonroad-rp
-from commonroad_rp.trajectories import TrajectorySample
+from commonroad_rp.trajectories import TrajectorySample, FeasibilityStatus
 from commonroad_rp.configuration import Configuration
+
+
+logger = logging.getLogger("RP_LOGGER")
+logging.getLogger('PIL').setLevel(logging.ERROR)
+logging.getLogger('matplotlib.font_manager').setLevel(logging.ERROR)
+
+# color dict of trajectories
+_dict_traj_status_to_color = {
+    FeasibilityStatus.FEASIBLE.name: 'blue',
+    FeasibilityStatus.INFEASIBLE_KINEMATIC.name: 'blue',
+    FeasibilityStatus.INFEASIBLE_COLLISION.name: 'blue'
+}
 
 
 def visualize_scenario_and_pp(scenario: Scenario, planning_problem: PlanningProblem, cosy=None):
@@ -106,7 +119,8 @@ def visualize_planner_at_timestep(scenario: Scenario, planning_problem: Planning
 
     # visualize scenario, planning problem, ego vehicle
     scenario.draw(rnd)
-    planning_problem.draw(rnd)
+    if config.debug.draw_planning_problem:
+        planning_problem.draw(rnd)
     ego.draw(rnd, draw_params=ego_params)
     rnd.render()
 
@@ -119,12 +133,12 @@ def visualize_planner_at_timestep(scenario: Scenario, planning_problem: Planning
     step = 1  # draw every trajectory (step=2 would draw every second trajectory)
     if traj_set is not None:
         for i in range(0, len(traj_set), step):
-            color = 'blue'
+            color = _dict_traj_status_to_color[traj_set[i].feasibility_label.name]
             plt.plot(traj_set[i].cartesian.x, traj_set[i].cartesian.y,
                      color=color, zorder=20, linewidth=0.1, alpha=1.0)
 
     # visualize reference path
-    if ref_path is not None:
+    if ref_path is not None and config.debug.draw_ref_path:
         rnd.ax.plot(ref_path[:, 0], ref_path[:, 1], color='g', marker='.', markersize=1, zorder=19, linewidth=0.8,
                     label='reference path')
 
@@ -170,7 +184,8 @@ def plot_final_trajectory(scenario: Scenario, planning_problem: PlanningProblem,
     # visualize scenario
     scenario.draw(rnd)
     # visualize planning problem
-    planning_problem.draw(rnd)
+    if config.debug.draw_planning_problem:
+        planning_problem.draw(rnd)
     # visualize occupancies of trajectory
     for i in range(len(state_list)):
         state = state_list[i]
@@ -189,7 +204,7 @@ def plot_final_trajectory(scenario: Scenario, planning_problem: PlanningProblem,
                 linewidth=0.8)
 
     # visualize reference path
-    if ref_path is not None:
+    if ref_path is not None and config.debug.draw_ref_path:
         rnd.ax.plot(ref_path[:, 0], ref_path[:, 1], color='g', marker='.', markersize=1, zorder=19, linewidth=0.8,
                     label='reference path')
 
@@ -206,9 +221,9 @@ def plot_final_trajectory(scenario: Scenario, planning_problem: PlanningProblem,
         plt.show(block=True)
 
 
-def make_gif(config: Configuration, scenario: Scenario, time_steps: Union[range, List[int]], duration: float = 0.1):
+def make_gif(config: Configuration, time_steps: Union[range, List[int]], duration: float = 0.1):
     """
-    Function to create from single images of planning results at each time step
+    Function to create GIF from single images of planning results at each time step
     Images are saved in output path specified in config.general.path_output
     :param config Configuration object
     :param scenario CommonRoad scenario object
@@ -224,15 +239,17 @@ def make_gif(config: Configuration, scenario: Scenario, time_steps: Union[range,
         images = []
         filenames = []
 
+        scenario_id = config.scenario.scenario_id
+
         # directory, where single images are outputted (see visualize_planner_at_timestep())
-        path_images = os.path.join(config.general.path_output, str(scenario.scenario_id))
+        path_images = os.path.join(config.general.path_output, str(scenario_id))
 
         for step in time_steps:
-            im_path = os.path.join(path_images, str(scenario.scenario_id) + "_{}.png".format(step))
+            im_path = os.path.join(path_images, str(scenario_id) + "_{}.png".format(step))
             filenames.append(im_path)
 
         for filename in filenames:
             images.append(imageio.imread(filename))
 
-        imageio.mimsave(os.path.join(config.general.path_output, str(scenario.scenario_id) + ".gif"),
+        imageio.mimsave(os.path.join(config.general.path_output, str(scenario_id) + ".gif"),
                         images, duration=duration)

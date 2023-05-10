@@ -1,3 +1,13 @@
+__author__ = "Gerald Würsching"
+__copyright__ = "TUM Cyber-Physical Systems Group"
+__version__ = "1.0"
+__maintainer__ = "Gerald Würsching"
+__email__ = "commonroad@lists.lrz.de"
+__status__ = "Beta"
+
+from typing import Optional
+from copy import deepcopy
+
 import numpy as np
 
 from commonroad.scenario.scenario import Scenario
@@ -5,7 +15,12 @@ from commonroad.planning.planning_problem import PlanningProblem
 from commonroad.geometry.shape import Polygon, ShapeGroup
 from commonroad.prediction.prediction import Occupancy, SetBasedPrediction, TrajectoryPrediction
 
-import spot
+from commonroad_rp.configuration import Configuration
+
+try:
+    import spot
+except ImportError:
+    raise ImportError("SPOT not installed!")
 
 
 def spot_setup_scenario(scenario: Scenario, planning_problem: PlanningProblem, spot_scenario_id: int = 1,
@@ -110,3 +125,48 @@ def spot_update_init_state_obstacles(scenario: Scenario, time_step):
                 scenario.remove_obstacle(dyn_obstacle)
 
     return scenario
+
+
+class SpotManager:
+    """Wrapper class for SPOT prediction operations"""
+
+    def __init__(self, spot_update_dict: dict, config: Configuration = None):
+        self._scenario: Optional[Scenario] = None
+        self._planning_problem: Optional[PlanningProblem] = None
+        self._curr_global_time_step: Optional[int] = None
+        self._steps_prediction: Optional[int] = None
+        self._time_step: Optional[int] = None
+
+        self.spot_scenario_id: int = 1
+        self.spot_update_dict = spot_update_dict
+
+        if config is not None:
+            self.reset(config)
+
+    @property
+    def scenario_spot(self):
+        """return the modified scenario with SPOT occupancy predictions"""
+        return self._scenario
+
+    def reset(self, config: Configuration, curr_global_time_step: int = None):
+        """updates relevant environment information for prediction"""
+        self._scenario = deepcopy(config.scenario)
+        self._planning_problem = config.planning_problem
+        self._curr_global_time_step = curr_global_time_step if curr_global_time_step is not None else None
+        self._steps_prediction = config.planning.time_steps_computation
+        self._time_step = config.planning.dt
+
+    def predict(self):
+        """computes SPOT occupancy prediction for given SPOT scenario"""
+        # update obstacle initial time steps
+        self._scenario = spot_update_init_state_obstacles(self._scenario, self._curr_global_time_step)
+        # register scenario
+        spot_setup_scenario(self._scenario, self._planning_problem, self.spot_scenario_id, self.spot_update_dict)
+        # do actual prediction
+        spot_compute_occupancy_prediction(self._scenario, self.spot_scenario_id,
+                                          start_time_step=self._curr_global_time_step,
+                                          end_time_step=self._curr_global_time_step + self._steps_prediction,
+                                          dt=self._time_step,
+                                          num_threads=4)
+        # deregister Spot Scenario
+        spot_remove_scenario(self.spot_scenario_id)

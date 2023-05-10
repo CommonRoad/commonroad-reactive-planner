@@ -9,12 +9,17 @@ __status__ = "Alpha"
 from copy import deepcopy
 import numpy as np
 from scipy.interpolate import splprep, splev
+import logging
 
 from commonroad_dc.pycrccosy import CurvilinearCoordinateSystem
 from commonroad_dc.geometry.util import compute_pathlength_from_polyline,compute_curvature_from_polyline, \
     compute_orientation_from_polyline, resample_polyline, chaikins_corner_cutting
 
 from commonroad.common.util import make_valid_orientation
+
+
+logger = logging.getLogger("RP_LOGGER")
+logging.getLogger('matplotlib.font_manager').setLevel(logging.ERROR)
 
 
 def interpolate_angle(x: float, x1: float, x2: float, y1: float, y2: float) -> float:
@@ -66,7 +71,6 @@ def preprocess_ref_path(ref_path: np.ndarray, resample_step: float = 1.0, max_cu
     return ref_path_preprocessed
 
 
-# TODO use wrapper class of CCosy in commonroad_dc instead
 class CoordinateSystem:
 
     def __init__(self, reference: np.ndarray = None, ccosy: CurvilinearCoordinateSystem = None):
@@ -75,6 +79,19 @@ class CoordinateSystem:
                                           'CurvilinearCoordinateSystem object.'
             # set reference and create ccosy from given reference
 
+            # remove duplicated vertices in reference path
+            _, idx = np.unique(reference, axis=0, return_index=True)
+            reference = reference[np.sort(idx)]
+
+            smoothing_scipy_splines = True
+            if smoothing_scipy_splines:
+                # print("Smoothing via spline interpolation...")
+                logger.info("Smoothing reference path via spline interpolation...")
+                tck, u = splprep(reference.T, u=None, k=3, s=0.0)
+                u_new = np.linspace(u.min(), u.max(), 200)
+                x_new, y_new = splev(u_new, tck, der=0)
+                ref_path = np.array([x_new, y_new]).transpose()
+                reference = resample_polyline(ref_path, 1)
             # remove duplicated vertices in reference path
             _, idx = np.unique(reference, axis=0, return_index=True)
             reference = reference[np.sort(idx)]
@@ -91,6 +108,7 @@ class CoordinateSystem:
         self._ref_curv = compute_curvature_from_polyline(self.reference)
         self._ref_theta = np.unwrap(compute_orientation_from_polyline(self.reference))
         self._ref_curv_d = np.gradient(self._ref_curv, self._ref_pos)
+        self._ref_curv_dd = np.gradient(self._ref_curv_d, self._ref_pos)
 
     @property
     def reference(self) -> np.ndarray:
@@ -130,6 +148,11 @@ class CoordinateSystem:
         return self._ref_curv_d
 
     @property
+    def ref_cruv_dd(self) -> np.ndarray:
+        """change of curvature rate along reference path"""
+        return self._ref_curv_dd
+
+    @property
     def ref_theta(self) -> np.ndarray:
         """orientation along reference path"""
         return self._ref_theta
@@ -154,21 +177,29 @@ class CoordinateSystem:
         plt.suptitle("Reference path states")
 
         # orientation theta
-        plt.subplot(3, 1, 1)
+        plt.subplot(4, 1, 1)
         plt.plot(self.ref_pos, self.ref_theta, color="k")
         plt.xlabel("s")
         plt.ylabel("theta_ref")
 
         # curvature kappa
-        plt.subplot(3, 1, 2)
+        plt.subplot(4, 1, 2)
         plt.plot(self.ref_pos, self.ref_curv, color="k")
         plt.xlabel("s")
         plt.ylabel("kappa_ref")
 
         # curvature rate kappa_dot
-        plt.subplot(3, 1, 3)
+        plt.subplot(4, 1, 3)
         plt.plot(self.ref_pos, self.ref_curv_d, color="k")
         plt.xlabel("s")
         plt.ylabel("kappa_dot_ref")
+        plt.ylim(-0.1, 0.1)
+
+        # change curvature rate kappa_dot_dot
+        plt.subplot(4, 1, 4)
+        plt.plot(self.ref_pos, self.ref_cruv_dd, color="k")
+        plt.xlabel("s")
+        plt.ylabel("kappa_dot_dot_ref")
+        plt.ylim(-0.1, 0.1)
         plt.tight_layout()
         plt.show()

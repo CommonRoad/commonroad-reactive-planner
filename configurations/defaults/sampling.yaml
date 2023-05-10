@@ -1,3 +1,12 @@
+# choose sampling method
+# 1: sampling in fixed intervals (see above)
+# 2: adaptive corridor sampling (requires CommonRoad-Reach)
+sampling_method: 1
+
+# number of sampling levels
+num_sampling_levels: 4
+
+# sampling in fixed intervals
 # minimum time sampling in s (t_max is given by planning horizon)
 t_min: 0.4
 # velocity sampling interval

@@ -1,6 +1,6 @@
 __author__ = "Gerald Würsching"
 __copyright__ = "TUM Cyber-Physical Systems Group"
-__version__ = "0.5"
+__version__ = "1.0"
 __maintainer__ = "Gerald Würsching"
 __email__ = "commonroad@lists.lrz.de"
 __status__ = "Beta"
@@ -19,21 +19,67 @@ from commonroad.common.solution import Solution, PlanningProblemSolution, Vehicl
 
 from commonroad_dc.feasibility.feasibility_checker import VehicleDynamics, \
     state_transition_feasibility, position_orientation_objective, position_orientation_feasibility_criteria, _angle_diff
+from commonroad_dc.feasibility.solution_checker import valid_solution
 
 from commonroad_rp.configuration import Configuration
-from commonroad_rp.reactive_planner import CartesianState
+from commonroad_rp.reactive_planner import ReactivePlannerState
+from commonroad_rp.utility.visualization import plot_final_trajectory
 
 
-def create_full_solution_trajectory(config: Configuration, state_list: List[CartesianState]) -> Trajectory:
+def run_evaluation(config: Configuration, state_list: List[ReactivePlannerState], input_list: List[InputState]):
+    """
+    Creates a CommonRoad solution Trajectory from the planning results, evaluates state and input feasibility, plots
+    solution Trajectory
+    :return cr_solution: Planner solution as CR solution object
+    :return feasibility_list: List[Bool] indicating feasibility of each state transition
+    """
+    ego_solution_trajectory = create_full_solution_trajectory(config, state_list)
+    cr_solution, feasibility_list = evaluate_results(config, ego_solution_trajectory, input_list)
+    plot_final_trajectory(config.scenario, config.planning_problem, ego_solution_trajectory.state_list, config)
+
+    return cr_solution, feasibility_list
+
+
+def evaluate_results(config: Configuration, ego_solution_trajectory, record_input_list):
+    """
+    Solution is evaluated via input reconstruction from commonroad_dc.feasibility.feasibility_checker
+    For each state transition the inputs are reconstructed. To check feasibility, the reconstructed input is used for
+    forward simulation and the error between the forward simulated (reconstructed) state and the planned state is
+    evaluated
+    """
+    # create CR solution
+    solution = create_planning_problem_solution(config, ego_solution_trajectory, config.scenario,
+                                                config.planning_problem)
+
+    # check feasibility
+    # reconstruct inputs (state transition optimizations)
+    feasible, reconstructed_inputs = reconstruct_inputs(config, solution.planning_problem_solutions[0])
+
+    # reconstruct states from inputs
+    reconstructed_states = reconstruct_states(config, ego_solution_trajectory.state_list, reconstructed_inputs)
+
+    # check acceleration correctness
+    check_acceleration(config, ego_solution_trajectory.state_list, plot=True)
+
+    # plot
+    plot_states(config, ego_solution_trajectory.state_list, reconstructed_states, plot_bounds=False)
+    plot_inputs(config, record_input_list[1:], reconstructed_inputs, plot_bounds=True)
+
+    # CR validity check
+    print("Feasibility Check Result: ")
+    print(valid_solution(config.scenario, config.planning_problem_set, solution))
+
+    return solution, feasible
+
+
+def create_full_solution_trajectory(config: Configuration, state_list: List[ReactivePlannerState]) -> Trajectory:
     """
     Create CR solution trajectory from recorded state list of the reactive planner
     Positions are shifted from rear axis to vehicle center due to CR position convention
     """
     new_state_list = list()
     for state in state_list:
-        new_state_list.append(
-            state.translate_rotate(np.array([config.vehicle.rear_ax_distance * np.cos(state.orientation),
-                                             config.vehicle.rear_ax_distance * np.sin(state.orientation)]), 0.0))
+        new_state_list.append(state.shift_positions_to_center(config.vehicle.wb_rear_axle))
     return Trajectory(initial_time_step=new_state_list[0].time_step, state_list=new_state_list)
 
 
@@ -43,7 +89,7 @@ def create_planning_problem_solution(config: Configuration, solution_trajectory:
     Creates CommonRoad Solution object
     """
     pps = PlanningProblemSolution(planning_problem_id=planning_problem.planning_problem_id,
-                                  vehicle_type=VehicleType(config.vehicle.cr_vehicle_id),
+                                  vehicle_type=VehicleType(config.vehicle.id_type_vehicle),
                                   vehicle_model=VehicleModel.KS,
                                   cost_function=CostFunction.JB1,
                                   trajectory=solution_trajectory)
@@ -53,9 +99,9 @@ def create_planning_problem_solution(config: Configuration, solution_trajectory:
     return solution
 
 
-def reconstruct_states(config: Configuration, states: List[Union[CartesianState, TraceState]], inputs: List[InputState]):
+def reconstruct_states(config: Configuration, states: List[Union[ReactivePlannerState, TraceState]], inputs: List[InputState]):
     """reconstructs states from a given list of inputs by forward simulation"""
-    vehicle_dynamics = VehicleDynamics.from_model(VehicleModel.KS, VehicleType(config.vehicle.cr_vehicle_id))
+    vehicle_dynamics = VehicleDynamics.from_model(VehicleModel.KS, VehicleType(config.vehicle.id_type_vehicle))
 
     x_sim_list = list()
     x_sim_list.append(states[0])
@@ -88,7 +134,7 @@ def reconstruct_inputs(config: Configuration, pps: PlanningProblemSolution):
     return feasible_state_list, reconstructed_inputs
 
 
-def check_acceleration(config: Configuration, state_list:  List[Union[CartesianState, TraceState]], plot=False):
+def check_acceleration(config: Configuration, state_list:  List[Union[ReactivePlannerState, TraceState]], plot=False):
     """Checks whether the computed acceleration the trajectory matches the velocity difference (dv/dt), i.e., assuming
     piecewise constant acceleration input"""
     # computed acceleration of trajectory
@@ -118,7 +164,7 @@ def check_acceleration(config: Configuration, state_list:  List[Union[CartesianS
         plt.show()
 
 
-def plot_states(config: Configuration, state_list: List[Union[CartesianState, TraceState]], reconstructed_states=None, plot_bounds=False):
+def plot_states(config: Configuration, state_list: List[Union[ReactivePlannerState, TraceState]], reconstructed_states=None, plot_bounds=False):
     """
     Plots states of trajectory from a given state_list
     state_list must contain the following states: steering_angle, velocity, orientation and yaw_rate
@@ -175,7 +221,7 @@ def plot_states(config: Configuration, state_list: List[Union[CartesianState, Tr
              [state.yaw_rate for state in state_list], color="black", label="planned")
     reconstructed_yaw_rate = np.diff(np.array([state.orientation for state in reconstructed_states])) / config.planning.dt
     reconstructed_yaw_rate = np.insert(reconstructed_yaw_rate, 0, state_list[0].yaw_rate, axis=0)
-    plt.plot(list(range(len(state_list))),
+    plt.plot(list(range(len(reconstructed_yaw_rate))),
              reconstructed_yaw_rate, color="blue", label="reconstructed")
     plt.ylabel("theta_dot")
     plt.tight_layout()
@@ -195,8 +241,8 @@ def plot_states(config: Configuration, state_list: List[Union[CartesianState, Tr
                                                 for i in range(len(state_list))], color="black")
         plt.ylabel("y error")
         plt.subplot(5, 1, 3)
-        plt.plot(list(range(len(state_list))), [abs(_angle_diff(state_list[i].orientation,
-                                                                reconstructed_states[i].orientation))
+        plt.plot(list(range(len(state_list))), [abs(_angle_diff(state_list[i].steering_angle,
+                                                                reconstructed_states[i].steering_angle))
                                                 for i in range(len(state_list))], color="black")
         plt.ylabel("delta error")
         plt.subplot(5, 1, 4)
@@ -204,8 +250,8 @@ def plot_states(config: Configuration, state_list: List[Union[CartesianState, Tr
                                                 for i in range(len(state_list))], color="black")
         plt.ylabel("velocity error")
         plt.subplot(5, 1, 5)
-        plt.plot(list(range(len(state_list))), [abs(_angle_diff(state_list[i].steering_angle,
-                                                                reconstructed_states[i].steering_angle))
+        plt.plot(list(range(len(state_list))), [abs(_angle_diff(state_list[i].orientation,
+                                                                reconstructed_states[i].orientation))
                                                 for i in range(len(state_list))], color="black")
         plt.ylabel("theta error")
         plt.tight_layout()

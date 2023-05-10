@@ -22,9 +22,15 @@ For the development IDE we suggest [PyCharm](http://www.jetbrains.com/pycharm/)
 
 
 
-### Example script
+### Example scripts
 
-An example script `run_planner.py` is provided, which plans intended trajectories for motion planning
+**Main example script** `run_planner.py`: run the base version of the reactive planner on a given CommonRoad scenario
+
+We provide two additional scripts which use the planner in conjunction with other CR tools:
+* `run_planner_corridors.py`: requires [CommonRoad-Reach](https://commonroad.in.tum.de/tools/commonroad-reach) 
+  for sampling in corridors
+* `run_planner_spot.py`: requires [SPOT](https://commonroad.in.tum.de/tools/spot) for computing occupancy sets 
+  of other traffic participants before planning
 
 
 ## Literature
