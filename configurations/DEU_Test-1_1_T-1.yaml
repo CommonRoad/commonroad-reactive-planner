@@ -8,7 +8,7 @@ vehicle:
   id_type_vehicle: 2
 
 sampling:
-  sampling_method: 2
+  sampling_method: 1
   t_min: 0.4
 
 debug:
