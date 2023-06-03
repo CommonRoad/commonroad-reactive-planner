@@ -296,10 +296,7 @@ class ReactivePlanner(object):
         else:
             self._desired_speed = desired_velocity if desired_velocity is not None else self._desired_speed
         if not stopping:
-            if current_speed is not None:
-                reference_speed = current_speed
-            else:
-                reference_speed = self._desired_speed
+            reference_speed = current_speed if current_speed is not None else self._desired_speed
 
             min_v = max(0, reference_speed - (0.125 * self.horizon * self.vehicle_params.a_max))
             # max_v = max(min_v + 5.0, reference_speed + (0.25 * self.horizon * self.constraints.a_max))
@@ -466,12 +463,9 @@ class ReactivePlanner(object):
             cart_states['velocity'] = trajectory.cartesian.v[i]
             cart_states['acceleration'] = trajectory.cartesian.a[i]
             if i > 0:
-                # TODO: compute yaw rate via kappa[i] * v[i]
                 cart_states['yaw_rate'] = (trajectory.cartesian.theta[i] - trajectory.cartesian.theta[i-1]) / self.dt
-                # cart_states['yaw_rate'] = trajectory.cartesian.kappa[i] * trajectory.cartesian.v[i]
             else:
                 cart_states['yaw_rate'] = self.x_0.yaw_rate
-            # TODO Check why computation with yaw rate was faulty ??
             cart_states['steering_angle'] = np.arctan2(self.vehicle_params.wheelbase *
                                                        trajectory.cartesian.kappa[i], 1.0)
             cart_list.append(ReactivePlannerState(**cart_states))
@@ -558,7 +552,7 @@ class ReactivePlanner(object):
 
         if optimal_trajectory is None and self.x_0.velocity <= 0.1:
             logger.info("Planning standstill for the current scenario")
-            optimal_trajectory = self._compute_standstill_trajectory(self.x_0, x_0_lon, x_0_lat)
+            optimal_trajectory = self._compute_standstill_trajectory()
 
         # check if feasible trajectory exists -> emergency mode
         if optimal_trajectory is None:
@@ -584,22 +578,20 @@ class ReactivePlanner(object):
 
         return planning_result
 
-    def _compute_standstill_trajectory(self, x_0, x_0_lon, x_0_lat) -> TrajectorySample:
-        # TODO This method needs to be checked again
+    def _compute_standstill_trajectory(self) -> TrajectorySample:
         """
         Computes a standstill trajectory if the vehicle is already at velocity 0
-        :param x_0: The current state of the ego vehicle
-        :param x_0_lon: The longitudinal state in curvilinear coordinates
-        :param x_0_lat: The lateral state in curvilinear coordinates
         :return: The TrajectorySample for a standstill trajectory
         """
+        # current planner initial state
+        x_0 = self.x_0
+        x_0_lon, x_0_lat = self.x_0_cl
+
         # create artificial standstill trajectory
-        logger.info('Adding standstill trajectory')
-        logger.info("Initial state: x_0 is {}".format(x_0))
-        logger.info("Longitudinal initial state is x_0_lon is {}".format(x_0_lon))
-        logger.info("Lateral initial state is x_0_lat is {}".format(x_0_lat))
-        for i in x_0_lon:
-            print("The element {} of format {} is a real number? {}".format(i, type(i), is_real_number(i)))
+        logger.info("Adding standstill trajectory")
+        logger.info(f"Initial state: x_0 is {x_0}")
+        logger.info(f"Longitudinal initial state is x_0_lon is {x_0_lon}")
+        logger.info("fLateral initial state is x_0_lat is {x_0_lat}")
 
         # create lon and lat polynomial
         traj_lon = QuarticTrajectory(tau_0=0, delta_tau=self.horizon, x_0=np.asarray(x_0_lon),
@@ -607,15 +599,27 @@ class ReactivePlanner(object):
         traj_lat = QuinticTrajectory(tau_0=0, delta_tau=self.horizon, x_0=np.asarray(x_0_lat),
                                      x_d=np.array([x_0_lat[0], 0, 0]))
 
-        # create Cartesian and Curvilinear trajectory
+        # compute initial ego curvature (global coordinates) from initial steering angle
+        kappa_0 = np.tan(x_0.steering_angle) / self.vehicle_params.wheelbase
+
+        # create Trajectory sample
         p = TrajectorySample(self.horizon, self.dt, traj_lon, traj_lat)
+
+        # create Cartesian trajectory sample
         p.cartesian = CartesianSample(np.repeat(x_0.position[0], self.N), np.repeat(x_0.position[1], self.N),
                                       np.repeat(x_0.orientation, self.N), np.repeat(0, self.N),
-                                      np.repeat(0, self.N), np.repeat(0, self.N), np.repeat(0, self.N),
+                                      np.repeat(0, self.N), np.repeat(kappa_0, self.N), np.repeat(0, self.N),
                                       current_time_step=self.N)
 
+        # create Curvilinear trajectory sample
+        # compute orientation in curvilinear coordinate frame
+        s_idx = np.argmax(self._co.ref_pos > x_0_lon[0]) - 1
+        ref_theta = np.unwrap(self._co.ref_theta)
+        theta_cl = x_0.orientation - interpolate_angle(x_0_lon[0], self._co.ref_pos[s_idx], self._co.ref_pos[s_idx + 1],
+                                                       ref_theta[s_idx], ref_theta[s_idx + 1])
+
         p.curvilinear = CurviLinearSample(np.repeat(x_0_lon[0], self.N), np.repeat(x_0_lat[0], self.N),
-                                          np.repeat(x_0.orientation, self.N), dd=np.repeat(x_0_lat[1], self.N),
+                                          np.repeat(theta_cl, self.N), dd=np.repeat(x_0_lat[1], self.N),
                                           ddd=np.repeat(x_0_lat[2], self.N), ss=np.repeat(x_0_lon[1], self.N),
                                           sss=np.repeat(x_0_lon[2], self.N), current_time_step=self.N)
         return p

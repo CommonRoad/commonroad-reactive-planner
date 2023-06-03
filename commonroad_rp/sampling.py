@@ -279,12 +279,22 @@ class CorridorSampling(SamplingSpace):
         self._v_min = vel_sampling.low
         self._v_max = vel_sampling.up
 
-    def set_dict_number_of_samples(self, n_min: int = 3):
-        """store number of samples per sampling level"""
-        n = n_min
-        for i in range(self.num_sampling_levels):
-            self._dict_level_to_num_samples[i] = n
-            n = (n * 2) - 1
+    def set_dict_number_of_samples(self, n_min: int = 3, dict_level_to_num_samples: dict = None):
+        """
+        store number of samples per sampling level
+        :param n_min: minimum number of samples in lowest level (default 3)
+        :param dict_level_to_num_samples: directly set dictionary with numbers of samples per level
+        """
+        if dict_level_to_num_samples is not None:
+            for level in range(self.num_sampling_levels):
+                assert level in dict_level_to_num_samples.keys(), f"<SamplingSpace.set_dict_number_of_samples()>:" \
+                                                                  f"input dictionary does not contain sampling level:" \
+                                                                  f"{level}"
+        else:
+            n = n_min
+            for i in range(self.num_sampling_levels):
+                self._dict_level_to_num_samples[i] = n
+                n = (n * 2) - 1
 
     def generate_trajectories_at_level(self, level_sampling, x_0_lon, x_0_lat, low_vel_mode: bool) \
             -> List[TrajectorySample]:
