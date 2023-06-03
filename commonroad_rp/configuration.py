@@ -104,13 +104,19 @@ class GeneralConfiguration(ConfigurationBase):
 class PlanningConfiguration(ConfigurationBase):
     """Class to store all planning configurations"""
     def __init__(self, config: Union[ListConfig, DictConfig]):
+        # general
         self.dt = config.dt
         self.time_steps_computation = config.time_steps_computation
         self.replanning_frequency = config.replanning_frequency
         self.mode = config.mode
+        self.low_vel_mode_threshold = config.low_vel_mode_threshold
+
+        # collision checks
         self.continuous_collision_check = config.continuous_collision_check
         self.factor = config.factor
-        self.low_vel_mode_threshold = config.low_vel_mode_threshold
+
+        # kinematic checks
+        self.constraints_to_check = config.constraints_to_check
 
         # initial planning state set during init
         self.state_initial: InitialState = Optional[None]

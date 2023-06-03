@@ -12,3 +12,6 @@ continuous_collision_check: False
 factor: 1
 # velocity threshold (in m/s) for switching to low velocity mode
 low_vel_mode_threshold: 4
+# kinematic constraints to check.
+# The list can contain these constraints: velocity, acceleration, kappa, kappa_dot, yaw_rate (Exact naming important!!)
+constraints_to_check: ["velocity", "acceleration", "kappa", "kappa_dot", "yaw_rate"]

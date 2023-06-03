@@ -75,6 +75,7 @@ class ReactivePlanner(object):
         # statistics
         self._infeasible_count_collision = 0
         self._infeasible_count_kinematics = 0
+        self._infeasible_reason_dict = dict()
         self._optimal_cost = 0
         self._planning_times_list = list()
         self._record_state_list: List[ReactivePlannerState] = list()
@@ -127,6 +128,11 @@ class ReactivePlanner(object):
         return self._infeasible_count_kinematics
 
     @property
+    def infeasible_reason_dict(self) -> dict:
+        """Dictionary to store number of kinematically infeasible trajectories for each checked kinematic constraint"""
+        return self._infeasible_reason_dict
+
+    @property
     def optimal_cost(self) -> float:
         """Cost of the optimal trajectory"""
         return self._optimal_cost
@@ -171,9 +177,7 @@ class ReactivePlanner(object):
             assert self.config is not None, "<ReactivePlanner.reset(). No Configuration object provided>"
 
         # reset statistics
-        self._optimal_cost = 0
-        self._infeasible_count_kinematics = 0
-        self._infeasible_count_collision = 0
+        self._reset_statistics()
 
         # reset collision checker
         if collision_checker is None:
@@ -339,6 +343,17 @@ class ReactivePlanner(object):
                                  steering_angle_speed=steering_angle_speed)
         self.record_input_list.append(input_state)
 
+    def _reset_statistics(self):
+        """resets internal statistics/counter variables used for debugging at the start of each planning cycle"""
+        # set all counters to zero
+        self._optimal_cost = 0
+        self._infeasible_count_kinematics = 0
+        self._infeasible_count_collision = 0
+
+        # reset dictionary for counting infeasible trajectories for each constraint
+        for constraint in self.config.planning.constraints_to_check:
+            self._infeasible_reason_dict[constraint] = 0
+
     def _create_trajectory_bundle(self, x_0_lon: np.array, x_0_lat: np.array, samp_level: int) -> TrajectoryBundle:
         """
         Plans trajectory samples that try to reach a certain velocity and samples in this domain.
@@ -451,7 +466,9 @@ class ReactivePlanner(object):
             cart_states['velocity'] = trajectory.cartesian.v[i]
             cart_states['acceleration'] = trajectory.cartesian.a[i]
             if i > 0:
+                # TODO: compute yaw rate via kappa[i] * v[i]
                 cart_states['yaw_rate'] = (trajectory.cartesian.theta[i] - trajectory.cartesian.theta[i-1]) / self.dt
+                # cart_states['yaw_rate'] = trajectory.cartesian.kappa[i] * trajectory.cartesian.v[i]
             else:
                 cart_states['yaw_rate'] = self.x_0.yaw_rate
             # TODO Check why computation with yaw rate was faulty ??
@@ -532,6 +549,8 @@ class ReactivePlanner(object):
             logger.info("===== Planning result =====")
             logger.info(f"Total checking time: {time.time() - t0:.7f}")
             logger.info(f"Rejected {self.infeasible_count_kinematics} infeasible trajectories due to kinematics")
+            for constraint in self.config.planning.constraints_to_check:
+                logger.debug(f"\tInfeasible {constraint}: {self._infeasible_reason_dict[constraint]}")
             logger.info(f"Rejected {self.infeasible_count_collision} infeasible trajectories due to collisions")
 
             # increase sampling level (i.e., density) if no optimal trajectory could be found
@@ -680,11 +699,11 @@ class ReactivePlanner(object):
             if not self._draw_traj_set:
                 # pre-filter with quick underapproximative check for feasibility
                 if np.any(np.abs(s_acceleration) > self.vehicle_params.a_max):
-                    logger.debug(f"Acceleration {np.max(np.abs(s_acceleration))}")
+                    self._infeasible_reason_dict["acceleration"] += 1
                     feasible = False
                     continue
                 if np.any(s_velocity < -0.1):
-                    logger.debug(f"Velocity {min(s_velocity)} at step")
+                    self._infeasible_reason_dict["velocity"] += 1
                     feasible = False
                     continue
 
@@ -778,44 +797,9 @@ class ReactivePlanner(object):
                         k_r_d * d[i] + k_r * dp))
 
                 # CHECK KINEMATIC CONSTRAINTS (remove infeasible trajectories)
-                # velocity constraint
-                if v[i] < -0.1:
-                    feasible = False
-                    trajectory.feasibility_label = FeasibilityStatus.INFEASIBLE_KINEMATIC
-                    if not self._draw_traj_set:
-                        break
-                # curvature constraint
-                kappa_max = np.tan(self.vehicle_params.delta_max) / self.vehicle_params.wheelbase
-                if abs(kappa_gl[i]) > kappa_max:
-                    feasible = False
-                    trajectory.feasibility_label = FeasibilityStatus.INFEASIBLE_KINEMATIC
-                    if not self._draw_traj_set:
-                        break
-                # yaw rate (orientation change) constraint
-                yaw_rate = (theta_gl[i] - theta_gl[i-1]) / self.dt if i > 0 else 0.
-                theta_dot_max = kappa_max * v[i]
-                if abs(yaw_rate) > theta_dot_max:
-                    feasible = False
-                    trajectory.feasibility_label = FeasibilityStatus.INFEASIBLE_KINEMATIC
-                    if not self._draw_traj_set:
-                        break
-                # curvature rate constraint
-                # TODO: chck if kappa_gl[i-1] ??
-                steering_angle = np.arctan2(self.vehicle_params.wheelbase * kappa_gl[i], 1.0)
-                kappa_dot_max = self.vehicle_params.v_delta_max / (self.vehicle_params.wheelbase *
-                                                                   math.cos(steering_angle) ** 2)
-                kappa_dot = (kappa_gl[i] - kappa_gl[i - 1]) / self.dt if i > 0 else 0.
-                if abs(kappa_dot) > kappa_dot_max:
-                    feasible = False
-                    trajectory.feasibility_label = FeasibilityStatus.INFEASIBLE_KINEMATIC
-                    if not self._draw_traj_set:
-                        break
-                # acceleration constraint (considering switching velocity, see vehicle models documentation)
-                v_switch = self.vehicle_params.v_switch
-                a_max = self.vehicle_params.a_max * v_switch / v[i] if v[i] > v_switch else self.vehicle_params.a_max
-                a_min = -self.vehicle_params.a_max
-                if not a_min <= a[i] <= a_max:
-                    feasible = False
+                if feasible:
+                    feasible = self._check_constraints(v, kappa_gl, theta_gl, a, i)
+                if not feasible:
                     trajectory.feasibility_label = FeasibilityStatus.INFEASIBLE_KINEMATIC
                     if not self._draw_traj_set:
                         break
@@ -885,6 +869,54 @@ class ReactivePlanner(object):
         else:
             return feasible_trajectories, infeasible_trajectories
 
+    def _check_constraints(self, v: np.ndarray, kappa_gl: np.ndarray, theta_gl: np.ndarray, a: np.ndarray, i: int) \
+            -> bool:
+        """
+        Checks kinematic constraints for a sampled trajectory at time index i
+        Constraints which should be checked can be specified in config.planning.constraints_to_check
+        :return: Boolean stating feasibility for the given constraint set
+        """
+        # velocity constraint
+        if "velocity" in self.config.planning.constraints_to_check:
+            if v[i] < -0.1:
+                self._infeasible_reason_dict["velocity"] += 1
+                return False
+
+        # curvature constraint
+        kappa_max = np.tan(self.vehicle_params.delta_max) / self.vehicle_params.wheelbase
+        if "kappa" in self.config.planning.constraints_to_check:
+            if abs(kappa_gl[i]) > kappa_max:
+                self._infeasible_reason_dict["kappa"] += 1
+                return False
+
+        # yaw rate (orientation change) constraint
+        if "yaw_rate" in self.config.planning.constraints_to_check:
+            yaw_rate = (theta_gl[i] - theta_gl[i - 1]) / self.dt if i > 0 else 0.
+            theta_dot_max = kappa_max * v[i]
+            if abs(yaw_rate) > theta_dot_max:
+                self._infeasible_reason_dict["yaw_rate"] += 1
+                return False
+
+        # curvature rate constraint
+        if "kappa_dot" in self.config.planning.constraints_to_check:
+            steering_angle = np.arctan2(self.vehicle_params.wheelbase * kappa_gl[i], 1.0)
+            kappa_dot_max = self.vehicle_params.v_delta_max / (self.vehicle_params.wheelbase *
+                                                               math.cos(steering_angle) ** 2)
+            kappa_dot = (kappa_gl[i] - kappa_gl[i - 1]) / self.dt if i > 0 else 0.
+            if abs(kappa_dot) > kappa_dot_max:
+                self._infeasible_reason_dict["kappa_dot"] += 1
+                return False
+
+        # acceleration constraint (considering switching velocity, see vehicle models documentation)
+        if "acceleration" in self.config.planning.constraints_to_check:
+            v_switch = self.vehicle_params.v_switch
+            a_max = self.vehicle_params.a_max * v_switch / v[i] if v[i] > v_switch else self.vehicle_params.a_max
+            a_min = -self.vehicle_params.a_max
+            if not a_min <= a[i] <= a_max:
+                self._infeasible_reason_dict["acceleration"] += 1
+                return False
+        return True
+
     def _check_collisions(self, trajectory_bundle: TrajectoryBundle) -> Union[TrajectorySample, None]:
         """
         Lazy check: Iterates over the sorted list of trajectory samples and returns the first non-colliding sample.
@@ -939,8 +971,8 @@ class ReactivePlanner(object):
         """
         logger.info("===== Checking trajectories ... =====")
         # reset statistics
-        self._infeasible_count_collision = 0
-        self._infeasible_count_kinematics = 0
+        self._reset_statistics()
+
         num_workers = self.config.debug.num_workers
 
         # ==== Kinematic checking
