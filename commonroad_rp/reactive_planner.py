@@ -272,7 +272,7 @@ class ReactivePlanner(object):
         :param delta_d_max: lateral distance higher than reference
         """
         self.sampling_space.samples_d = PositionSampling(delta_d_min, delta_d_max, self._sampling_level)
-        logger.debug("Sampled interval of position: {} m - {} m".format(delta_d_min, delta_d_max))
+        logger.debug("Sampled interval of lateral position: {} m - {} m".format(delta_d_min, delta_d_max))
 
     def set_v_sampling_parameters(self, v_min, v_max):
         """
@@ -295,6 +295,11 @@ class ReactivePlanner(object):
             self._desired_speed = retrieve_desired_velocity_from_pp(self.config.planning_problem)
         else:
             self._desired_speed = desired_velocity if desired_velocity is not None else self._desired_speed
+        
+        # check if desired speed is valid
+        assert self._desired_speed >= 0.0, f"<ReactivePlanner.set_desired_velocity(): desired speed has to be " \
+                                           f"positive. Provided speed{self._desired_speed}>"
+
         if not stopping:
             reference_speed = current_speed if current_speed is not None else self._desired_speed
 
@@ -591,11 +596,11 @@ class ReactivePlanner(object):
         logger.info("Adding standstill trajectory")
         logger.info(f"Initial state: x_0 is {x_0}")
         logger.info(f"Longitudinal initial state is x_0_lon is {x_0_lon}")
-        logger.info("fLateral initial state is x_0_lat is {x_0_lat}")
+        logger.info(f"Lateral initial state is x_0_lat is {x_0_lat}")
 
         # create lon and lat polynomial
         traj_lon = QuarticTrajectory(tau_0=0, delta_tau=self.horizon, x_0=np.asarray(x_0_lon),
-                                     x_d=np.array([self._desired_speed, 0]))
+                                     x_d=np.array([0, 0]))
         traj_lat = QuinticTrajectory(tau_0=0, delta_tau=self.horizon, x_0=np.asarray(x_0_lat),
                                      x_d=np.array([x_0_lat[0], 0, 0]))
 
@@ -795,7 +800,7 @@ class ReactivePlanner(object):
                 kappa_cl[i] = kappa_gl[i] - k_r
 
                 # compute (global) Cartesian velocity
-                v[i] = abs(s_velocity[i] * (oneKrD / (math.cos(theta_cl[i]))))
+                v[i] = s_velocity[i] * (oneKrD / (math.cos(theta_cl[i])))
 
                 # compute (global) Cartesian acceleration
                 a[i] = s_acceleration[i] * oneKrD / cosTheta + ((s_velocity[i] ** 2) / cosTheta) * (
@@ -899,7 +904,7 @@ class ReactivePlanner(object):
         if "yaw_rate" in self.config.planning.constraints_to_check:
             yaw_rate = (theta_gl[i] - theta_gl[i - 1]) / self.dt if i > 0 else 0.
             theta_dot_max = kappa_max * v[i]
-            if abs(yaw_rate) > theta_dot_max:
+            if abs(round(yaw_rate, 5)) > theta_dot_max:
                 self._infeasible_reason_dict["yaw_rate"] += 1
                 return False
 
