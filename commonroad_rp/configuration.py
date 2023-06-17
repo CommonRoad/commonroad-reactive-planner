@@ -166,8 +166,13 @@ class SamplingConfiguration(ConfigurationBase):
         self.t_min = config.t_min
         self.v_min = config.v_min
         self.v_max = config.v_max
+        self.s_min = config.s_min
+        self.s_max = config.s_max
         self.d_min = config.d_min
         self.d_max = config.d_max
+
+        # longitudinal sampling mode (velocity or position sampling)
+        self.longitudinal_mode = config.longitudinal_mode
 
         # number of sampling levels
         self.num_sampling_levels = config.num_sampling_levels

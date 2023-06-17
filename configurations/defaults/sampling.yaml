@@ -3,15 +3,27 @@
 # 2: adaptive corridor sampling (requires CommonRoad-Reach)
 sampling_method: 1
 
+# choose longitudinal driving mode
+# "velocity_keeping": samples around a desired lon. velocity; (default mode)
+#                     generates QUARTIC polynomials in longitudinal direction
+# "stopping": samples around a desired lon. position (stop point);
+#             generates QUINTIC polynomials in longitudinal direction,
+#             sets target lon. velocity to 0.0
+longitudinal_mode: "velocity_keeping"
+
 # number of sampling levels
 num_sampling_levels: 4
 
 # sampling in fixed intervals
-# minimum time sampling in s (t_max is given by planning horizon)
+# minimum time sampling in [s] (t_max is given by planning horizon)
 t_min: 0.4
-# velocity sampling interval
+# longitudinal velocity sampling interval in [m/s] (interval determined by setting desired velocity)
 v_min: 0
 v_max: 0
-# lateral sampling interval
+# longitudinal position sampling interval around a desired stop point in [m]
+# (interval determined by setting desired stop position)
+s_min: -1
+s_max: 1
+# lateral sampling interval around reference path in [m]
 d_min: -3
 d_max: 3

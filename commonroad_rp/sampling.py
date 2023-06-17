@@ -128,6 +128,7 @@ class SamplingSpace(ABC):
         self._samples_t: Optional[TimeSampling] = None
         self._samples_d: Optional[PositionSampling] = None
         self._samples_v: Optional[VelocitySampling] = None
+        self._samples_s: Optional[PositionSampling] = None
 
     @property
     def samples_t(self) -> TimeSampling:
@@ -175,7 +176,7 @@ class SamplingSpace(ABC):
 
 class FixedIntervalSampling(SamplingSpace):
     """
-    Class representing a sampling space with fixed intervals for sampling in t, v, d domain.
+    Class representing a sampling space with fixed intervals for sampling in t, v, d or s domain.
     """
 
     def __init__(self, config: Configuration):
@@ -188,10 +189,14 @@ class FixedIntervalSampling(SamplingSpace):
         self.dt = config.planning.dt
         self.horizon = config.planning.dt * config.planning.time_steps_computation
 
+        # longitudinal mode
+        self.longitudinal_mode = config_sampling.longitudinal_mode
+
         # initialize and pre-compute samples in t, d, v domains
         self.samples_t = TimeSampling(config_sampling.t_min, self.horizon, num_sampling_levels, self.dt)
         self.samples_d = PositionSampling(config_sampling.d_min, config_sampling.d_max, num_sampling_levels)
         self.samples_v = VelocitySampling(config_sampling.v_min, config_sampling.v_max, num_sampling_levels)
+        self.samples_s = PositionSampling(config_sampling.s_min, config_sampling.s_max, num_sampling_levels)
 
     def generate_trajectories_at_level(self, level_sampling, x_0_lon, x_0_lat, low_vel_mode: bool) \
             -> List[TrajectorySample]:
@@ -201,11 +206,14 @@ class FixedIntervalSampling(SamplingSpace):
         # initialize trajectory list
         list_trajectories = list()
 
+        # get longitudinal samples (depending if velocity or position sampling is used)
+        longitudinal_samples = self._get_lon_samples(level_sampling)
+
         # Iterate over pre-stored time samples
         for t in self.samples_t.samples_at_level(level_sampling):
-            # Iterate over pre-stored velocity samples
-            for v in self.samples_v.samples_at_level(level_sampling):
-                trajectory_long = QuarticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lon), x_d=np.array([v, 0]))
+            # Iterate over pre-stored longitudinal velocity or position samples
+            for lon_sample in longitudinal_samples:
+                trajectory_long = self._generate_lon_trajectory(delta_tau=t, x_0=np.array(x_0_lon), lon_sample=lon_sample)
 
                 # Sample lateral end states (add x_0_lat to sampled states)
                 if trajectory_long.coeffs is not None:
@@ -217,16 +225,44 @@ class FixedIntervalSampling(SamplingSpace):
                             s_lon_goal = trajectory_long.evaluate_state_at_tau(t)[0] - x_0_lon[0]
                             if s_lon_goal <= 0:
                                 s_lon_goal = t
-                            trajectory_lat = QuinticTrajectory(tau_0=0, delta_tau=s_lon_goal, x_0=np.array(x_0_lat),
-                                                               x_d=end_state_lat)
+                            trajectory_lat = self._generate_lat_trajectory(delta_tau=s_lon_goal, x_0=np.array(x_0_lat),
+                                                                           x_d=end_state_lat)
                         # Switch to sampling over t for high velocities
                         else:
-                            trajectory_lat = QuinticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lat),
-                                                               x_d=end_state_lat)
+                            trajectory_lat = self._generate_lat_trajectory(delta_tau=t, x_0=np.array(x_0_lat),
+                                                                           x_d=end_state_lat)
                         if trajectory_lat.coeffs is not None:
                             trajectory_sample = TrajectorySample(self.horizon, self.dt, trajectory_long, trajectory_lat)
                             list_trajectories.append(trajectory_sample)
         return list_trajectories
+
+    def _get_lon_samples(self, level_sampling):
+        if self.longitudinal_mode == "velocity_keeping":
+            return self.samples_v.samples_at_level(level_sampling)
+        elif self.longitudinal_mode == "stopping":
+            return self.samples_s.samples_at_level(level_sampling)
+        else:
+            raise AttributeError(f"<FixedIntervalSampling>: specified longitudinal mode {self.longitudinal_mode} is"
+                                 f"invalid.")
+
+    def _generate_lon_trajectory(self, delta_tau: float, x_0: np.ndarray, lon_sample: float):
+        if self.longitudinal_mode == "velocity_keeping":
+            # longitudinal sample is a target velocity
+            # Velocity keeping mode: end state acceleration is 0.0
+            end_state_lon = np.array([lon_sample, 0])
+            return QuarticTrajectory(tau_0=0, delta_tau=delta_tau, x_0=x_0, x_d=end_state_lon)
+        elif self.longitudinal_mode == "stopping":
+            # longitudinal sample is a target position
+            # Stopping mode: end state velocity and acceleration are 0.0
+            end_state_lon = np.array([lon_sample, 0, 0])
+            return QuinticTrajectory(tau_0=0, delta_tau=delta_tau, x_0=x_0, x_d=end_state_lon)
+        else:
+            raise AttributeError(f"<FixedIntervalSampling>: specified longitudinal mode {self.longitudinal_mode} is"
+                                 f"invalid.")
+
+    @staticmethod
+    def _generate_lat_trajectory(delta_tau: float, x_0: np.ndarray, x_d: np.ndarray):
+        return QuinticTrajectory(tau_0=0, delta_tau=delta_tau, x_0=x_0, x_d=x_d)
 
 
 class CorridorSampling(SamplingSpace):

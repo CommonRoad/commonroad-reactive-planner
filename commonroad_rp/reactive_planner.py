@@ -86,6 +86,7 @@ class ReactivePlanner(object):
 
         # desired speed
         self._desired_speed = None
+        self._desired_lon_position = None
         # threshold for low velocity mode
         self._low_vel_mode = False
 
@@ -272,7 +273,7 @@ class ReactivePlanner(object):
         :param delta_d_max: lateral distance higher than reference
         """
         self.sampling_space.samples_d = PositionSampling(delta_d_min, delta_d_max, self._sampling_level)
-        logger.debug("Sampled interval of position: {} m - {} m".format(delta_d_min, delta_d_max))
+        logger.debug("Sampled interval of lateral position: {} m - {} m".format(delta_d_min, delta_d_max))
 
     def set_v_sampling_parameters(self, v_min, v_max):
         """
@@ -282,6 +283,15 @@ class ReactivePlanner(object):
         """
         self.sampling_space.samples_v = VelocitySampling(v_min, v_max, self._sampling_level)
         logger.info("Sampled interval of velocity: {} m/s - {} m/s".format(v_min, v_max))
+
+    def set_s_sampling_parameters(self, s_min, s_max):
+        """
+        Sets sample parameters of longitudinal position
+        :param s_min minimum lon position sample bound
+        :param s_max maximum lon position sample bound
+        """
+        self.sampling_space.samples_s = PositionSampling(s_min, s_max, self._sampling_level)
+        logger.info("Sampled interval of longitudinal position: {} m - {} m".format(s_min, s_max))
 
     def set_desired_velocity(self, desired_velocity: float = None, current_speed: float = None, stopping: bool = False):
         """
@@ -295,6 +305,11 @@ class ReactivePlanner(object):
             self._desired_speed = retrieve_desired_velocity_from_pp(self.config.planning_problem)
         else:
             self._desired_speed = desired_velocity if desired_velocity is not None else self._desired_speed
+
+        # check if desired speed is valid
+        assert self._desired_speed >= 0.0, f"<ReactivePlanner.set_desired_velocity(): desired speed has to be " \
+                                           f"positive. Provided speed{self._desired_speed}>"
+
         if not stopping:
             reference_speed = current_speed if current_speed is not None else self._desired_speed
 
@@ -308,12 +323,45 @@ class ReactivePlanner(object):
         # Update desired velocity in cost function
         if hasattr(self.cost_function, "desired_speed"):
             self.cost_function.desired_speed = self._desired_speed
+        # update acceleration weight in cost function
+        if hasattr(self.cost_function, "w_a"):
+            self.cost_function.w_a = 5
+
+    def set_desired_lon_position(self, lon_position: float,
+                                 delta_s_min: Optional[float] = None, delta_s_max: Optional[float] = None):
+        """
+        Sets a desired longitudinal position for stopping and re-calculates s position samples
+        NOTE: Currently, the desired longitudinal position is only considered for stopping, target velocity and
+              acceleration are set to 0.0
+        :param lon_position: the desired longitudinal position (used in cost function)
+        :param delta_s_min: longitudinal distance behind lon_position
+        :param delta_s_max: longitudinal distance in front of lon_position
+        """
+        # set target longitudinal position for stopping
+        self._desired_lon_position = lon_position
+        # set target velocity for stopping
+        self._desired_speed = 0.0
+        # set up sampling interval for longitudinal position
+        if delta_s_min is None and delta_s_max is None:
+            delta_s_min = self.config.sampling.s_min
+            delta_s_max = self.config.sampling.s_max
+        self.set_s_sampling_parameters(s_min=lon_position+delta_s_min, s_max=lon_position+delta_s_max)
+
+        # Update cost function
+        if hasattr(self.cost_function, "desired_s"):
+            self.cost_function.desired_s = self._desired_lon_position
+        if hasattr(self.cost_function, "desired_speed"):
+            self.cost_function.desired_speed = self._desired_speed
+        # update acceleration weight in cost function
+        if hasattr(self.cost_function, "w_a"):
+            self.cost_function.w_a = 1
 
     def set_cost_function(self, cost_function: Type[CostFunction] = None):
         if cost_function:
             self.cost_function = cost_function
         else:
-            self.cost_function = DefaultCostFunction(self._desired_speed, desired_d=0)
+            self.cost_function = DefaultCostFunction(self._desired_speed, desired_d=0.0,
+                                                     desired_s=self._desired_lon_position)
 
     def set_sampling_space(self, sampling_space: Type[SamplingSpace] = None):
         if sampling_space:
@@ -520,7 +568,10 @@ class ReactivePlanner(object):
         logger.info(f"==== Initial state Curvilinear ====")
         logger.info(f"longitudinal state = {x_0_lon}")
         logger.info(f"lateral state = {x_0_lat}")
+        logger.info(f"==== Target states ====")
+        logger.info(f"longitudinal driving mode: {self.config.sampling.longitudinal_mode}")
         logger.info(f"desired velocity: {self._desired_speed} m/s")
+        logger.info(f"desired longitudinal position: {self._desired_lon_position} m")
 
         # initialize optimal trajectory dummy
         optimal_trajectory = None
@@ -531,40 +582,45 @@ class ReactivePlanner(object):
         # initialize bundle
         bundle = None
 
-        # sample until trajectory has been found or sampling sets are empty
-        while optimal_trajectory is None and i < self._sampling_level:
-            # sample trajectory bundle
-            bundle = self._create_trajectory_bundle(x_0_lon, x_0_lat, samp_level=i)
-
-            # find optimal trajectory (kinematic check/sorting/collision check)
-            t0 = time.time()
-            optimal_trajectory = self._get_optimal_trajectory(bundle)
-
-            logger.info("===== Planning result =====")
-            logger.info(f"Total checking time: {time.time() - t0:.7f}")
-            logger.info(f"Rejected {self.infeasible_count_kinematics} infeasible trajectories due to kinematics")
-            for constraint in self.config.planning.constraints_to_check:
-                logger.debug(f"\tInfeasible {constraint}: {self._infeasible_reason_dict[constraint]}")
-            logger.info(f"Rejected {self.infeasible_count_collision} infeasible trajectories due to collisions")
-
-            # increase sampling level (i.e., density) if no optimal trajectory could be found
-            i = i + 1
-
-        if optimal_trajectory is None and self.x_0.velocity <= 0.1:
+        # check if standstill trajectory should be planned
+        if self.x_0.velocity <= 0.1 and self._desired_speed <= 0.0001:
             logger.info("Planning standstill for the current scenario")
             optimal_trajectory = self._compute_standstill_trajectory()
-
-        # check if feasible trajectory exists -> emergency mode
-        if optimal_trajectory is None:
-            logger.warning(f"Could not find a valid trajectory")
         else:
-            self._optimal_cost = optimal_trajectory.cost
-            relative_costs = None
-            if bundle is not None:
-                relative_costs = ((optimal_trajectory.cost - bundle.min_costs().cost) /
-                                  (bundle.max_costs().cost - bundle.min_costs().cost))
-            logger.info(f"Found optimal trajectory with costs = {self._optimal_cost:.3f} "
-                        f"({relative_costs:.3f} of seen costs)")
+        # sample until trajectory has been found or sampling sets are empty
+            while optimal_trajectory is None and i < self._sampling_level:
+                # sample trajectory bundle
+                bundle = self._create_trajectory_bundle(x_0_lon, x_0_lat, samp_level=i)
+
+                # find optimal trajectory (kinematic check/sorting/collision check)
+                t0 = time.time()
+                optimal_trajectory = self._get_optimal_trajectory(bundle)
+
+                logger.info("===== Planning result =====")
+                logger.info(f"Total checking time: {time.time() - t0:.7f}")
+                logger.info(f"Rejected {self.infeasible_count_kinematics} infeasible trajectories due to kinematics")
+                for constraint in self.config.planning.constraints_to_check:
+                    logger.debug(f"\tInfeasible {constraint}: {self._infeasible_reason_dict[constraint]}")
+                logger.info(f"Rejected {self.infeasible_count_collision} infeasible trajectories due to collisions")
+
+                # increase sampling level (i.e., density) if no optimal trajectory could be found
+                i = i + 1
+
+            if optimal_trajectory is None and self.x_0.velocity <= 0.1:
+                logger.info("Planning standstill for the current scenario")
+                optimal_trajectory = self._compute_standstill_trajectory()
+
+            # check if feasible trajectory exists -> emergency mode
+            if optimal_trajectory is None:
+                logger.warning(f"Could not find a valid trajectory")
+            else:
+                self._optimal_cost = optimal_trajectory.cost
+                relative_costs = None
+                if bundle is not None:
+                    relative_costs = ((optimal_trajectory.cost - bundle.min_costs().cost) /
+                                      (bundle.max_costs().cost - bundle.min_costs().cost))
+                logger.info(f"Found optimal trajectory with costs = {self._optimal_cost:.3f} "
+                            f"({relative_costs:.3f} of seen costs)")
 
         # compute output
         planning_result = self._compute_trajectory_pair(optimal_trajectory) if optimal_trajectory is not None else None
@@ -591,11 +647,11 @@ class ReactivePlanner(object):
         logger.info("Adding standstill trajectory")
         logger.info(f"Initial state: x_0 is {x_0}")
         logger.info(f"Longitudinal initial state is x_0_lon is {x_0_lon}")
-        logger.info("fLateral initial state is x_0_lat is {x_0_lat}")
+        logger.info(f"Lateral initial state is x_0_lat is {x_0_lat}")
 
         # create lon and lat polynomial
         traj_lon = QuarticTrajectory(tau_0=0, delta_tau=self.horizon, x_0=np.asarray(x_0_lon),
-                                     x_d=np.array([self._desired_speed, 0]))
+                                     x_d=np.array([0, 0]))
         traj_lat = QuinticTrajectory(tau_0=0, delta_tau=self.horizon, x_0=np.asarray(x_0_lat),
                                      x_d=np.array([x_0_lat[0], 0, 0]))
 
@@ -606,9 +662,11 @@ class ReactivePlanner(object):
         p = TrajectorySample(self.horizon, self.dt, traj_lon, traj_lat)
 
         # create Cartesian trajectory sample
+        a = np.repeat(0.0, self.N)
+        a[1] = - self.x_0.velocity / self.dt
         p.cartesian = CartesianSample(np.repeat(x_0.position[0], self.N), np.repeat(x_0.position[1], self.N),
                                       np.repeat(x_0.orientation, self.N), np.repeat(0, self.N),
-                                      np.repeat(0, self.N), np.repeat(kappa_0, self.N), np.repeat(0, self.N),
+                                      a, np.repeat(kappa_0, self.N), np.repeat(0, self.N),
                                       current_time_step=self.N)
 
         # create Curvilinear trajectory sample
@@ -795,7 +853,7 @@ class ReactivePlanner(object):
                 kappa_cl[i] = kappa_gl[i] - k_r
 
                 # compute (global) Cartesian velocity
-                v[i] = abs(s_velocity[i] * (oneKrD / (math.cos(theta_cl[i]))))
+                v[i] = s_velocity[i] * (oneKrD / (math.cos(theta_cl[i])))
 
                 # compute (global) Cartesian acceleration
                 a[i] = s_acceleration[i] * oneKrD / cosTheta + ((s_velocity[i] ** 2) / cosTheta) * (
@@ -899,7 +957,7 @@ class ReactivePlanner(object):
         if "yaw_rate" in self.config.planning.constraints_to_check:
             yaw_rate = (theta_gl[i] - theta_gl[i - 1]) / self.dt if i > 0 else 0.
             theta_dot_max = kappa_max * v[i]
-            if abs(yaw_rate) > theta_dot_max:
+            if abs(round(yaw_rate, 5)) > theta_dot_max:
                 self._infeasible_reason_dict["yaw_rate"] += 1
                 return False
 
