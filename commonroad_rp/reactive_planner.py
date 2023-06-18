@@ -10,7 +10,7 @@ __status__ = "Beta"
 import math
 import time
 import numpy as np
-from typing import List, Union, Optional, Tuple, Type
+from typing import List, Union, Optional, Tuple, Type, Dict
 import multiprocessing
 from multiprocessing.context import Process
 import logging
@@ -57,9 +57,9 @@ class ReactivePlanner(object):
         : param config: Configuration object holding all planner-relevant configurations
         """
         # Set horizon variables
-        self.dt = config.planning.dt
-        self.N = config.planning.time_steps_computation
-        self.horizon = config.planning.dt * config.planning.time_steps_computation
+        self.dt: float = config.planning.dt
+        self.N: int = config.planning.time_steps_computation
+        self.horizon: float = config.planning.dt * config.planning.time_steps_computation
 
         # get vehicle parameters from config file
         self.vehicle_params: VehicleConfiguration = config.vehicle
@@ -73,11 +73,11 @@ class ReactivePlanner(object):
         self._cc: Optional[pycrcc.CollisionChecker] = None
 
         # statistics
-        self._infeasible_count_collision = 0
-        self._infeasible_count_kinematics = 0
-        self._infeasible_reason_dict = dict()
-        self._optimal_cost = 0
-        self._planning_times_list = list()
+        self._infeasible_count_collision: int = 0
+        self._infeasible_count_kinematics: int = 0
+        self._infeasible_reason_dict: Dict = dict()
+        self._optimal_cost: float = 0.0
+        self._planning_times_list: List = list()
         self._record_state_list: List[ReactivePlannerState] = list()
         self._record_input_list: List[InputState] = list()
 
@@ -85,8 +85,8 @@ class ReactivePlanner(object):
         self.stored_trajectories: Optional[List[TrajectorySample]] = None
 
         # desired speed
-        self._desired_speed = None
-        self._desired_lon_position = None
+        self._desired_speed: Optional[float] = None
+        self._desired_lon_position: Optional[float] = None
         # threshold for low velocity mode
         self._low_vel_mode = False
 
