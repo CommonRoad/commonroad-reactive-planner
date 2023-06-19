@@ -43,7 +43,11 @@ from commonroad_rp.utility.general import shift_orientation, retrieve_desired_ve
 from commonroad_rp.configuration import Configuration, VehicleConfiguration
 
 
+# get logger
 logger = logging.getLogger("RP_LOGGER")
+
+# precision value
+_EPS = 1e-5
 
 
 class ReactivePlanner(object):
@@ -688,6 +692,11 @@ class ReactivePlanner(object):
                 d_velocity[:traj_len] = trajectory.trajectory_lat.calc_velocity(s1, s2, s3, s4)  # lat velocity
                 d_acceleration[:traj_len] = trajectory.trajectory_lat.calc_acceleration(s1, s2, s3)  # lat acceleration
 
+            # precision for near zero velocities from evaluation of polynomial coefficients
+            # set small velocities to zero
+            s_velocity[np.abs(s_velocity) < _EPS] = 0.0
+            d_velocity[np.abs(d_velocity) < _EPS] = 0.0
+
             # Initialize trajectory state vectors
             # (Global) Cartesian positions x, y
             x = np.zeros(self.N + 1)
@@ -711,7 +720,7 @@ class ReactivePlanner(object):
                     self._infeasible_reason_dict["acceleration"] += 1
                     feasible = False
                     continue
-                if np.any(s_velocity < -0.1):
+                if np.any(s_velocity < -_EPS):
                     self._infeasible_reason_dict["velocity"] += 1
                     feasible = False
                     continue
@@ -889,7 +898,7 @@ class ReactivePlanner(object):
         """
         # velocity constraint
         if "velocity" in self.config.planning.constraints_to_check:
-            if v[i] < -0.1:
+            if v[i] < -_EPS:
                 self._infeasible_reason_dict["velocity"] += 1
                 return False
 
