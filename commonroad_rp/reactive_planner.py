@@ -419,6 +419,7 @@ class ReactivePlanner(object):
         logger.info(f"Sampling density {samp_level + 1} of {self._sampling_level}")
 
         trajectories = self.sampling_space.generate_trajectories_at_level(samp_level, x_0_lon, x_0_lat,
+                                                                          self.config.sampling.longitudinal_mode,
                                                                           self._low_vel_mode)
 
         # create trajectory bundle

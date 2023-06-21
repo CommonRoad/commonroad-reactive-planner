@@ -163,7 +163,8 @@ class SamplingSpace(ABC):
         return self._num_sampling_levels
 
     @abstractmethod
-    def generate_trajectories_at_level(self, level_sampling, x_0_lon, x_0_lat, low_vel_mode: bool) \
+    def generate_trajectories_at_level(self, level_sampling: int, x_0_lon: np.ndarray, x_0_lat: np.ndarray,
+                                       longitudinal_mode: str, low_vel_mode: bool) \
             -> List[TrajectorySample]:
         """
         Abstract method to generate a set of trajectories within the sampling space for a given sampling level.
@@ -189,8 +190,8 @@ class FixedIntervalSampling(SamplingSpace):
         self.dt = config.planning.dt
         self.horizon = config.planning.dt * config.planning.time_steps_computation
 
-        # longitudinal mode
-        self.longitudinal_mode = config_sampling.longitudinal_mode
+        # longitudinal sampling mode
+        self._longitudinal_mode = None
 
         # initialize and pre-compute samples in t, d, v domains
         self.samples_t = TimeSampling(config_sampling.t_min, self.horizon, num_sampling_levels, self.dt)
@@ -198,11 +199,15 @@ class FixedIntervalSampling(SamplingSpace):
         self.samples_v = VelocitySampling(config_sampling.v_min, config_sampling.v_max, num_sampling_levels)
         self.samples_s = PositionSampling(config_sampling.s_min, config_sampling.s_max, num_sampling_levels)
 
-    def generate_trajectories_at_level(self, level_sampling, x_0_lon, x_0_lat, low_vel_mode: bool) \
+    def generate_trajectories_at_level(self, level_sampling: int, x_0_lon: np.ndarray, x_0_lat: np.ndarray,
+                                       longitudinal_mode: str, low_vel_mode: bool) \
             -> List[TrajectorySample]:
         """
-        Implements trajectory generation method for sampling trajectories in fixed intervals in t, v, d domain
+        Implements trajectory generation method for sampling trajectories in fixed intervals in t, v, d  or s domain
         """
+        # set longitudinal sampling mode
+        self._longitudinal_mode = longitudinal_mode
+
         # initialize trajectory list
         list_trajectories = list()
 
@@ -237,27 +242,27 @@ class FixedIntervalSampling(SamplingSpace):
         return list_trajectories
 
     def _get_lon_samples(self, level_sampling):
-        if self.longitudinal_mode == "velocity_keeping":
+        if self._longitudinal_mode == "velocity_keeping":
             return self.samples_v.samples_at_level(level_sampling)
-        elif self.longitudinal_mode == "stopping":
+        elif self._longitudinal_mode == "stopping":
             return self.samples_s.samples_at_level(level_sampling)
         else:
-            raise AttributeError(f"<FixedIntervalSampling>: specified longitudinal mode {self.longitudinal_mode} is"
+            raise AttributeError(f"<FixedIntervalSampling>: specified longitudinal mode {self._longitudinal_mode} is"
                                  f"invalid.")
 
     def _generate_lon_trajectory(self, delta_tau: float, x_0: np.ndarray, lon_sample: float):
-        if self.longitudinal_mode == "velocity_keeping":
+        if self._longitudinal_mode == "velocity_keeping":
             # longitudinal sample is a target velocity
             # Velocity keeping mode: end state acceleration is 0.0
-            end_state_lon = np.array([lon_sample, 0])
+            end_state_lon = np.array([lon_sample, 0.0])
             return QuarticTrajectory(tau_0=0, delta_tau=delta_tau, x_0=x_0, x_d=end_state_lon)
-        elif self.longitudinal_mode == "stopping":
+        elif self._longitudinal_mode == "stopping":
             # longitudinal sample is a target position
             # Stopping mode: end state velocity and acceleration are 0.0
-            end_state_lon = np.array([lon_sample, 0, 0])
+            end_state_lon = np.array([lon_sample, 0.0, 0.0])
             return QuinticTrajectory(tau_0=0, delta_tau=delta_tau, x_0=x_0, x_d=end_state_lon)
         else:
-            raise AttributeError(f"<FixedIntervalSampling>: specified longitudinal mode {self.longitudinal_mode} is"
+            raise AttributeError(f"<FixedIntervalSampling>: specified longitudinal mode {self._longitudinal_mode} is"
                                  f"invalid.")
 
     @staticmethod
@@ -332,7 +337,8 @@ class CorridorSampling(SamplingSpace):
                 self._dict_level_to_num_samples[i] = n
                 n = (n * 2) - 1
 
-    def generate_trajectories_at_level(self, level_sampling, x_0_lon, x_0_lat, low_vel_mode: bool) \
+    def generate_trajectories_at_level(self, level_sampling: int, x_0_lon: np.ndarray, x_0_lat: np.ndarray,
+                                       longitudinal_mode: str, low_vel_mode: bool) \
             -> List[TrajectorySample]:
         """
         Implements trajectory generation method for sampling trajectories within driving corridor
