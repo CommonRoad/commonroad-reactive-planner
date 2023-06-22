@@ -309,6 +309,9 @@ class ReactivePlanner(object):
         :param stopping
         :return: velocity in m/s
         """
+        # set desired lon position to None if in velocity following mode
+        self._desired_lon_position = None
+
         if desired_velocity is None and self._desired_speed is None:
             self._desired_speed = retrieve_desired_velocity_from_pp(self.config.planning_problem)
         else:
@@ -334,7 +337,7 @@ class ReactivePlanner(object):
         # update acceleration weight in cost function
         if hasattr(self.cost_function, "w_a"):
             self.cost_function.w_a = 5
-        self._desired_lon_position = None
+        # set desired_s in cost function to None
         if hasattr(self.cost_function, "desired_s"):
             self.cost_function.desired_s = self._desired_lon_position
 
