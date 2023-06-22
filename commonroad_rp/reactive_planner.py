@@ -29,6 +29,7 @@ import commonroad_dc.pycrcc as pycrcc
 from commonroad_dc.boundary.boundary import create_road_boundary_obstacle
 from commonroad_dc.collision.collision_detection.pycrcc_collision_dispatch import create_collision_object
 from commonroad_dc.collision.trajectory_queries.trajectory_queries import trajectory_preprocess_obb_sum
+from numpy import ndarray
 
 # commonroad_rp imports
 from commonroad_rp.state import ReactivePlannerState
@@ -109,6 +110,9 @@ class ReactivePlanner(object):
         # set cost function
         self.cost_function: Optional[Type[CostFunction]] = None
         self.set_cost_function()
+
+        # set standstill lookahead
+        self._standstill_lookahead = config.planning.standstill_lookahead
 
     @property
     def collision_checker(self) -> pycrcc.CollisionChecker:
@@ -330,6 +334,9 @@ class ReactivePlanner(object):
         # update acceleration weight in cost function
         if hasattr(self.cost_function, "w_a"):
             self.cost_function.w_a = 5
+        self._desired_lon_position = None
+        if hasattr(self.cost_function, "desired_s"):
+            self.cost_function.desired_s = self._desired_lon_position
 
     def set_desired_lon_position(self, lon_position: float,
                                  delta_s_min: Optional[float] = None, delta_s_max: Optional[float] = None):
@@ -587,33 +594,29 @@ class ReactivePlanner(object):
         # initialize bundle
         bundle = None
 
-        # check if standstill trajectory should be planned
-        if self.x_0.velocity <= 0.1 and self._desired_speed <= 0.0001:
+        # sample until trajectory has been found or sampling sets are empty
+        while optimal_trajectory is None and i < self._sampling_level:
+            # sample trajectory bundle
+            bundle = self._create_trajectory_bundle(x_0_lon, x_0_lat, samp_level=i)
+
+            # find optimal trajectory (kinematic check/sorting/collision check)
+            t0 = time.time()
+            optimal_trajectory = self._get_optimal_trajectory(bundle)
+
+            logger.info("===== Planning result =====")
+            logger.info(f"Total checking time: {time.time() - t0:.7f}")
+            logger.info(f"Rejected {self.infeasible_count_kinematics} infeasible trajectories due to kinematics")
+            for constraint in self.config.planning.constraints_to_check:
+                logger.debug(f"\tInfeasible {constraint}: {self._infeasible_reason_dict[constraint]}")
+            logger.info(f"Rejected {self.infeasible_count_collision} infeasible trajectories due to collisions")
+
+            # increase sampling level (i.e., density) if no optimal trajectory could be found
+            i = i + 1
+
+        if (optimal_trajectory is None or optimal_trajectory.cartesian.v[
+            self._standstill_lookahead] <= 0.05) and self.x_0.velocity <= 0.05:
             logger.info("Planning standstill for the current scenario")
             optimal_trajectory = self._compute_standstill_trajectory()
-        else:
-        # sample until trajectory has been found or sampling sets are empty
-            while optimal_trajectory is None and i < self._sampling_level:
-                # sample trajectory bundle
-                bundle = self._create_trajectory_bundle(x_0_lon, x_0_lat, samp_level=i)
-
-                # find optimal trajectory (kinematic check/sorting/collision check)
-                t0 = time.time()
-                optimal_trajectory = self._get_optimal_trajectory(bundle)
-
-                logger.info("===== Planning result =====")
-                logger.info(f"Total checking time: {time.time() - t0:.7f}")
-                logger.info(f"Rejected {self.infeasible_count_kinematics} infeasible trajectories due to kinematics")
-                for constraint in self.config.planning.constraints_to_check:
-                    logger.debug(f"\tInfeasible {constraint}: {self._infeasible_reason_dict[constraint]}")
-                logger.info(f"Rejected {self.infeasible_count_collision} infeasible trajectories due to collisions")
-
-                # increase sampling level (i.e., density) if no optimal trajectory could be found
-                i = i + 1
-
-            if optimal_trajectory is None and self.x_0.velocity <= 0.1:
-                logger.info("Planning standstill for the current scenario")
-                optimal_trajectory = self._compute_standstill_trajectory()
 
             # check if feasible trajectory exists -> emergency mode
             if optimal_trajectory is None:
@@ -670,8 +673,8 @@ class ReactivePlanner(object):
         a = np.repeat(0.0, self.N)
         a[1] = - self.x_0.velocity / self.dt
         p.cartesian = CartesianSample(np.repeat(x_0.position[0], self.N), np.repeat(x_0.position[1], self.N),
-                                      np.repeat(x_0.orientation, self.N), np.repeat(0, self.N),
-                                      a, np.repeat(kappa_0, self.N), np.repeat(0, self.N),
+                                      np.repeat(x_0.orientation, self.N), np.repeat(0.0, self.N),
+                                      a, np.repeat(kappa_0, self.N), np.repeat(0.0, self.N),
                                       current_time_step=self.N)
 
         # create Curvilinear trajectory sample

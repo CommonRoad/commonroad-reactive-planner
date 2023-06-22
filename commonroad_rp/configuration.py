@@ -124,6 +124,9 @@ class PlanningConfiguration(ConfigurationBase):
         self.route: Optional[Route] = None
         self.reference_path: Optional[np.ndarray] = None
 
+        # standstill lookahead
+        self.standstill_lookahead = config.standstill_lookahead
+
 
 class VehicleConfiguration(ConfigurationBase):
     """Class to store vehicle configurations"""
