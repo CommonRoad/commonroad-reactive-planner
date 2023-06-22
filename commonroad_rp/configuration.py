@@ -108,7 +108,6 @@ class PlanningConfiguration(ConfigurationBase):
         self.dt = config.dt
         self.time_steps_computation = config.time_steps_computation
         self.replanning_frequency = config.replanning_frequency
-        self.mode = config.mode
         self.low_vel_mode_threshold = config.low_vel_mode_threshold
 
         # collision checks
@@ -124,6 +123,9 @@ class PlanningConfiguration(ConfigurationBase):
         # global route and reference path is stored in planning config
         self.route: Optional[Route] = None
         self.reference_path: Optional[np.ndarray] = None
+
+        # standstill lookahead
+        self.standstill_lookahead = config.standstill_lookahead
 
 
 class VehicleConfiguration(ConfigurationBase):
@@ -166,8 +168,13 @@ class SamplingConfiguration(ConfigurationBase):
         self.t_min = config.t_min
         self.v_min = config.v_min
         self.v_max = config.v_max
+        self.s_min = config.s_min
+        self.s_max = config.s_max
         self.d_min = config.d_min
         self.d_max = config.d_max
+
+        # longitudinal sampling mode (velocity or position sampling)
+        self.longitudinal_mode = config.longitudinal_mode
 
         # number of sampling levels
         self.num_sampling_levels = config.num_sampling_levels

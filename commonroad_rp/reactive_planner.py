@@ -10,7 +10,7 @@ __status__ = "Beta"
 import math
 import time
 import numpy as np
-from typing import List, Union, Optional, Tuple, Type
+from typing import List, Union, Optional, Tuple, Type, Dict
 import multiprocessing
 from multiprocessing.context import Process
 import logging
@@ -29,6 +29,7 @@ import commonroad_dc.pycrcc as pycrcc
 from commonroad_dc.boundary.boundary import create_road_boundary_obstacle
 from commonroad_dc.collision.collision_detection.pycrcc_collision_dispatch import create_collision_object
 from commonroad_dc.collision.trajectory_queries.trajectory_queries import trajectory_preprocess_obb_sum
+from numpy import ndarray
 
 # commonroad_rp imports
 from commonroad_rp.state import ReactivePlannerState
@@ -61,9 +62,9 @@ class ReactivePlanner(object):
         : param config: Configuration object holding all planner-relevant configurations
         """
         # Set horizon variables
-        self.dt = config.planning.dt
-        self.N = config.planning.time_steps_computation
-        self.horizon = config.planning.dt * config.planning.time_steps_computation
+        self.dt: float = config.planning.dt
+        self.N: int = config.planning.time_steps_computation
+        self.horizon: float = config.planning.dt * config.planning.time_steps_computation
 
         # get vehicle parameters from config file
         self.vehicle_params: VehicleConfiguration = config.vehicle
@@ -77,11 +78,11 @@ class ReactivePlanner(object):
         self._cc: Optional[pycrcc.CollisionChecker] = None
 
         # statistics
-        self._infeasible_count_collision = 0
-        self._infeasible_count_kinematics = 0
-        self._infeasible_reason_dict = dict()
-        self._optimal_cost = 0
-        self._planning_times_list = list()
+        self._infeasible_count_collision: int = 0
+        self._infeasible_count_kinematics: int = 0
+        self._infeasible_reason_dict: Dict = dict()
+        self._optimal_cost: float = 0.0
+        self._planning_times_list: List = list()
         self._record_state_list: List[ReactivePlannerState] = list()
         self._record_input_list: List[InputState] = list()
 
@@ -89,7 +90,8 @@ class ReactivePlanner(object):
         self.stored_trajectories: Optional[List[TrajectorySample]] = None
 
         # desired speed
-        self._desired_speed = None
+        self._desired_speed: Optional[float] = None
+        self._desired_lon_position: Optional[float] = None
         # threshold for low velocity mode
         self._low_vel_mode = False
 
@@ -108,6 +110,9 @@ class ReactivePlanner(object):
         # set cost function
         self.cost_function: Optional[Type[CostFunction]] = None
         self.set_cost_function()
+
+        # set standstill lookahead
+        self._standstill_lookahead = config.planning.standstill_lookahead
 
     @property
     def collision_checker(self) -> pycrcc.CollisionChecker:
@@ -287,6 +292,15 @@ class ReactivePlanner(object):
         self.sampling_space.samples_v = VelocitySampling(v_min, v_max, self._sampling_level)
         logger.info("Sampled interval of velocity: {} m/s - {} m/s".format(v_min, v_max))
 
+    def set_s_sampling_parameters(self, s_min, s_max):
+        """
+        Sets sample parameters of longitudinal position
+        :param s_min minimum lon position sample bound
+        :param s_max maximum lon position sample bound
+        """
+        self.sampling_space.samples_s = PositionSampling(s_min, s_max, self._sampling_level)
+        logger.info("Sampled interval of longitudinal position: {} m - {} m".format(s_min, s_max))
+
     def set_desired_velocity(self, desired_velocity: float = None, current_speed: float = None, stopping: bool = False):
         """
         Sets desired velocity and re-calculates velocity samples
@@ -295,11 +309,14 @@ class ReactivePlanner(object):
         :param stopping
         :return: velocity in m/s
         """
+        # set desired lon position to None if in velocity following mode
+        self._desired_lon_position = None
+
         if desired_velocity is None and self._desired_speed is None:
             self._desired_speed = retrieve_desired_velocity_from_pp(self.config.planning_problem)
         else:
             self._desired_speed = desired_velocity if desired_velocity is not None else self._desired_speed
-        
+
         # check if desired speed is valid
         assert self._desired_speed >= 0.0, f"<ReactivePlanner.set_desired_velocity(): desired speed has to be " \
                                            f"positive. Provided speed{self._desired_speed}>"
@@ -317,12 +334,48 @@ class ReactivePlanner(object):
         # Update desired velocity in cost function
         if hasattr(self.cost_function, "desired_speed"):
             self.cost_function.desired_speed = self._desired_speed
+        # update acceleration weight in cost function
+        if hasattr(self.cost_function, "w_a"):
+            self.cost_function.w_a = 5
+        # set desired_s in cost function to None
+        if hasattr(self.cost_function, "desired_s"):
+            self.cost_function.desired_s = self._desired_lon_position
+
+    def set_desired_lon_position(self, lon_position: float,
+                                 delta_s_min: Optional[float] = None, delta_s_max: Optional[float] = None):
+        """
+        Sets a desired longitudinal position for stopping and re-calculates s position samples
+        NOTE: Currently, the desired longitudinal position is only considered for stopping, target velocity and
+              acceleration are set to 0.0
+        :param lon_position: the desired longitudinal position (used in cost function)
+        :param delta_s_min: longitudinal distance behind lon_position
+        :param delta_s_max: longitudinal distance in front of lon_position
+        """
+        # set target longitudinal position for stopping
+        self._desired_lon_position = lon_position
+        # set target velocity for stopping
+        self._desired_speed = 0.0
+        # set up sampling interval for longitudinal position
+        if delta_s_min is None and delta_s_max is None:
+            delta_s_min = self.config.sampling.s_min
+            delta_s_max = self.config.sampling.s_max
+        self.set_s_sampling_parameters(s_min=lon_position+delta_s_min, s_max=lon_position+delta_s_max)
+
+        # Update cost function
+        if hasattr(self.cost_function, "desired_s"):
+            self.cost_function.desired_s = self._desired_lon_position
+        if hasattr(self.cost_function, "desired_speed"):
+            self.cost_function.desired_speed = self._desired_speed
+        # update acceleration weight in cost function
+        if hasattr(self.cost_function, "w_a"):
+            self.cost_function.w_a = 1
 
     def set_cost_function(self, cost_function: Type[CostFunction] = None):
         if cost_function:
             self.cost_function = cost_function
         else:
-            self.cost_function = DefaultCostFunction(self._desired_speed, desired_d=0)
+            self.cost_function = DefaultCostFunction(self._desired_speed, desired_d=0.0,
+                                                     desired_s=self._desired_lon_position)
 
     def set_sampling_space(self, sampling_space: Type[SamplingSpace] = None):
         if sampling_space:
@@ -376,6 +429,7 @@ class ReactivePlanner(object):
         logger.info(f"Sampling density {samp_level + 1} of {self._sampling_level}")
 
         trajectories = self.sampling_space.generate_trajectories_at_level(samp_level, x_0_lon, x_0_lat,
+                                                                          self.config.sampling.longitudinal_mode,
                                                                           self._low_vel_mode)
 
         # create trajectory bundle
@@ -529,7 +583,10 @@ class ReactivePlanner(object):
         logger.info(f"==== Initial state Curvilinear ====")
         logger.info(f"longitudinal state = {x_0_lon}")
         logger.info(f"lateral state = {x_0_lat}")
+        logger.info(f"==== Target states ====")
+        logger.info(f"longitudinal driving mode: {self.config.sampling.longitudinal_mode}")
         logger.info(f"desired velocity: {self._desired_speed} m/s")
+        logger.info(f"desired longitudinal position: {self._desired_lon_position} m")
 
         # initialize optimal trajectory dummy
         optimal_trajectory = None
@@ -559,21 +616,22 @@ class ReactivePlanner(object):
             # increase sampling level (i.e., density) if no optimal trajectory could be found
             i = i + 1
 
-        if optimal_trajectory is None and self.x_0.velocity <= 0.1:
+        if (optimal_trajectory is None or optimal_trajectory.cartesian.v[
+            self._standstill_lookahead] <= 0.05) and self.x_0.velocity <= 0.05:
             logger.info("Planning standstill for the current scenario")
             optimal_trajectory = self._compute_standstill_trajectory()
 
-        # check if feasible trajectory exists -> emergency mode
-        if optimal_trajectory is None:
-            logger.warning(f"Could not find a valid trajectory")
-        else:
-            self._optimal_cost = optimal_trajectory.cost
-            relative_costs = None
-            if bundle is not None:
-                relative_costs = ((optimal_trajectory.cost - bundle.min_costs().cost) /
-                                  (bundle.max_costs().cost - bundle.min_costs().cost))
-            logger.info(f"Found optimal trajectory with costs = {self._optimal_cost:.3f} "
-                        f"({relative_costs:.3f} of seen costs)")
+            # check if feasible trajectory exists -> emergency mode
+            if optimal_trajectory is None:
+                logger.warning(f"Could not find a valid trajectory")
+            else:
+                self._optimal_cost = optimal_trajectory.cost
+                relative_costs = None
+                if bundle is not None:
+                    relative_costs = ((optimal_trajectory.cost - bundle.min_costs().cost) /
+                                      (bundle.max_costs().cost - bundle.min_costs().cost))
+                logger.info(f"Found optimal trajectory with costs = {self._optimal_cost:.3f} "
+                            f"({relative_costs:.3f} of seen costs)")
 
         # compute output
         planning_result = self._compute_trajectory_pair(optimal_trajectory) if optimal_trajectory is not None else None
@@ -615,9 +673,11 @@ class ReactivePlanner(object):
         p = TrajectorySample(self.horizon, self.dt, traj_lon, traj_lat)
 
         # create Cartesian trajectory sample
+        a = np.repeat(0.0, self.N)
+        a[1] = - self.x_0.velocity / self.dt
         p.cartesian = CartesianSample(np.repeat(x_0.position[0], self.N), np.repeat(x_0.position[1], self.N),
-                                      np.repeat(x_0.orientation, self.N), np.repeat(0, self.N),
-                                      np.repeat(0, self.N), np.repeat(kappa_0, self.N), np.repeat(0, self.N),
+                                      np.repeat(x_0.orientation, self.N), np.repeat(0.0, self.N),
+                                      a, np.repeat(kappa_0, self.N), np.repeat(0.0, self.N),
                                       current_time_step=self.N)
 
         # create Curvilinear trajectory sample
