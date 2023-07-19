@@ -40,7 +40,7 @@ from commonroad_rp.trajectories import TrajectoryBundle, TrajectorySample, Carte
     FeasibilityStatus
 from commonroad_rp.utility.utils_coordinate_system import CoordinateSystem, interpolate_angle
 from commonroad_rp.utility.general import shift_orientation, retrieve_desired_velocity_from_pp
-from commonroad_rp.utility.config import ReactivePlannerConfiguration
+from commonroad_rp.utility.config import ReactivePlannerConfiguration, VehicleConfiguration
 
 # get logger
 logger = logging.getLogger("RP_LOGGER")
@@ -65,7 +65,7 @@ class ReactivePlanner(object):
         self.horizon: float = config.planning.dt * config.planning.time_steps_computation
 
         # get vehicle parameters from config file
-        self.vehicle_params = config.vehicle
+        self.vehicle_params: VehicleConfiguration = config.vehicle
 
         # planner initial states (cartesian and curvilinear)
         self.x_0: Optional[ReactivePlannerState] = None
