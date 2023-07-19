@@ -56,6 +56,8 @@ planner = ReactivePlanner(config)
 # Add first state to recorded state and input list
 planner.record_state_and_input(planner.x_0)
 
+SAMPLING_ITERATION_IN_PLANNER = True
+
 while not planner.goal_reached():
     current_count = len(planner.record_state_list) - 1
 
@@ -64,7 +66,13 @@ while not planner.goal_reached():
     if plan_new_trajectory:
         # new planning cycle -> plan a new optimal trajectory
         planner.set_desired_velocity(current_speed=planner.x_0.velocity)
-        optimal = planner.plan()
+        if SAMPLING_ITERATION_IN_PLANNER:
+            optimal = planner.plan()
+        else:
+            optimal = None
+            i = 1
+            while optimal is None and i <= planner.sampling_level:
+                optimal = planner.plan(i)
 
         if not optimal:
             break
