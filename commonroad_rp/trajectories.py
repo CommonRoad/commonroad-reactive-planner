@@ -545,6 +545,13 @@ class TrajectoryBundle:
             self.sort()
         return self._trajectory_bundle
 
+    def filter_goals_behind(self):
+        valid_trajectories = []
+        for traj in self.trajectories:
+            if traj.trajectory_long.x_0[0] < traj.trajectory_long.x_d[0]:
+                valid_trajectories.append(traj)
+        self.trajectories = valid_trajectories
+
     @property
     def empty(self) -> bool:
         """
