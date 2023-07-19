@@ -20,7 +20,7 @@ from commonroad_route_planner.route_planner import RoutePlanner
 from commonroad_rp.reactive_planner import ReactivePlanner
 from commonroad_rp.utility.visualization import visualize_planner_at_timestep, make_gif
 from commonroad_rp.utility.evaluation import run_evaluation
-from commonroad_rp.configuration_builder import ConfigurationBuilder as ReactiveConfigurationBuilder
+from commonroad_rp.utility.config import ReactivePlannerConfiguration
 import commonroad_rp.utility.logger as util_logger_rp
 
 # commonroad-reach
@@ -36,7 +36,7 @@ import commonroad_reach.utility.visualization as util_visual
 filename = "DEU_Test-1_1_T-1.xml"
 
 # Build planner config object
-config_planner = ReactiveConfigurationBuilder.build_configuration(filename[:-4])
+config_planner = ReactivePlannerConfiguration.load(f"configurations/{filename[:-4]}.yaml", filename)
 config_planner.update()
 
 # Build reach config object

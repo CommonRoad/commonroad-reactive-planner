@@ -29,7 +29,7 @@ from commonroad_dc import pycrcc
 
 # commonroad-rp
 from commonroad_rp.trajectories import TrajectorySample, FeasibilityStatus
-from commonroad_rp.configuration import Configuration
+from commonroad_rp.utility.config import ReactivePlannerConfiguration
 
 
 logger = logging.getLogger("RP_LOGGER")
@@ -82,7 +82,7 @@ def visualize_collision_checker(scenario: Scenario, cc: pycrcc.CollisionChecker)
 
 
 def visualize_planner_at_timestep(scenario: Scenario, planning_problem: PlanningProblem, ego: DynamicObstacle,
-                                  timestep: int, config: Configuration, traj_set: List[TrajectorySample] = None,
+                                  timestep: int, config: ReactivePlannerConfiguration, traj_set: List[TrajectorySample] = None,
                                   ref_path: np.ndarray = None, rnd: MPRenderer = None,
                                   plot_limits: Union[List[Union[int, float]], None] = None):
     """
@@ -156,7 +156,7 @@ def visualize_planner_at_timestep(scenario: Scenario, planning_problem: Planning
 
 
 def plot_final_trajectory(scenario: Scenario, planning_problem: PlanningProblem, state_list: List[CustomState],
-                          config: Configuration, ref_path: np.ndarray = None):
+                          config: ReactivePlannerConfiguration, ref_path: np.ndarray = None):
     """
     Function plots occupancies for a given CommonRoad trajectory (of the ego vehicle)
     :param scenario: CommonRoad scenario object
@@ -221,7 +221,7 @@ def plot_final_trajectory(scenario: Scenario, planning_problem: PlanningProblem,
         plt.show(block=True)
 
 
-def make_gif(config: Configuration, time_steps: Union[range, List[int]], duration: float = 0.1):
+def make_gif(config: ReactivePlannerConfiguration, time_steps: Union[range, List[int]], duration: float = 0.1):
     """
     Function to create GIF from single images of planning results at each time step
     Images are saved in output path specified in config.general.path_output

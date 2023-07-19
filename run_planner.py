@@ -15,9 +15,9 @@ from commonroad_route_planner.route_planner import RoutePlanner
 
 # reactive planner
 from commonroad_rp.reactive_planner import ReactivePlanner
-from commonroad_rp.utility.visualization import visualize_planner_at_timestep, make_gif
+from commonroad_rp.utility.visualization import visualize_planner_at_timestep
 from commonroad_rp.utility.evaluation import run_evaluation
-from commonroad_rp.configuration_builder import ConfigurationBuilder
+from commonroad_rp.utility.config import ReactivePlannerConfiguration
 
 from commonroad_rp.utility.logger import initialize_logger
 
@@ -30,7 +30,7 @@ filename = "ZAM_Over-1_1.xml"
 # filename = "ZAM_Tjunction-1_42_T-1.xml"
 
 # Build config object
-config = ConfigurationBuilder.build_configuration(filename[:-4])
+config = ReactivePlannerConfiguration.load(f"configurations/{filename[:-4]}.yaml", filename)
 config.update()
 
 # initialize and get logger

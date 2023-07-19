@@ -2,10 +2,10 @@ import logging
 import os
 from datetime import datetime
 import sys
-from commonroad_rp.configuration import Configuration
+from commonroad_rp.utility.config import ReactivePlannerConfiguration
 
 
-def initialize_logger(config: Configuration) -> logging.Logger:
+def initialize_logger(config: ReactivePlannerConfiguration) -> logging.Logger:
     """
     Initializes the logging module and returns a logger.
     """
