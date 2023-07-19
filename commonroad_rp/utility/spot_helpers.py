@@ -15,7 +15,7 @@ from commonroad.planning.planning_problem import PlanningProblem
 from commonroad.geometry.shape import Polygon, ShapeGroup
 from commonroad.prediction.prediction import Occupancy, SetBasedPrediction, TrajectoryPrediction
 
-from commonroad_rp.configuration import Configuration
+from commonroad_rp.utility.config import ReactivePlannerConfiguration
 
 try:
     import spot

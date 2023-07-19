@@ -10,7 +10,7 @@ import numpy as np
 from abc import ABC, abstractmethod
 from typing import Dict, Optional, List
 
-from commonroad_rp.configuration import Configuration
+from commonroad_rp.utility.config import ReactivePlannerConfiguration
 from commonroad_rp.polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
 from commonroad_rp.trajectories import TrajectorySample
 
@@ -180,7 +180,7 @@ class FixedIntervalSampling(SamplingSpace):
     Class representing a sampling space with fixed intervals for sampling in t, v, d or s domain.
     """
 
-    def __init__(self, config: Configuration):
+    def __init__(self, config: ReactivePlannerConfiguration):
         num_sampling_levels = config.sampling.num_sampling_levels
         super(FixedIntervalSampling, self).__init__(num_sampling_levels)
 
@@ -276,7 +276,7 @@ class CorridorSampling(SamplingSpace):
     collision-free driving corridor.
     NOTE: CommonRoad-Reach is required (https://commonroad.in.tum.de/tools/commonroad-reach)
     """
-    def __init__(self, config: Configuration):
+    def __init__(self, config: ReactivePlannerConfiguration):
         if not cr_reach_installed:
             raise ImportError("<CorridorSampling>: Please install CommonRoad-Reach to use adaptive corridor sampling!")
 
@@ -397,7 +397,7 @@ class CorridorSampling(SamplingSpace):
         return list_trajectories
 
 
-def sampling_space_factory(config: Configuration):
+def sampling_space_factory(config: ReactivePlannerConfiguration):
     """Factory function to select SamplingSpace class"""
     sampling_method = config.sampling.sampling_method
     if sampling_method == 1:

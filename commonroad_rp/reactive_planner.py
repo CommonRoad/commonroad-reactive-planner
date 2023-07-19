@@ -40,7 +40,7 @@ from commonroad_rp.trajectories import TrajectoryBundle, TrajectorySample, Carte
     FeasibilityStatus
 from commonroad_rp.utility.utils_coordinate_system import CoordinateSystem, interpolate_angle
 from commonroad_rp.utility.general import shift_orientation, retrieve_desired_velocity_from_pp
-from commonroad_rp.configuration import Configuration, VehicleConfiguration
+from commonroad_rp.utility.config import ReactivePlannerConfiguration
 
 # get logger
 logger = logging.getLogger("RP_LOGGER")
@@ -54,7 +54,7 @@ class ReactivePlanner(object):
     Reactive planner class that plans trajectories in a sampling-based fashion
     """
 
-    def __init__(self, config: Configuration):
+    def __init__(self, config: ReactivePlannerConfiguration):
         """
         Constructor of the reactive planner
         : param config: Configuration object holding all planner-relevant configurations
@@ -65,7 +65,7 @@ class ReactivePlanner(object):
         self.horizon: float = config.planning.dt * config.planning.time_steps_computation
 
         # get vehicle parameters from config file
-        self.vehicle_params: VehicleConfiguration = config.vehicle
+        self.vehicle_params = config.vehicle
 
         # planner initial states (cartesian and curvilinear)
         self.x_0: Optional[ReactivePlannerState] = None
@@ -97,7 +97,7 @@ class ReactivePlanner(object):
         self._draw_traj_set = config.debug.draw_traj_set and (config.debug.save_plots or config.debug.save_plots)
 
         # set/reset configuration
-        self.config: Optional[Configuration] = None
+        self.config: Optional[ReactivePlannerConfiguration] = None
         self.reset(config)
 
         # set sampling space
@@ -169,7 +169,7 @@ class ReactivePlanner(object):
         else:
             return False
 
-    def reset(self, config: Configuration = None,
+    def reset(self, config: ReactivePlannerConfiguration = None,
               initial_state_cart: ReactivePlannerState = None,
               initial_state_curv: Tuple[List, List] = None,
               collision_checker: pycrcc.CollisionChecker = None,
