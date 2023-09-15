@@ -117,7 +117,7 @@ class PlanningConfiguration(BaseConfiguration):
     # time scaling factor for collision checking if planner time step and scenario time step deviate
     factor: int = 1
     # velocity threshold (in m/s) for switching to low velocity mode
-    low_vel_mode_threshold: int = 4
+    low_vel_mode_threshold: float = 4.0
     # kinematic constraints to check.
     # The list can contain these constraints: velocity, acceleration, kappa, kappa_dot,
     # yaw_rate (Exact naming important!!)

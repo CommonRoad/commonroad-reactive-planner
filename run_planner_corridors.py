@@ -41,7 +41,7 @@ config_planner.update()
 
 # Build reach config object
 path_reach = "/home/gerald/Documents/CommonRoad/cps/commonroad-reachable-set"
-config_reach = ReachConfigurationBuilder.build_configuration(filename[:-4], path_root=path_reach)
+config_reach = ReachConfigurationBuilder(path_root=path_reach).build_configuration(filename[:-4])
 
 # initialize and get logger
 util_logger_rp.initialize_logger(config_planner)
