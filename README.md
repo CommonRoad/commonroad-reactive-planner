@@ -5,7 +5,7 @@ The trajectories are generated using the sampling-based approach in [1][2]. This
 discrete set of trajectories, represented as quintic polynomials in a Frenet frame and selecting an optimal trajectory according
 to a given cost function.
 
-<img src="doc/images/ZAM_Tjunction-1_42_T-1.gif" alt="reactive-planner" width="250"/>
+<img src="doc/images/ZAM_Tjunction-1_42_T-1.gif" alt="reactive-planner" width="400"/>
 
 
 ## Getting Started
