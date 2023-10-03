@@ -130,7 +130,7 @@ def spot_update_init_state_obstacles(scenario: Scenario, time_step):
 class SpotManager:
     """Wrapper class for SPOT prediction operations"""
 
-    def __init__(self, spot_update_dict: dict, config: Configuration = None):
+    def __init__(self, spot_update_dict: dict, config: ReactivePlannerConfiguration = None):
         self._scenario: Optional[Scenario] = None
         self._planning_problem: Optional[PlanningProblem] = None
         self._curr_global_time_step: Optional[int] = None
@@ -148,7 +148,7 @@ class SpotManager:
         """return the modified scenario with SPOT occupancy predictions"""
         return self._scenario
 
-    def reset(self, config: Configuration, curr_global_time_step: int = None):
+    def reset(self, config: ReactivePlannerConfiguration, curr_global_time_step: int = None):
         """updates relevant environment information for prediction"""
         self._scenario = deepcopy(config.scenario)
         self._planning_problem = config.planning_problem

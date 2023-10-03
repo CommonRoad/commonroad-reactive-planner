@@ -179,7 +179,6 @@ class CartesianSample(Sample):
         self.a[self.current_time_step:] = np.repeat(self.a[last_time_step], steps)
 
         # enlarge velocities by considering acceleration
-        # TODO remove a?
         v_temp = self.v[last_time_step] + t * self.a[-1]
         # remove negative velocities
         v_temp = v_temp * np.greater_equal(v_temp, 0)
@@ -311,14 +310,12 @@ class CurviLinearSample(Sample):
         # create time array
         t = np.arange(1, (steps + 1), 1) * dt
         # enlarge velocities by considering acceleration
-        #TODO Remove acceleration?
         s_dot_temp = self.s_dot[last_time_step] + t * self.s_ddot[-1]
         # remove negative velocities
         s_dot_temp = s_dot_temp * np.greater_equal(s_dot_temp, 0)
         self.s_dot[self.current_time_step:] = s_dot_temp
 
         # enlarge velocities by considering acceleration
-        # TODO remove acceleration?
         d_dot_temp = self.d_dot[last_time_step] + t * self.d_ddot[-1]
         self.d_dot[self.current_time_step:] = d_dot_temp
 
