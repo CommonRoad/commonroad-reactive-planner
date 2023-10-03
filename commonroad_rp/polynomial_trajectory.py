@@ -69,7 +69,6 @@ class PolynomialTrajectory(ABC):
         Sets the coefficients of the polynomial trajectory
         :param co: The coefficients of the polynomial trajectory
         """
-        # todo: remove fixed len = 6 => make modular and adaptable
         assert isinstance(co, np.ndarray) and len(
             co) == 6, '<PolynomialTrajectory/coeffs>: coeffs length not valid! length={}'.format(len(co))
         self._coeffs = co

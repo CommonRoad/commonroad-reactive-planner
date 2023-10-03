@@ -1,7 +1,7 @@
 __author__ = "Gerald Würsching, Christian Pek"
 __copyright__ = "TUM Cyber-Physical Systems Group"
 __credits__ = ["BMW Group CAR@TUM, interACT"]
-__version__ = "0.1"
+__version__ = "1.0"
 __maintainer__ = "Gerald Würsching"
 __email__ = "commonroad@lists.lrz.de"
 __status__ = "Alpha"
@@ -71,6 +71,18 @@ def preprocess_ref_path(ref_path: np.ndarray, resample_step: float = 1.0, max_cu
     return ref_path_preprocessed
 
 
+def smooth_ref_path(ref_path: np.ndarray, smoothing_factor=0.0, resample_step: float = 1.0):
+    """Simple reference path smoothing using cubic splines"""
+
+    logger.info("Smoothing reference path...")
+    tck, u = splprep(ref_path.T, u=None, k=3, s=smoothing_factor)
+    u_new = np.linspace(u.min(), u.max(), 200)
+    x_new, y_new = splev(u_new, tck, der=0)
+    ref_path = np.array([x_new, y_new]).transpose()
+    reference = resample_polyline(ref_path, resample_step)
+    return reference
+
+
 class CoordinateSystem:
 
     def __init__(self, reference: np.ndarray = None, ccosy: CurvilinearCoordinateSystem = None):
@@ -83,16 +95,10 @@ class CoordinateSystem:
             _, idx = np.unique(reference, axis=0, return_index=True)
             reference = reference[np.sort(idx)]
 
-            smoothing_scipy_splines = True
-            if smoothing_scipy_splines:
-                # print("Smoothing via spline interpolation...")
-                logger.info("Smoothing reference path via spline interpolation...")
-                tck, u = splprep(reference.T, u=None, k=3, s=0.0)
-                u_new = np.linspace(u.min(), u.max(), 200)
-                x_new, y_new = splev(u_new, tck, der=0)
-                ref_path = np.array([x_new, y_new]).transpose()
-                reference = resample_polyline(ref_path, 1)
-            # remove duplicated vertices in reference path
+            # smooth reference path
+            reference = smooth_ref_path(reference)
+
+            # remove duplicated vertices in reference path after smoothing
             _, idx = np.unique(reference, axis=0, return_index=True)
             reference = reference[np.sort(idx)]
 

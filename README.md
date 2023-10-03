@@ -1,19 +1,29 @@
 # Reactive Planner
 
-Currently, this project generates solutions to trajectory planning problems given in the [CommonRoad](https://commonroad.in.tum.de/) scenario format.
-The trajectories are generated according to the sampling-based approach in [1][2]. 
+This project generates solutions to trajectory planning problems given in the [CommonRoad](https://commonroad.in.tum.de/) scenario format.
+The trajectories are generated using the sampling-based approach in [1][2]. This approach plans motions by sampling a 
+discrete set of trajectories, represented as quintic polynomials in a Frenet frame and selecting an optimal trajectory according
+to a given cost function.
+
 
 ## Getting Started
 These instructions should help you to install the trajectory planner and use it for development and testing purposes.
 
+To install the trajectory planner from PyPi, please run:
+```shell
+pip install commonroad-reactive-planner
+```
+
 ### Requirements
-The software is  developed and tested on recent versions of Linux and OS X.
+The software is  developed and tested on recent versions of Linux. The required python dependencies are listed in `requirements.txt`.
 
 For the python installation, we suggest the usage of [Anaconda](http://www.anaconda.com/download/#download).
+
 For the development IDE we suggest [PyCharm](http://www.jetbrains.com/pycharm/)
 
-### Installation
-1. Clone this repository & create a new conda environment `conda create -n commonroad-py37 python=3.7`
+
+### Installation from Source
+1. Clone this repository & create a new conda environment, e.g.,  `conda create -n commonroad-py37 python=3.7`
 
 
 2. Install the package:
@@ -22,15 +32,13 @@ For the development IDE we suggest [PyCharm](http://www.jetbrains.com/pycharm/)
 
 
 
-### Example scripts
+### How to run
 
-**Main example script** `run_planner.py`: run the base version of the reactive planner on a given CommonRoad scenario
-
-We provide two additional scripts which use the planner in conjunction with other CR tools:
-* `run_planner_corridors.py`: requires [CommonRoad-Reach](https://commonroad.in.tum.de/tools/commonroad-reach) 
-  for sampling in corridors
-* `run_planner_spot.py`: requires [SPOT](https://commonroad.in.tum.de/tools/spot) for computing occupancy sets 
-  of other traffic participants before planning
+Main example script `run_planner.py`: The example script shows how to run the planner on an exemplary 
+CommonRoad scenario. Therein, the following steps are included:
+* creating a planner configuration
+* instantiating the reactive planner
+* running the planner in planning cycles with a fixed re-planning frequency
 
 
 ## Literature
