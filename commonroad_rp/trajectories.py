@@ -1,17 +1,25 @@
 __author__ = "Christian Pek, Gerald Würsching"
 __copyright__ = "TUM Cyber-Physical Systems Group"
 __credits__ = ["BMW Group CAR@TUM, interACT"]
-__version__ = "0.5"
+__version__ = "1.0"
 __maintainer__ = "Gerald Würsching"
 __email__ = "commonroad@lists.lrz.de"
 __status__ = "Beta"
 
-from typing import Union, List
+from typing import Union, List, Optional
+from enum import Enum
 import numpy as np
 from abc import ABC, abstractmethod
 import math
 
 from commonroad_rp.polynomial_trajectory import PolynomialTrajectory
+
+
+class FeasibilityStatus(Enum):
+    """Enum with types of feasibility status of a TrajectorySample after checking. (Can be extended)"""
+    FEASIBLE = 'feasible'
+    INFEASIBLE_KINEMATIC = 'infeasible_kinematic'
+    INFEASIBLE_COLLISION = "infeasible_collision"
 
 
 class Sample(ABC):
@@ -171,7 +179,6 @@ class CartesianSample(Sample):
         self.a[self.current_time_step:] = np.repeat(self.a[last_time_step], steps)
 
         # enlarge velocities by considering acceleration
-        # TODO remove a?
         v_temp = self.v[last_time_step] + t * self.a[-1]
         # remove negative velocities
         v_temp = v_temp * np.greater_equal(v_temp, 0)
@@ -303,16 +310,14 @@ class CurviLinearSample(Sample):
         # create time array
         t = np.arange(1, (steps + 1), 1) * dt
         # enlarge velocities by considering acceleration
-        #TODO Remove acceleration?
         s_dot_temp = self.s_dot[last_time_step] + t * self.s_ddot[-1]
         # remove negative velocities
         s_dot_temp = s_dot_temp * np.greater_equal(s_dot_temp, 0)
         self.s_dot[self.current_time_step:] = s_dot_temp
 
         # enlarge velocities by considering acceleration
-        # TODO remove acceleration?
         d_dot_temp = self.d_dot[last_time_step] + t * self.d_ddot[-1]
-        self.d_dot = np.append(self.d_dot, d_dot_temp)
+        self.d_dot[self.current_time_step:] = d_dot_temp
 
         # enlarge accelerations
         self.s_ddot[self.current_time_step:] = np.repeat(self.s_ddot[last_time_step], steps)
@@ -350,10 +355,12 @@ class TrajectorySample(Sample):
 
         self._cost = 0
         self._cost_function = None
-        self._cartesian: CartesianSample = None
-        self._curvilinear: CurviLinearSample = None
+        self._cartesian: Optional[CartesianSample] = None
+        self._curvilinear: Optional[CurviLinearSample] = None
         self._ext_cartesian = None
         self._ext_curvilinear = None
+
+        self._label: Optional[FeasibilityStatus] = None
 
     @property
     def trajectory_long(self) -> PolynomialTrajectory:
@@ -429,6 +436,16 @@ class TrajectorySample(Sample):
         """
         assert isinstance(cartesian, CartesianSample)
         self._cartesian = cartesian
+
+    @property
+    def feasibility_label(self):
+        """returns feasibility label of trajectory"""
+        return self._label
+
+    @feasibility_label.setter
+    def feasibility_label(self, feasbility_status: FeasibilityStatus):
+        """sets feasibility label according to status after checks"""
+        self._label = feasbility_status
 
     def length(self) -> int:
         """
@@ -524,6 +541,13 @@ class TrajectoryBundle:
         if not self._is_sorted:
             self.sort()
         return self._trajectory_bundle
+
+    def filter_goals_behind(self):
+        valid_trajectories = []
+        for traj in self.trajectories:
+            if traj.trajectory_long.x_0[0] < traj.trajectory_long.x_d[0]:
+                valid_trajectories.append(traj)
+        self.trajectories = valid_trajectories
 
     @property
     def empty(self) -> bool:

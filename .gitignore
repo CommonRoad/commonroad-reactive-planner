@@ -1,6 +1,11 @@
 .idea/
 .idea/**
 
+build/
+*.egg-info
+install/
+log/
+
 *.iml
 .DS_Store
 .ipynb_checkpoints
@@ -12,3 +17,5 @@ plots/
 unit_tests/img/
 evals/
 doc/build
+output/
+dist/

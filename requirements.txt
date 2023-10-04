@@ -1,4 +1,4 @@
-commonroad_vehicle_models>=2.0.0
+commonroad_vehicle_models>=3.0.0
 matplotlib>=2.2.2
 networkx>=2.2
 numpy>=1.13
@@ -7,9 +7,10 @@ omegaconf>=2.1.1
 pytest>=6.2.5
 scipy>=1.5.2
 sphinx>=2.2.1
-commonroad-route-planner>=2022.1
-commonroad-io>=2021.4
-commonroad-drivability-checker>=2021.4
+imageio>=2.9.0
+commonroad-route-planner>=2022.3
+commonroad-io>=2022.3
+commonroad-drivability-checker>=2023.1
 
 
 

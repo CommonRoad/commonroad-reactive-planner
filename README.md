@@ -1,19 +1,31 @@
 # Reactive Planner
 
-Currently, this project generates solutions to trajectory planning problems given in the [CommonRoad](https://commonroad.in.tum.de/) scenario format.
-The trajectories are generated according to the sampling-based approach in [1][2]. 
+This project generates solutions to trajectory planning problems given in the [CommonRoad](https://commonroad.in.tum.de/) scenario format.
+The trajectories are generated using the sampling-based approach in [1][2]. This approach plans motions by sampling a 
+discrete set of trajectories, represented as quintic polynomials in a Frenet frame and selecting an optimal trajectory according
+to a given cost function.
+
+<img src="doc/images/ZAM_Tjunction-1_42_T-1.gif" alt="reactive-planner" width="400"/>
+
 
 ## Getting Started
 These instructions should help you to install the trajectory planner and use it for development and testing purposes.
 
+To install the trajectory planner from PyPi, please run:
+```shell
+pip install commonroad-reactive-planner
+```
+
 ### Requirements
-The software is  developed and tested on recent versions of Linux and OS X.
+The software is  developed and tested on recent versions of Linux. The required python dependencies are listed in `requirements.txt`.
 
 For the python installation, we suggest the usage of [Anaconda](http://www.anaconda.com/download/#download).
+
 For the development IDE we suggest [PyCharm](http://www.jetbrains.com/pycharm/)
 
-### Installation
-1. Clone this repository & create a new conda environment `conda create -n commonroad-py37 python=3.7`
+
+### Installation from Source
+1. Clone this repository & create a new conda environment, e.g.,  `conda create -n commonroad-py37 python=3.7`
 
 
 2. Install the package:
@@ -22,9 +34,13 @@ For the development IDE we suggest [PyCharm](http://www.jetbrains.com/pycharm/)
 
 
 
-### Example script
+### How to run
 
-An example script `run_planner.py` is provided, which plans intended trajectories for motion planning
+Main example script `run_planner.py`: The example script shows how to run the planner on an exemplary 
+CommonRoad scenario. Therein, the following steps are included:
+* creating a planner configuration
+* instantiating the reactive planner
+* running the planner in planning cycles with a fixed re-planning frequency
 
 
 ## Literature
