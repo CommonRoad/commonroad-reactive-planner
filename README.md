@@ -11,7 +11,7 @@ to a given cost function.
 ## Getting Started
 These instructions should help you to install the trajectory planner and use it for development and testing purposes.
 
-To install the trajectory planner from PyPi, please run:
+To install the package from PyPi, please run:
 ```shell
 pip install commonroad-reactive-planner
 ```
@@ -29,8 +29,8 @@ For the development IDE we suggest [PyCharm](http://www.jetbrains.com/pycharm/)
 
 
 2. Install the package:
-    * Install the package via pip: `pip install .`
-    * **Or** install the dependencies with `pip install -r requirements.txt` and add the root folder to the python path of your interpreter
+    * Install the package via poetry: `poetry install`
+    * **Or** install the dependencies via pip: `pip install -r requirements.txt` and add the root folder to the python path of your interpreter
 
 
 
