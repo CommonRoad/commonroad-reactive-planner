@@ -195,10 +195,7 @@ class ReactivePlanner(object):
             self.set_collision_checker(collision_checker=collision_checker)
 
         # reset ref path and CoSys
-        if coordinate_system is None:
-            # create new CoSys from reference path
-            self.set_reference_path(reference_path=self.config.planning.reference_path)
-        else:
+        if coordinate_system is not None:
             # use passed CoSys object
             self.set_reference_path(coordinate_system=coordinate_system)
 
@@ -444,6 +441,10 @@ class ReactivePlanner(object):
         :param x_0: The Cartesion state object representing the initial state of the vehicle
         :return: A tuple containing the initial longitudinal and lateral states (lon,lat)
         """
+        # if no coordinate system is given return None
+        if not self._co:
+            return None
+
         # compute curvilinear position
         try:
             s, d = self._co.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
@@ -567,8 +568,15 @@ class ReactivePlanner(object):
         # start timer
         planning_start_time = time.time()
 
-        # check if initial states are provided
+        # check if cartesian initial state is provided
         assert self.x_0 is not None, "<ReactivePlanner.plan(): Planner Cartesian initial state is empty!>"
+
+        # check if coordinate system is provided
+        assert self._co is not None, "<ReactivePlanner.plan(): No coordinate system given. Call set_reference_path()>"
+
+        # check if curvilinear initial state is provided and compute if necessary
+        if not self.x_0_cl:
+            self.x_0_cl = self._compute_initial_states(self.x_0)
         assert self.x_0_cl is not None, "<ReactivePlanner.plan(): Planner curvilinear initial state is empty!>"
 
         # get curvilinear initial states

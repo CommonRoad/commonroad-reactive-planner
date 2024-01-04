@@ -126,11 +126,6 @@ class PlanningConfiguration(BaseConfiguration):
     # lookahead in dt*standstill_lookahead seconds if current velocity <= 0.1 and after specified time too
     standstill_lookahead: int = 10
 
-    def __post_init__(self):
-        # global route and reference path is stored in planning config
-        self.route: Optional[Route] = None
-        self.reference_path: Optional[np.ndarray] = None
-
 
 @dataclass
 class SamplingConfiguration(BaseConfiguration):
