@@ -199,19 +199,18 @@ class ReactivePlanner(object):
             # use passed CoSys object
             self.set_reference_path(coordinate_system=coordinate_system)
 
-        # if planner init state is empty: Get cartesian initial state from planning problem (if available)
+        # if planner init state is empty
         if self.x_0 is None and initial_state_cart is None:
             if self.config.planning_problem:
+                # Get cartesian initial state from planning problem (if available)
                 self.x_0 = ReactivePlannerState.create_from_initial_state(self.config.planning_problem.initial_state,
                                                                           self.vehicle_params.wheelbase,
                                                                           self.vehicle_params.wb_rear_axle)
             else:
+                # otherwise set to None and provide later
                 self.x_0 = None
         else:
             self.x_0 = initial_state_cart if initial_state_cart is not None else self.x_0
-
-        # set low velocity mode given initial velocity in self.x_0
-        self._low_vel_mode = True if self.x_0.velocity < self.config.planning.low_vel_mode_threshold else False
 
         # convert Cartesian initial state or pass given curvilinear initial state
         self.x_0_cl = initial_state_curv if initial_state_curv is not None else self._compute_initial_states(self.x_0)
@@ -584,6 +583,9 @@ class ReactivePlanner(object):
 
         # get curvilinear initial states
         x_0_lon, x_0_lat = self.x_0_cl
+
+        # set low velocity mode given initial velocity in self.x_0
+        self._low_vel_mode = True if self.x_0.velocity < self.config.planning.low_vel_mode_threshold else False
 
         logger.info("===============================================================")
         logger.info("=================== Starting Planning Cycle ===================")
