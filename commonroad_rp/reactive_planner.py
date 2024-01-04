@@ -199,11 +199,14 @@ class ReactivePlanner(object):
             # use passed CoSys object
             self.set_reference_path(coordinate_system=coordinate_system)
 
-        # if planner init state is empty: Convert cartesian initial state from planning problem
+        # if planner init state is empty: Get cartesian initial state from planning problem (if available)
         if self.x_0 is None and initial_state_cart is None:
-            self.x_0 = ReactivePlannerState.create_from_initial_state(self.config.planning_problem.initial_state,
-                                                                      self.vehicle_params.wheelbase,
-                                                                      self.vehicle_params.wb_rear_axle)
+            if self.config.planning_problem:
+                self.x_0 = ReactivePlannerState.create_from_initial_state(self.config.planning_problem.initial_state,
+                                                                          self.vehicle_params.wheelbase,
+                                                                          self.vehicle_params.wb_rear_axle)
+            else:
+                self.x_0 = None
         else:
             self.x_0 = initial_state_cart if initial_state_cart is not None else self.x_0
 

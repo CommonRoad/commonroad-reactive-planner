@@ -257,8 +257,7 @@ class ReactivePlannerConfiguration(BaseConfiguration):
     def name_scenario(self) -> str:
         return self.general.name_scenario
 
-    def update(self, scenario: Scenario = None, planning_problem: PlanningProblem = None,
-               state_initial: InitialState = None):
+    def update(self, scenario: Scenario = None, planning_problem: PlanningProblem = None):
         """
         Updates configuration based on the given attributes.
         Function used to construct initial configuration before planner initialization and update configuration during
@@ -269,26 +268,13 @@ class ReactivePlannerConfiguration(BaseConfiguration):
         :param state_initial: initial state (can be different from planning problem initial state during re-planning)
         """
         # update scenario and planning problem with explicitly given ones
-        if scenario:
-            self.scenario = scenario
-        if planning_problem:
-            self.planning_problem = planning_problem
+        self.scenario = scenario
+        self.planning_problem = planning_problem
 
-        # if scenario and planning problem not explicitly given
+        # if both scenario and planning problem are not explicitly provided
         if scenario is None and planning_problem is None:
-            if self.scenario is None or self.planning_problem is None:
-                # read original scenario and pp from scenario file
-                self.scenario, self.planning_problem, self.planning_problem_set = \
-                    load_scenario_and_planning_problem(self.general.path_scenario)
-            else:
-                # keep previously stored scenario and planning problem
-                pass
-        else:
-            raise RuntimeError("ReactiveParams::update: Scenario or Planning not None")
+            self.scenario, self.planning_problem, self.planning_problem_set = \
+                load_scenario_and_planning_problem(self.general.path_scenario)
 
-        # Check that scenario and planning problem are set
+        # Check that a scenario is set (planning problem can be set afterwards)
         assert self.scenario is not None, "<Configuration.update()>: no scenario has been specified"
-        assert self.planning_problem is not None, "<Configuration.update()>: no planning problem has been specified"
-
-        # update initial state for planning if explicitly given
-        self.planning.state_initial = state_initial if state_initial else self.planning_problem.initial_state
