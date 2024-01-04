@@ -609,7 +609,7 @@ class ReactivePlanner(object):
         # initial index of sampling set to use
         i = 1 if current_sampling_level is None else current_sampling_level
 
-        while optimal_trajectory is None and i <self.sampling_level:
+        while optimal_trajectory is None and i < self.sampling_level:
             # sample trajectory bundle
             bundle = self._create_trajectory_bundle(x_0_lon, x_0_lat, samp_level=i)
 
