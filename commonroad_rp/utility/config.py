@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Union, Any, Optional, Dict, List
 import pathlib
 from omegaconf import OmegaConf
+import warnings
 
 from commonroad.scenario.state import InitialState
 from commonroad_dc.feasibility.vehicle_dynamics import VehicleParameterMapping
@@ -81,13 +82,14 @@ class BaseConfiguration:
             raise KeyError(f"{key} is not a parameter of {self.__class__.__name__}") from e
 
     @classmethod
-    def load(cls, file_path: Union[pathlib.Path, str], scenario_name: str, validate_types: bool = True) \
+    def load(cls, file_path: Union[pathlib.Path, str], scenario_name: Optional[str] = None, validate_types: bool = True) \
             -> 'ReactivePlannerConfiguration':
         """
-        Loads config file and creates parameter class.
+        Loads parameters from a config yaml file and returns the Configuration class.
 
         :param file_path: Path to yaml file containing config parameters.
-        :param scenario_name: Name of scenario which should be used.
+        :param scenario_name: Name of scenario which should be used. If provided, scenario and planning problem are
+                              loaded from a CR scenario XML file.
         :param validate_types:  Boolean indicating whether loaded config should be validated against CARLA parameters.
         :return: Base parameter class.
         """
@@ -97,7 +99,8 @@ class BaseConfiguration:
         if validate_types:
             OmegaConf.merge(OmegaConf.structured(ReactivePlannerConfiguration), loaded_yaml)
         params = _dict_to_params(OmegaConf.to_object(loaded_yaml), cls)
-        params.general.set_path_scenario(scenario_name)
+        if scenario_name:
+            params.general.set_path_scenario(scenario_name)
         return params
 
 
@@ -273,8 +276,12 @@ class ReactivePlannerConfiguration(BaseConfiguration):
 
         # if both scenario and planning problem are not explicitly provided
         if scenario is None and planning_problem is None:
-            self.scenario, self.planning_problem, self.planning_problem_set = \
-                load_scenario_and_planning_problem(self.general.path_scenario)
+            try:
+                self.scenario, self.planning_problem, self.planning_problem_set = \
+                    load_scenario_and_planning_problem(self.general.path_scenario)
+            except FileNotFoundError:
+                warnings.warn(f"<ReactivePlannerConfiguration.update()>: No scenario .xml file found at "
+                              f"path_scenario = {self.general.path_scenario}")
 
         # Check that a scenario is set (planning problem can be set afterwards)
         assert self.scenario is not None, "<Configuration.update()>: no scenario has been specified"
