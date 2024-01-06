@@ -62,10 +62,10 @@ def visualize_scenario_and_pp(scenario: Scenario, planning_problem: PlanningProb
     planning_problem.draw(rnd)
     rnd.render()
     if ref_path is not None:
-        rnd.ax.plot(ref_path[:, 0], ref_path[:, 1], color='g', marker='.', markersize=1, zorder=19,
+        rnd.ax.plot(ref_path[:, 0], ref_path[:, 1], color='g', marker='.', markersize=1, zorder=100,
                     linewidth=0.8, label='reference path')
         proj_domain_border = np.array(cosy.ccosy.projection_domain())
-        rnd.ax.plot(proj_domain_border[:, 0], proj_domain_border[:, 1], color="orange", linewidth=0.8)
+        rnd.ax.plot(proj_domain_border[:, 0], proj_domain_border[:, 1], color="orange", linewidth=0.8, zorder=100)
     plt.show(block=True)
 
 
@@ -98,6 +98,14 @@ def visualize_planner_at_timestep(scenario: Scenario, planning_problem: Planning
     will visualize on the existing object)
     :param plot_limits: x, y axis limits for plotting
     """
+    # get plot limits from ref path
+    if plot_limits is None and ref_path is not None:
+        x_min = np.min(ref_path[:, 0]) - 20
+        x_max = np.max(ref_path[:, 0]) + 20
+        y_min = np.min(ref_path[:, 1]) - 20
+        y_max = np.max(ref_path[:, 1]) + 20
+        plot_limits = [x_min, x_max, y_min, y_max]
+
     # create renderer object (if no existing renderer is passed)
     if rnd is None:
         rnd = MPRenderer(figsize=(20, 10), plot_limits=plot_limits)
