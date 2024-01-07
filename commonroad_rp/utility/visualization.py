@@ -7,7 +7,7 @@ __status__ = "Beta"
 
 
 # standard imports
-from typing import List, Union
+from typing import List, Union, Optional
 import os
 import logging
 
@@ -164,7 +164,8 @@ def visualize_planner_at_timestep(scenario: Scenario, planning_problem: Planning
 
 
 def plot_final_trajectory(scenario: Scenario, planning_problem: PlanningProblem, state_list: List[CustomState],
-                          config: ReactivePlannerConfiguration, ref_path: np.ndarray = None):
+                          config: ReactivePlannerConfiguration, ref_path: np.ndarray = None,
+                          plot_limits: Optional[List[Union[int, float]]] = None):
     """
     Function plots occupancies for a given CommonRoad trajectory (of the ego vehicle)
     :param scenario: CommonRoad scenario object
@@ -174,8 +175,17 @@ def plot_final_trajectory(scenario: Scenario, planning_problem: PlanningProblem,
     :param ref_path: Reference path as [(nx2) np.ndarray] (optional)
     :param save_path: Path to save plot as .png (optional)
     """
+    # get plot limits from trajectory
+    if plot_limits is None:
+        position_array = np.array([state.position for state in state_list])
+        x_min = np.min(position_array[:, 0]) - 20
+        x_max = np.max(position_array[:, 0]) + 20
+        y_min = np.min(position_array[:, 1]) - 20
+        y_max = np.max(position_array[:, 1]) + 20
+        plot_limits = [x_min, x_max, y_min, y_max]
+
     # create renderer object (if no existing renderer is passed)
-    rnd = MPRenderer(figsize=(20, 10))
+    rnd = MPRenderer(figsize=(20, 10), plot_limits=plot_limits)
 
     # set renderer draw params
     rnd.draw_params.time_begin = 0

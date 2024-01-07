@@ -9,6 +9,7 @@ __status__ = "Beta"
 from typing import List, Union
 from matplotlib import pyplot as plt
 import numpy as np
+import warnings
 
 from commonroad.scenario.trajectory import Trajectory
 from commonroad.scenario.state import InputState, TraceState
@@ -34,8 +35,8 @@ def run_evaluation(config: ReactivePlannerConfiguration, state_list: List[Reacti
     :return feasibility_list: List[Bool] indicating feasibility of each state transition
     """
     ego_solution_trajectory = create_full_solution_trajectory(config, state_list)
-    cr_solution, feasibility_list = evaluate_results(config, ego_solution_trajectory, input_list)
     plot_final_trajectory(config.scenario, config.planning_problem, ego_solution_trajectory.state_list, config)
+    cr_solution, feasibility_list = evaluate_results(config, ego_solution_trajectory, input_list)
 
     return cr_solution, feasibility_list
 
