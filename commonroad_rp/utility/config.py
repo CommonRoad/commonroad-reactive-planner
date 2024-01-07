@@ -259,7 +259,8 @@ class ReactivePlannerConfiguration(BaseConfiguration):
     def name_scenario(self) -> str:
         return self.general.name_scenario
 
-    def update(self, scenario: Scenario = None, planning_problem: PlanningProblem = None):
+    def update(self, scenario: Scenario = None, planning_problem: PlanningProblem = None,
+               idx_planning_problem: Optional[int] = None):
         """
         Updates configuration based on the given attributes.
         Function used to construct initial configuration before planner initialization and update configuration during
@@ -277,7 +278,7 @@ class ReactivePlannerConfiguration(BaseConfiguration):
         if scenario is None and planning_problem is None:
             try:
                 self.scenario, self.planning_problem, self.planning_problem_set = \
-                    load_scenario_and_planning_problem(self.general.path_scenario)
+                    load_scenario_and_planning_problem(self.general.path_scenario, idx_planning_problem)
             except FileNotFoundError:
                 warnings.warn(f"<ReactivePlannerConfiguration.update()>: No scenario .xml file found at "
                               f"path_scenario = {self.general.path_scenario}")
