@@ -228,7 +228,6 @@ class GeneralConfiguration(BaseConfiguration):
     path_output: str = "output/"
     path_logs: str = "output/logs/"
     path_pickles: str = "output/pickles/"
-    path_offline_data: str = "output/offline_data/"
     path_scenario: Optional[str] = None
     name_scenario: Optional[str] = None
 
