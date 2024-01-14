@@ -218,6 +218,9 @@ class VehicleConfiguration(BaseConfiguration):
     # wheelbase
     wheelbase: float = vehicle_parameters.a + vehicle_parameters.b
 
+    def __post_init__(self):
+        self.kappa_max = np.tan(self.delta_max) / self.wheelbase
+
 
 @dataclass
 class GeneralConfiguration(BaseConfiguration):
