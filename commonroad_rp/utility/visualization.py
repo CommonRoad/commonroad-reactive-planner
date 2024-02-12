@@ -40,7 +40,7 @@ logging.getLogger('matplotlib.font_manager').setLevel(logging.ERROR)
 _dict_traj_status_to_color = {
     FeasibilityStatus.FEASIBLE.name: 'blue',
     FeasibilityStatus.INFEASIBLE_KINEMATIC.name: 'blue',
-    FeasibilityStatus.INFEASIBLE_COLLISION.name: 'blue'
+    FeasibilityStatus.INFEASIBLE_COLLISION.name: 'red'
 }
 
 
@@ -50,14 +50,15 @@ def visualize_scenario_and_pp(scenario: Scenario, planning_problem: PlanningProb
     ref_path = None
     if cosy is not None:
         ref_path = cosy.reference
-        x_min = np.min(ref_path[:, 0]) - 50
-        x_max = np.max(ref_path[:, 0]) + 50
-        y_min = np.min(ref_path[:, 1]) - 50
-        y_max = np.max(ref_path[:, 1]) + 50
+        x_min = np.min(ref_path[:, 0]) - 20
+        x_max = np.max(ref_path[:, 0]) + 20
+        y_min = np.min(ref_path[:, 1]) - 20
+        y_max = np.max(ref_path[:, 1]) + 20
         plot_limits = [x_min, x_max, y_min, y_max]
 
     rnd = MPRenderer(figsize=(20, 10), plot_limits=plot_limits)
     rnd.draw_params.time_begin = 0
+    rnd.draw_params.dynamic_obstacle.draw_icon = True
     scenario.draw(rnd)
     planning_problem.draw(rnd)
     rnd.render()
@@ -119,6 +120,7 @@ def visualize_planner_at_timestep(scenario: Scenario, planning_problem: Planning
     # set ego vehicle draw params
     ego_params = DynamicObstacleParams()
     ego_params.time_begin = timestep
+    ego_params.time_end = 1000
     ego_params.draw_icon = config.debug.draw_icons
     ego_params.vehicle_shape.occupancy.shape.facecolor = "#E37222"
     ego_params.vehicle_shape.occupancy.shape.edgecolor = "#9C4100"
