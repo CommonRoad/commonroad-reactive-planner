@@ -215,7 +215,8 @@ class ReactivePlanner(object):
         # convert Cartesian initial state or pass given curvilinear initial state
         self.x_0_cl = initial_state_curv if initial_state_curv is not None else self._compute_initial_states(self.x_0)
 
-    def set_collision_checker(self, scenario: Scenario = None, collision_checker: pycrcc.CollisionChecker = None):
+    def set_collision_checker(self, scenario: Scenario = None, collision_checker: pycrcc.CollisionChecker = None,
+                              road_boundary_obstacle=None):
         """
         Sets the collision checker used by the planner using either of the two options:
         If a collision_checker object is passed, then it is used directly by the planner.
@@ -223,6 +224,8 @@ class ReactivePlanner(object):
         checker is created and set.
         :param scenario: CommonRoad Scenario object
         :param collision_checker: pycrcc.CollisionChecker object
+        :param road_boundary_obstacle: obstacle of type pycrcc.CollisionObject. Can be passed directly to avoid
+        recomputing the road boundary obstacle every time
         """
         if collision_checker is None:
             assert scenario is not None, '<ReactivePlanner.set collision checker>: Please provide a CommonRoad ' \
@@ -240,8 +243,11 @@ class ReactivePlanner(object):
                         raise Exception("Invalid input for trajectory_preprocess_obb_sum: dynamic "
                                         "obstacle elements overlap")
                 cc_scenario.add_collision_object(tvo)
-            _, road_boundary_sg_obb = create_road_boundary_obstacle(scenario)
-            cc_scenario.add_collision_object(road_boundary_sg_obb)
+            if road_boundary_obstacle is None:
+                _, road_boundary_sg_obb = create_road_boundary_obstacle(scenario)
+                cc_scenario.add_collision_object(road_boundary_sg_obb)
+            else:
+                cc_scenario.add_collision_object(road_boundary_obstacle)
             self._cc: pycrcc.CollisionChecker = cc_scenario
         else:
             assert scenario is None, '<ReactivePlanner.set collision checker>: Please provide a CommonRoad scenario ' \
