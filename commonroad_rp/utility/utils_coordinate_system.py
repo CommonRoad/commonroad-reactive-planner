@@ -85,7 +85,7 @@ def smooth_ref_path(ref_path: np.ndarray, smoothing_factor=0.0, resample_step: f
 
 class CoordinateSystem:
 
-    def __init__(self, reference: np.ndarray = None, ccosy: CurvilinearCoordinateSystem = None):
+    def __init__(self, reference: np.ndarray = None, ccosy: CurvilinearCoordinateSystem = None, smooth_reference=True):
         if ccosy is None:
             assert reference is not None, '<CoordinateSystem>: Please provide a reference path OR a ' \
                                           'CurvilinearCoordinateSystem object.'
@@ -95,12 +95,13 @@ class CoordinateSystem:
             _, idx = np.unique(reference, axis=0, return_index=True)
             reference = reference[np.sort(idx)]
 
-            # smooth reference path
-            reference = smooth_ref_path(reference)
+            if smooth_reference:
+                # smooth reference path
+                reference = smooth_ref_path(reference)
 
-            # remove duplicated vertices in reference path after smoothing
-            _, idx = np.unique(reference, axis=0, return_index=True)
-            reference = reference[np.sort(idx)]
+                # remove duplicated vertices in reference path after smoothing
+                _, idx = np.unique(reference, axis=0, return_index=True)
+                reference = reference[np.sort(idx)]
 
             self.reference = reference
         else:

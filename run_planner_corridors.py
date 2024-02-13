@@ -54,11 +54,12 @@ logger = logging.getLogger("RP_LOGGER")
 # run route planner and add reference path to config
 route_planner = RoutePlanner(config_planner.scenario, config_planner.planning_problem)
 route = route_planner.plan_routes().retrieve_first_route()
-config_planner.planning.route = route
-config_planner.planning.reference_path = route.reference_path
 
 # initialize reactive planner
 planner = ReactivePlanner(config_planner)
+
+# set reference path for curvilinear coordinate system
+planner.set_reference_path(route.reference_path)
 
 
 # *************************************

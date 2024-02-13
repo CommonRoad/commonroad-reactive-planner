@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Union, Any, Optional, Dict, List
 import pathlib
 from omegaconf import OmegaConf
+import warnings
 
 from commonroad.scenario.state import InitialState
 from commonroad_dc.feasibility.vehicle_dynamics import VehicleParameterMapping
@@ -81,13 +82,14 @@ class BaseConfiguration:
             raise KeyError(f"{key} is not a parameter of {self.__class__.__name__}") from e
 
     @classmethod
-    def load(cls, file_path: Union[pathlib.Path, str], scenario_name: str, validate_types: bool = True) \
+    def load(cls, file_path: Union[pathlib.Path, str], scenario_name: Optional[str] = None, validate_types: bool = True) \
             -> 'ReactivePlannerConfiguration':
         """
-        Loads config file and creates parameter class.
+        Loads parameters from a config yaml file and returns the Configuration class.
 
         :param file_path: Path to yaml file containing config parameters.
-        :param scenario_name: Name of scenario which should be used.
+        :param scenario_name: Name of scenario which should be used. If provided, scenario and planning problem are
+                              loaded from a CR scenario XML file.
         :param validate_types:  Boolean indicating whether loaded config should be validated against CARLA parameters.
         :return: Base parameter class.
         """
@@ -97,7 +99,8 @@ class BaseConfiguration:
         if validate_types:
             OmegaConf.merge(OmegaConf.structured(ReactivePlannerConfiguration), loaded_yaml)
         params = _dict_to_params(OmegaConf.to_object(loaded_yaml), cls)
-        params.general.set_path_scenario(scenario_name)
+        if scenario_name:
+            params.general.set_path_scenario(scenario_name)
         return params
 
 
@@ -125,11 +128,6 @@ class PlanningConfiguration(BaseConfiguration):
         field(default_factory=lambda: ["velocity", "acceleration", "kappa", "kappa_dot", "yaw_rate"])
     # lookahead in dt*standstill_lookahead seconds if current velocity <= 0.1 and after specified time too
     standstill_lookahead: int = 10
-
-    def __post_init__(self):
-        # global route and reference path is stored in planning config
-        self.route: Optional[Route] = None
-        self.reference_path: Optional[np.ndarray] = None
 
 
 @dataclass
@@ -220,6 +218,9 @@ class VehicleConfiguration(BaseConfiguration):
     # wheelbase
     wheelbase: float = vehicle_parameters.a + vehicle_parameters.b
 
+    def __post_init__(self):
+        self.kappa_max = np.tan(self.delta_max) / self.wheelbase
+
 
 @dataclass
 class GeneralConfiguration(BaseConfiguration):
@@ -230,7 +231,6 @@ class GeneralConfiguration(BaseConfiguration):
     path_output: str = "output/"
     path_logs: str = "output/logs/"
     path_pickles: str = "output/pickles/"
-    path_offline_data: str = "output/offline_data/"
     path_scenario: Optional[str] = None
     name_scenario: Optional[str] = None
 
@@ -263,7 +263,7 @@ class ReactivePlannerConfiguration(BaseConfiguration):
         return self.general.name_scenario
 
     def update(self, scenario: Scenario = None, planning_problem: PlanningProblem = None,
-               state_initial: InitialState = None):
+               idx_planning_problem: Optional[int] = None):
         """
         Updates configuration based on the given attributes.
         Function used to construct initial configuration before planner initialization and update configuration during
@@ -274,26 +274,17 @@ class ReactivePlannerConfiguration(BaseConfiguration):
         :param state_initial: initial state (can be different from planning problem initial state during re-planning)
         """
         # update scenario and planning problem with explicitly given ones
-        if scenario:
-            self.scenario = scenario
-        if planning_problem:
-            self.planning_problem = planning_problem
+        self.scenario = scenario
+        self.planning_problem = planning_problem
 
-        # if scenario and planning problem not explicitly given
+        # if both scenario and planning problem are not explicitly provided
         if scenario is None and planning_problem is None:
-            if self.scenario is None or self.planning_problem is None:
-                # read original scenario and pp from scenario file
+            try:
                 self.scenario, self.planning_problem, self.planning_problem_set = \
-                    load_scenario_and_planning_problem(self.general.path_scenario)
-            else:
-                # keep previously stored scenario and planning problem
-                pass
-        else:
-            raise RuntimeError("ReactiveParams::update: Scenario or Planning not None")
+                    load_scenario_and_planning_problem(self.general.path_scenario, idx_planning_problem)
+            except FileNotFoundError:
+                warnings.warn(f"<ReactivePlannerConfiguration.update()>: No scenario .xml file found at "
+                              f"path_scenario = {self.general.path_scenario}")
 
-        # Check that scenario and planning problem are set
+        # Check that a scenario is set (planning problem can be set afterwards)
         assert self.scenario is not None, "<Configuration.update()>: no scenario has been specified"
-        assert self.planning_problem is not None, "<Configuration.update()>: no planning problem has been specified"
-
-        # update initial state for planning if explicitly given
-        self.planning.state_initial = state_initial if state_initial else self.planning_problem.initial_state
