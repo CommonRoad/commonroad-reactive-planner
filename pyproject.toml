@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "commonroad-reactive-planner"
-version = "2023.1"
+version = "2024.1"
 description = "CommonRoad Reactive Planner: Sampling-based Frenet Planner"
 authors = ["Cyber-Physical Systems Group, Technical University of Munich <commonroad@lists.lrz.de>"]
 license = "BSD"
@@ -8,10 +8,10 @@ readme = "README.md"
 homepage = "https://commonroad.in.tum.de"
 keywords= ["autonomous", "automated", "vehicles", "driving", "motion", "planning"]
 classifiers = [
-    "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
     "License :: OSI Approved :: BSD License (BSD)",
     "Operating System :: POSIX :: Linux"
 ]
@@ -22,14 +22,11 @@ packages = [{include = "commonroad_rp"}]
 Source = "https://gitlab.lrz.de/tum-cps/commonroad-reactive-planner"
 
 [tool.poetry.dependencies]
-python = ">=3.7,<3.11"
+python = ">=3.8,<3.12"
 
 matplotlib = ">=2.2.2"
 networkx = ">=2.2"
-numpy = [
-    {version = ">=1.13,<1.22", python = "<3.8"},
-    {version = ">=1.22", python = ">=3.8,<3.11"},
-]
+numpy = ">=1.22"
 methodtools = "^0.4.5"
 omegaconf = ">=2.1.1"
 scipy = ">=1.5.2"
@@ -37,10 +34,7 @@ imageio = ">=2.13.5"
 triangle = ">=20230923"
 
 commonroad-route-planner = ">=2022.3"
-commonroad-io = [
-    {version = ">=2023.1,<2023.2", python = "<3.8"},
-    {version = ">=2023.2", python = ">=3.8"}
-]
+commonroad-io = ">=2023.2"
 commonroad-drivability-checker = ">=2023.1"
 commonroad_vehicle_models = ">=3.0.2"
 
