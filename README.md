@@ -5,7 +5,7 @@ The trajectories are generated using the sampling-based approach in [1][2]. This
 discrete set of trajectories, represented as quintic polynomials in a Frenet frame and selecting an optimal trajectory according
 to a given cost function.
 
-<img src="doc/images/ZAM_Tjunction-1_42_T-1.gif" alt="reactive-planner" width="500"/>
+<img src="doc/images/ZAM_Tjunction-1_42_T-1.gif" alt="reactive-planner" width="600"/>
 
 
 ## Getting Started
@@ -43,10 +43,7 @@ The example script shows how to run the planner on an exemplary CommonRoad scena
 * instantiating the reactive planner
 * running the planner in a cyclic replanning loop with a fixed replanning fequency
 
-
-**Additional example scripts**
-* `run_planner_corridors.py`: uses driving corridors for adaptive sampling (_requires [CommonRoad-Reach](https://commonroad.in.tum.de/tools/commonroad-reach)_)
-* `run_planner_spot.py`: uses set-based predicition of other traffic participants for planning (_requires SPOT, which will be published in the future_)
+In addition we also provide an interactive Jupyter notebook tutorial in the `tutorial/` folder.
 
 
 ## Literature
