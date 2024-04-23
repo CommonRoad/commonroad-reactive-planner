@@ -1,0 +1,21 @@
+general:
+  path_scenarios: "../example_scenarios/"
+
+planning:
+  dt: 0.1
+  replanning_frequency: 3
+  time_steps_computation: 20
+
+vehicle:
+  # CR vehicle type (see commonroad-vehicle-models): #1: Ford Escort, #2: BMW 320i, 3 = VW Vanagon
+  id_type_vehicle: 2
+
+debug:
+  show_plots: True
+  save_plots: False
+  draw_traj_set: True
+  draw_icons: True
+  multiproc: False
+
+sampling:
+  t_min: 0.2
