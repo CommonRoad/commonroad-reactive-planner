@@ -21,7 +21,7 @@ from commonroad.geometry.shape import Rectangle
 from commonroad.prediction.prediction import TrajectoryPrediction
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 from commonroad.scenario.trajectory import Trajectory
-from commonroad.scenario.state import CustomState, InputState
+from commonroad.scenario.state import CustomState, InputState, InitialState
 from commonroad.scenario.scenario import Scenario
 
 # commonroad_dc
@@ -94,7 +94,7 @@ class ReactivePlanner(object):
         self._low_vel_mode = False
 
         # Debug setting: visualize trajectory set
-        self._draw_traj_set = config.debug.draw_traj_set and (config.debug.save_plots or config.debug.save_plots)
+        self._draw_traj_set = config.debug.draw_traj_set and (config.debug.show_plots or config.debug.save_plots)
 
         # set/reset configuration
         self.config: Optional[ReactivePlannerConfiguration] = None
@@ -1152,4 +1152,8 @@ class ReactivePlanner(object):
         shape = Rectangle(self.vehicle_params.length, self.vehicle_params.width)
         # get trajectory prediction
         prediction = TrajectoryPrediction(trajectory, shape)
-        return DynamicObstacle(obstacle_id, ObstacleType.CAR, shape, trajectory.state_list[0], prediction)
+        # get initial state
+        init_state = InitialState()
+        init_state = trajectory.state_list[0].convert_state_to_state(init_state)
+
+        return DynamicObstacle(obstacle_id, ObstacleType.CAR, shape, init_state, prediction)

@@ -40,7 +40,7 @@ logging.getLogger('matplotlib.font_manager').setLevel(logging.ERROR)
 _dict_traj_status_to_color = {
     FeasibilityStatus.FEASIBLE.name: 'blue',
     FeasibilityStatus.INFEASIBLE_KINEMATIC.name: 'blue',
-    FeasibilityStatus.INFEASIBLE_COLLISION.name: 'red'
+    FeasibilityStatus.INFEASIBLE_COLLISION.name: 'blue'
 }
 
 
