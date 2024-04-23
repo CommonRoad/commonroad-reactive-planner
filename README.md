@@ -25,7 +25,7 @@ For the development IDE we suggest [PyCharm](http://www.jetbrains.com/pycharm/)
 
 
 ### Installation from Source
-1. Clone this repository & create a new conda environment, e.g.,  `conda create -n commonroad-py37 python=3.7`
+1. Clone this repository & create a new conda environment, e.g.,  `conda create -n commonroad-py38 python=3.8`
 
 
 2. Go to cloned root directory and install the package:
