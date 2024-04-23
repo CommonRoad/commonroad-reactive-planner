@@ -1,7 +1,7 @@
 __author__ = "Gerald Würsching, Christian Pek"
 __copyright__ = "TUM Cyber-Physical Systems Group"
 __credits__ = ["BMW Group CAR@TUM, interACT"]
-__version__ = "1.0"
+__version__ = "2024.1"
 __maintainer__ = "Gerald Würsching"
 __email__ = "gerald.wuersching@tum.de"
 __status__ = "Beta"
@@ -21,7 +21,7 @@ from commonroad.geometry.shape import Rectangle
 from commonroad.prediction.prediction import TrajectoryPrediction
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 from commonroad.scenario.trajectory import Trajectory
-from commonroad.scenario.state import CustomState, InputState
+from commonroad.scenario.state import CustomState, InputState, InitialState
 from commonroad.scenario.scenario import Scenario
 
 # commonroad_dc
@@ -94,7 +94,7 @@ class ReactivePlanner(object):
         self._low_vel_mode = False
 
         # Debug setting: visualize trajectory set
-        self._draw_traj_set = config.debug.draw_traj_set and (config.debug.save_plots or config.debug.save_plots)
+        self._draw_traj_set = config.debug.draw_traj_set and (config.debug.show_plots or config.debug.save_plots)
 
         # set/reset configuration
         self.config: Optional[ReactivePlannerConfiguration] = None
@@ -195,28 +195,28 @@ class ReactivePlanner(object):
             self.set_collision_checker(collision_checker=collision_checker)
 
         # reset ref path and CoSys
-        if coordinate_system is None:
-            # create new CoSys from reference path
-            self.set_reference_path(reference_path=self.config.planning.reference_path)
-        else:
+        if coordinate_system is not None:
             # use passed CoSys object
             self.set_reference_path(coordinate_system=coordinate_system)
 
-        # if planner init state is empty: Convert cartesian initial state from planning problem
+        # if planner init state is empty
         if self.x_0 is None and initial_state_cart is None:
-            self.x_0 = ReactivePlannerState.create_from_initial_state(self.config.planning_problem.initial_state,
-                                                                      self.vehicle_params.wheelbase,
-                                                                      self.vehicle_params.wb_rear_axle)
+            if self.config.planning_problem:
+                # Get cartesian initial state from planning problem (if available)
+                self.x_0 = ReactivePlannerState.create_from_initial_state(self.config.planning_problem.initial_state,
+                                                                          self.vehicle_params.wheelbase,
+                                                                          self.vehicle_params.wb_rear_axle)
+            else:
+                # otherwise set to None and provide later
+                self.x_0 = None
         else:
             self.x_0 = initial_state_cart if initial_state_cart is not None else self.x_0
-
-        # set low velocity mode given initial velocity in self.x_0
-        self._low_vel_mode = True if self.x_0.velocity < self.config.planning.low_vel_mode_threshold else False
 
         # convert Cartesian initial state or pass given curvilinear initial state
         self.x_0_cl = initial_state_curv if initial_state_curv is not None else self._compute_initial_states(self.x_0)
 
-    def set_collision_checker(self, scenario: Scenario = None, collision_checker: pycrcc.CollisionChecker = None):
+    def set_collision_checker(self, scenario: Scenario = None, collision_checker: pycrcc.CollisionChecker = None,
+                              road_boundary_obstacle=None):
         """
         Sets the collision checker used by the planner using either of the two options:
         If a collision_checker object is passed, then it is used directly by the planner.
@@ -224,6 +224,8 @@ class ReactivePlanner(object):
         checker is created and set.
         :param scenario: CommonRoad Scenario object
         :param collision_checker: pycrcc.CollisionChecker object
+        :param road_boundary_obstacle: obstacle of type pycrcc.CollisionObject. Can be passed directly to avoid
+        recomputing the road boundary obstacle every time
         """
         if collision_checker is None:
             assert scenario is not None, '<ReactivePlanner.set collision checker>: Please provide a CommonRoad ' \
@@ -241,8 +243,11 @@ class ReactivePlanner(object):
                         raise Exception("Invalid input for trajectory_preprocess_obb_sum: dynamic "
                                         "obstacle elements overlap")
                 cc_scenario.add_collision_object(tvo)
-            _, road_boundary_sg_obb = create_road_boundary_obstacle(scenario)
-            cc_scenario.add_collision_object(road_boundary_sg_obb)
+            if road_boundary_obstacle is None:
+                _, road_boundary_sg_obb = create_road_boundary_obstacle(scenario)
+                cc_scenario.add_collision_object(road_boundary_sg_obb)
+            else:
+                cc_scenario.add_collision_object(road_boundary_obstacle)
             self._cc: pycrcc.CollisionChecker = cc_scenario
         else:
             assert scenario is None, '<ReactivePlanner.set collision checker>: Please provide a CommonRoad scenario ' \
@@ -444,6 +449,10 @@ class ReactivePlanner(object):
         :param x_0: The Cartesion state object representing the initial state of the vehicle
         :return: A tuple containing the initial longitudinal and lateral states (lon,lat)
         """
+        # if no coordinate system is given return None
+        if not self._co:
+            return None
+
         # compute curvilinear position
         try:
             s, d = self._co.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
@@ -567,12 +576,22 @@ class ReactivePlanner(object):
         # start timer
         planning_start_time = time.time()
 
-        # check if initial states are provided
+        # check if cartesian initial state is provided
         assert self.x_0 is not None, "<ReactivePlanner.plan(): Planner Cartesian initial state is empty!>"
+
+        # check if coordinate system is provided
+        assert self._co is not None, "<ReactivePlanner.plan(): No coordinate system given. Call set_reference_path()>"
+
+        # check if curvilinear initial state is provided and compute if necessary
+        if not self.x_0_cl:
+            self.x_0_cl = self._compute_initial_states(self.x_0)
         assert self.x_0_cl is not None, "<ReactivePlanner.plan(): Planner curvilinear initial state is empty!>"
 
         # get curvilinear initial states
         x_0_lon, x_0_lat = self.x_0_cl
+
+        # set low velocity mode given initial velocity in self.x_0
+        self._low_vel_mode = True if self.x_0.velocity < self.config.planning.low_vel_mode_threshold else False
 
         logger.info("===============================================================")
         logger.info("=================== Starting Planning Cycle ===================")
@@ -596,7 +615,7 @@ class ReactivePlanner(object):
         # initial index of sampling set to use
         i = 1 if current_sampling_level is None else current_sampling_level
 
-        while optimal_trajectory is None and i <= self.sampling_level:
+        while optimal_trajectory is None and i < self.sampling_level:
             # sample trajectory bundle
             bundle = self._create_trajectory_bundle(x_0_lon, x_0_lat, samp_level=i)
 
@@ -1133,4 +1152,8 @@ class ReactivePlanner(object):
         shape = Rectangle(self.vehicle_params.length, self.vehicle_params.width)
         # get trajectory prediction
         prediction = TrajectoryPrediction(trajectory, shape)
-        return DynamicObstacle(obstacle_id, ObstacleType.CAR, shape, trajectory.state_list[0], prediction)
+        # get initial state
+        init_state = InitialState()
+        init_state = trajectory.state_list[0].convert_state_to_state(init_state)
+
+        return DynamicObstacle(obstacle_id, ObstacleType.CAR, shape, init_state, prediction)

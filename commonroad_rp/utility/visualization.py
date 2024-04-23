@@ -1,13 +1,13 @@
 __author__ = "Gerald Würsching"
 __copyright__ = "TUM Cyber-Physical Systems Group"
-__version__ = "1.0"
+__version__ = "2024.1"
 __maintainer__ = "Gerald Würsching"
 __email__ = "commonroad@lists.lrz.de"
 __status__ = "Beta"
 
 
 # standard imports
-from typing import List, Union
+from typing import List, Union, Optional
 import os
 import logging
 
@@ -50,22 +50,23 @@ def visualize_scenario_and_pp(scenario: Scenario, planning_problem: PlanningProb
     ref_path = None
     if cosy is not None:
         ref_path = cosy.reference
-        x_min = np.min(ref_path[:, 0]) - 50
-        x_max = np.max(ref_path[:, 0]) + 50
-        y_min = np.min(ref_path[:, 1]) - 50
-        y_max = np.max(ref_path[:, 1]) + 50
+        x_min = np.min(ref_path[:, 0]) - 20
+        x_max = np.max(ref_path[:, 0]) + 20
+        y_min = np.min(ref_path[:, 1]) - 20
+        y_max = np.max(ref_path[:, 1]) + 20
         plot_limits = [x_min, x_max, y_min, y_max]
 
     rnd = MPRenderer(figsize=(20, 10), plot_limits=plot_limits)
     rnd.draw_params.time_begin = 0
+    rnd.draw_params.dynamic_obstacle.draw_icon = True
     scenario.draw(rnd)
     planning_problem.draw(rnd)
     rnd.render()
     if ref_path is not None:
-        rnd.ax.plot(ref_path[:, 0], ref_path[:, 1], color='g', marker='.', markersize=1, zorder=19,
+        rnd.ax.plot(ref_path[:, 0], ref_path[:, 1], color='g', marker='.', markersize=1, zorder=100,
                     linewidth=0.8, label='reference path')
         proj_domain_border = np.array(cosy.ccosy.projection_domain())
-        rnd.ax.plot(proj_domain_border[:, 0], proj_domain_border[:, 1], color="orange", linewidth=0.8)
+        rnd.ax.plot(proj_domain_border[:, 0], proj_domain_border[:, 1], color="orange", linewidth=0.8, zorder=100)
     plt.show(block=True)
 
 
@@ -98,6 +99,14 @@ def visualize_planner_at_timestep(scenario: Scenario, planning_problem: Planning
     will visualize on the existing object)
     :param plot_limits: x, y axis limits for plotting
     """
+    # get plot limits from ref path
+    if plot_limits is None and ref_path is not None:
+        x_min = np.min(ref_path[:, 0]) - 20
+        x_max = np.max(ref_path[:, 0]) + 20
+        y_min = np.min(ref_path[:, 1]) - 20
+        y_max = np.max(ref_path[:, 1]) + 20
+        plot_limits = [x_min, x_max, y_min, y_max]
+
     # create renderer object (if no existing renderer is passed)
     if rnd is None:
         rnd = MPRenderer(figsize=(20, 10), plot_limits=plot_limits)
@@ -111,6 +120,7 @@ def visualize_planner_at_timestep(scenario: Scenario, planning_problem: Planning
     # set ego vehicle draw params
     ego_params = DynamicObstacleParams()
     ego_params.time_begin = timestep
+    ego_params.time_end = 1000
     ego_params.draw_icon = config.debug.draw_icons
     ego_params.vehicle_shape.occupancy.shape.facecolor = "#E37222"
     ego_params.vehicle_shape.occupancy.shape.edgecolor = "#9C4100"
@@ -156,7 +166,8 @@ def visualize_planner_at_timestep(scenario: Scenario, planning_problem: Planning
 
 
 def plot_final_trajectory(scenario: Scenario, planning_problem: PlanningProblem, state_list: List[CustomState],
-                          config: ReactivePlannerConfiguration, ref_path: np.ndarray = None):
+                          config: ReactivePlannerConfiguration, ref_path: np.ndarray = None,
+                          plot_limits: Optional[List[Union[int, float]]] = None):
     """
     Function plots occupancies for a given CommonRoad trajectory (of the ego vehicle)
     :param scenario: CommonRoad scenario object
@@ -166,8 +177,17 @@ def plot_final_trajectory(scenario: Scenario, planning_problem: PlanningProblem,
     :param ref_path: Reference path as [(nx2) np.ndarray] (optional)
     :param save_path: Path to save plot as .png (optional)
     """
+    # get plot limits from trajectory
+    if plot_limits is None:
+        position_array = np.array([state.position for state in state_list])
+        x_min = np.min(position_array[:, 0]) - 20
+        x_max = np.max(position_array[:, 0]) + 20
+        y_min = np.min(position_array[:, 1]) - 20
+        y_max = np.max(position_array[:, 1]) + 20
+        plot_limits = [x_min, x_max, y_min, y_max]
+
     # create renderer object (if no existing renderer is passed)
-    rnd = MPRenderer(figsize=(20, 10))
+    rnd = MPRenderer(figsize=(20, 10), plot_limits=plot_limits)
 
     # set renderer draw params
     rnd.draw_params.time_begin = 0
