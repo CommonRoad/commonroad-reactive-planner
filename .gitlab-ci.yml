@@ -1,0 +1,53 @@
+stages:
+  - test_install
+  - deploy
+
+# TODO add stages: test_python (unit tests), publish (GitLab Pages documentation) 
+
+default:
+  image: python:3.10
+  before_script:
+      - pip install poetry
+
+test_install:
+  image : python:$PYTHON_VERSIONS
+  stage: test_install
+  parallel:
+    matrix:
+      - PYTHON_VERSIONS: ["3.8", "3.9", "3.10", "3.11"]
+  script:
+    - pip install poetry
+    - poetry config virtualenvs.in-project true
+    - poetry install
+    - source .venv/bin/activate
+
+push_to_internal_pipy_registry:
+  # push the development version to the internal pipy registry https://gitlab.lrz.de/cps/reactive-planner/-/packages
+  # before manually triggering the job, delete the previous package in case the version number didn't change
+  stage: deploy
+  rules:
+    - if: $CI_COMMIT_BRANCH == "development"
+      when: manual
+  script:
+    - poetry config repositories.gitlab ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi
+    - poetry build
+    - poetry publish --repository gitlab -u gitlab-ci-token -p ${CI_JOB_TOKEN}
+
+push_to_external_pipy_test_registry:
+  stage: deploy
+  rules:
+    - if: $CI_COMMIT_BRANCH == "master"
+      when: manual
+  script:
+    - poetry config repositories.test https://test.pypi.org/legacy/
+    - poetry build
+    - poetry publish --repository test -u __token__ -p ${CR_PYPI_TEST_API_TOKEN}
+
+push_to_external_pipy_release_registry:
+  stage: deploy
+  rules:
+    - if: $CI_COMMIT_BRANCH == "master"
+      when: manual
+  script:
+    - poetry build
+    - poetry publish -u __token__ -p ${CR_PYPI_RELEASE_API_TOKEN}

@@ -1,6 +1,6 @@
 __author__ = "Gerald Würsching"
 __copyright__ = "TUM Cyber-Physical Systems Group"
-__version__ = "1.0"
+__version__ = "2024.1"
 __maintainer__ = "Gerald Würsching"
 __email__ = "commonroad@lists.lrz.de"
 __status__ = "Beta"
@@ -42,11 +42,13 @@ logger = logging.getLogger("RP_LOGGER")
 # run route planner and add reference path to config
 route_planner = RoutePlanner(config.scenario, config.planning_problem)
 route = route_planner.plan_routes().retrieve_first_route()
-config.planning.route = route
-config.planning.reference_path = route.reference_path
 
 # initialize reactive planner
 planner = ReactivePlanner(config)
+
+# set reference path for curvilinear coordinate system
+planner.set_reference_path(route.reference_path)
+
 
 # **************************
 # Run Planning
