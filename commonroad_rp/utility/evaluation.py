@@ -60,7 +60,7 @@ def evaluate_results(config: ReactivePlannerConfiguration, ego_solution_trajecto
     reconstructed_states = reconstruct_states(config, ego_solution_trajectory.state_list, reconstructed_inputs)
 
     # check acceleration correctness
-    check_acceleration(config, ego_solution_trajectory.state_list, plot=True)
+    check_acceleration(config, ego_solution_trajectory.state_list)
 
     # plot
     plot_states(config, ego_solution_trajectory.state_list, reconstructed_states, plot_bounds=False)
@@ -135,7 +135,7 @@ def reconstruct_inputs(config: ReactivePlannerConfiguration, pps: PlanningProble
     return feasible_state_list, reconstructed_inputs
 
 
-def check_acceleration(config: ReactivePlannerConfiguration, state_list:  List[Union[ReactivePlannerState, TraceState]], plot=False):
+def check_acceleration(config: ReactivePlannerConfiguration, state_list:  List[Union[ReactivePlannerState, TraceState]]):
     """Checks whether the computed acceleration the trajectory matches the velocity difference (dv/dt), i.e., assuming
     piecewise constant acceleration input"""
     # computed acceleration of trajectory
@@ -149,7 +149,7 @@ def check_acceleration(config: ReactivePlannerConfiguration, state_list:  List[U
     acc_correct = np.all(diff < 1e-01)
     print("Acceleration correct: %s, with max deviation %s" % (acc_correct, np.max(diff)))
 
-    if plot:
+    if config.debug.show_evaluation_plots:
         plt.figure(figsize=(7, 3.5))
         plt.suptitle("Acceleration check")
         plt.plot(list(range(len(a_planned[1:]))),
@@ -226,7 +226,9 @@ def plot_states(config: ReactivePlannerConfiguration, state_list: List[Union[Rea
              reconstructed_yaw_rate, color="blue", label="reconstructed")
     plt.ylabel("theta_dot")
     plt.tight_layout()
-    plt.show()
+
+    if config.debug.show_evaluation_plots:
+        plt.show()
 
     # plot errors in position, velocity, orientation
     if reconstructed_states:
@@ -256,7 +258,9 @@ def plot_states(config: ReactivePlannerConfiguration, state_list: List[Union[Rea
                                                 for i in range(len(state_list))], color="black")
         plt.ylabel("theta error")
         plt.tight_layout()
-        plt.show()
+
+        if config.debug.show_evaluation_plots:
+            plt.show()
 
 
 def plot_inputs(config: ReactivePlannerConfiguration, input_list: List[InputState], reconstructed_inputs=None, plot_bounds=False):
@@ -298,4 +302,6 @@ def plot_inputs(config: ReactivePlannerConfiguration, input_list: List[InputStat
                  color="red")
     plt.ylabel("a_long in m/s^2")
     plt.tight_layout()
-    plt.show()
+
+    if config.debug.show_evaluation_plots:
+        plt.show()
