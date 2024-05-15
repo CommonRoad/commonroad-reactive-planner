@@ -175,6 +175,8 @@ class DebugConfiguration(BaseConfiguration):
     save_config: bool = False
     # show plots
     show_plots: bool = False
+    # show evaluation plots
+    show_evaluation_plots: bool = True
     # draw the reference path
     draw_ref_path: bool = True
     # draw the planning problem
