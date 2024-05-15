@@ -35,7 +35,8 @@ def run_evaluation(config: ReactivePlannerConfiguration, state_list: List[Reacti
     :return feasibility_list: List[Bool] indicating feasibility of each state transition
     """
     ego_solution_trajectory = create_full_solution_trajectory(config, state_list)
-    plot_final_trajectory(config.scenario, config.planning_problem, ego_solution_trajectory.state_list, config)
+    if config.debug.show_evaluation_plots:
+        plot_final_trajectory(config.scenario, config.planning_problem, ego_solution_trajectory.state_list, config)
     cr_solution, feasibility_list = evaluate_results(config, ego_solution_trajectory, input_list)
 
     return cr_solution, feasibility_list
@@ -63,8 +64,9 @@ def evaluate_results(config: ReactivePlannerConfiguration, ego_solution_trajecto
     check_acceleration(config, ego_solution_trajectory.state_list)
 
     # plot
-    plot_states(config, ego_solution_trajectory.state_list, reconstructed_states, plot_bounds=False)
-    plot_inputs(config, record_input_list[1:], reconstructed_inputs, plot_bounds=True)
+    if config.debug.show_evaluation_plots:
+        plot_states(config, ego_solution_trajectory.state_list, reconstructed_states, plot_bounds=False)
+        plot_inputs(config, record_input_list[1:], reconstructed_inputs, plot_bounds=True)
 
     # CR validity check
     print("Feasibility Check Result: ")
@@ -227,7 +229,7 @@ def plot_states(config: ReactivePlannerConfiguration, state_list: List[Union[Rea
     plt.ylabel("theta_dot")
     plt.tight_layout()
 
-    if config.debug.show_evaluation_plots:
+    if config.debug.show_plots:
         plt.show()
 
     # plot errors in position, velocity, orientation
@@ -259,7 +261,7 @@ def plot_states(config: ReactivePlannerConfiguration, state_list: List[Union[Rea
         plt.ylabel("theta error")
         plt.tight_layout()
 
-        if config.debug.show_evaluation_plots:
+        if config.debug.show_plots:
             plt.show()
 
 
@@ -303,5 +305,5 @@ def plot_inputs(config: ReactivePlannerConfiguration, input_list: List[InputStat
     plt.ylabel("a_long in m/s^2")
     plt.tight_layout()
 
-    if config.debug.show_evaluation_plots:
+    if config.debug.show_plots:
         plt.show()

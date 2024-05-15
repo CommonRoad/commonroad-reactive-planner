@@ -202,7 +202,7 @@ def plot_final_trajectory(scenario: Scenario, planning_problem: PlanningProblem,
     occ_params.zorder = 51
 
     # visualize scenario
-    if config.debug.show_evaluation_plots:
+    if config.debug.show_plots:
         scenario.draw(rnd)
     # visualize planning problem
     if config.debug.draw_planning_problem:
@@ -238,7 +238,7 @@ def plot_final_trajectory(scenario: Scenario, planning_problem: PlanningProblem,
                     bbox_inches='tight')
 
     # show plot
-    if config.debug.show_evaluation_plots:
+    if config.debug.show_plots:
         plt.show(block=True)
 
 
