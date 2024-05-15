@@ -33,7 +33,7 @@ scipy = ">=1.5.2"
 imageio = ">=2.13.5"
 triangle = ">=20230923"
 
-commonroad-route-planner = ">=2024.1.1"
+commonroad-route-planner = ">=2024.2.0"
 commonroad-io = ">=2023.2"
 commonroad-drivability-checker = ">=2024.1"
 commonroad_vehicle_models = ">=3.0.2"
