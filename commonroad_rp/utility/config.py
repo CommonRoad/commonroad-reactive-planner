@@ -197,30 +197,47 @@ class DebugConfiguration(BaseConfiguration):
 class VehicleConfiguration(BaseConfiguration):
     """Class to store vehicle configurations"""
 
+    # default vehicle type ID is 2 (BMW 320i parameters)
     id_type_vehicle: int = 2
-    # get vehicle parameters from CommonRoad vehicle models given cr_vehicle_id
-    vehicle_parameters: VehicleParameters = VehicleParameterMapping.from_vehicle_type(VehicleType(id_type_vehicle))
 
     # get dimensions from given vehicle ID
-    length: float = vehicle_parameters.l
-    width: float = vehicle_parameters.w
+    length: float = 4.508
+    width: float = 1.61
 
     # distances front/rear axle to vehicle center
-    wb_front_axle: float = vehicle_parameters.a
-    wb_rear_axle: float = vehicle_parameters.b
+    wb_front_axle: float = 1.1561957064
+    wb_rear_axle: float = 1.4227170936
 
     # get constraints from given vehicle ID
-    a_max: float = vehicle_parameters.longitudinal.a_max
-    v_switch: float = vehicle_parameters.longitudinal.v_switch
-    delta_min: float = vehicle_parameters.steering.min
-    delta_max: float = vehicle_parameters.steering.max
-    v_delta_min: float = vehicle_parameters.steering.v_min
-    v_delta_max: float = vehicle_parameters.steering.v_max
+    a_max: float = 11.5
+    v_switch: float = 7.319
+    delta_min: float = -1.066
+    delta_max: float = 1.066
+    v_delta_min: float = -0.4
+    v_delta_max: float = 0.4
 
     # wheelbase
-    wheelbase: float = vehicle_parameters.a + vehicle_parameters.b
+    wheelbase: float = wb_front_axle + wb_rear_axle
 
     def __post_init__(self):
+        # get vehicle parameters from CommonRoad vehicle models given cr_vehicle_id
+        vehicle_parameters: VehicleParameters = \
+            VehicleParameterMapping.from_vehicle_type(VehicleType(self.id_type_vehicle))
+
+        # overwrite parameters according to specified vehicle type
+        self.length = vehicle_parameters.l
+        self.width = vehicle_parameters.w
+        self.wb_front_axle = vehicle_parameters.a
+        self.wb_rear_axle = vehicle_parameters.b
+        self.a_max = vehicle_parameters.longitudinal.a_max
+        self.v_switch = vehicle_parameters.longitudinal.v_switch
+        self.delta_min = vehicle_parameters.steering.min
+        self.delta_max = vehicle_parameters.steering.max
+        self.v_delta_min = vehicle_parameters.steering.v_min
+        self.v_delta_max = vehicle_parameters.steering.v_max
+        self.wheelbase = self.wb_front_axle + self.wb_rear_axle
+
+        # compute maximum curvature from steering limit and wheelbase
         self.kappa_max = np.tan(self.delta_max) / self.wheelbase
 
 
