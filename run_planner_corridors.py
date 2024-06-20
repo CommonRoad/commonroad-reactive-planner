@@ -52,7 +52,7 @@ logger = logging.getLogger("RP_LOGGER")
 # Initialize Planner
 # *************************************
 # run route planner and add reference path to config
-route_planner = RoutePlanner(config_planner.scenario, config_planner.planning_problem)
+route_planner = RoutePlanner(config_planner.scenario.lanelet_network, config_planner.planning_problem)
 route = route_planner.plan_routes().retrieve_first_route()
 
 # initialize reactive planner

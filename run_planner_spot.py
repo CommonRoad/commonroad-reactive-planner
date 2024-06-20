@@ -51,7 +51,7 @@ spot_scenario_id = 1
 # Initialize Planner
 # *************************************
 # run route planner and add reference path to config
-route_planner = RoutePlanner(config.scenario, config.planning_problem)
+route_planner = RoutePlanner(config.scenario.lanelet_network, config.planning_problem)
 route = route_planner.plan_routes().retrieve_first_route()
 
 # initialize reactive planner
