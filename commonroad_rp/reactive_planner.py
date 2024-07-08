@@ -6,6 +6,7 @@ __maintainer__ = "Gerald Würsching"
 __email__ = "gerald.wuersching@tum.de"
 __status__ = "Beta"
 
+import copy
 # python packages
 import math
 import time
@@ -22,7 +23,7 @@ from commonroad.prediction.prediction import TrajectoryPrediction
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 from commonroad.scenario.trajectory import Trajectory
 from commonroad.scenario.state import CustomState, InputState, InitialState
-from commonroad.scenario.scenario import Scenario
+from commonroad.scenario.scenario import Scenario, LaneletNetwork, Lanelet
 
 # commonroad_dc
 import commonroad_dc.pycrcc as pycrcc
@@ -98,6 +99,9 @@ class ReactivePlanner(object):
 
         # set/reset configuration
         self.config: Optional[ReactivePlannerConfiguration] = None
+        self._permitted_lanelet_ids: List[int] = [
+            lanelet.lanelet_id for lanelet in config.scenario.lanelet_network.lanelets
+        ]
         self.reset(config)
 
         # set sampling space
@@ -111,6 +115,7 @@ class ReactivePlanner(object):
 
         # set standstill lookahead
         self._standstill_lookahead = config.planning.standstill_lookahead
+
 
     @property
     def collision_checker(self) -> pycrcc.CollisionChecker:
@@ -159,6 +164,43 @@ class ReactivePlanner(object):
         """List of recorded planner control inputs"""
         return self._record_input_list
 
+    @property
+    def permitted_lanelet_ids(self) -> List[int]:
+        """
+        :return: list of permitted lanelet ids
+        """
+        return self._permitted_lanelet_ids
+
+
+    def set_permitted_lanelet_ids(
+            self,
+            permitted_lanelet_ids: List[int]
+    ) -> None:
+        """
+        Set permitted lanelet ids and limit lanelet boundaries to it
+        :param permitted_lanelet_ids: ids of permitted lanelets.
+        """
+        # sanity check
+        if(len(permitted_lanelet_ids) == 0):
+            raise ValueError("No permitted lanelets set")
+
+        self._permitted_lanelet_ids = permitted_lanelet_ids
+        self.reset(config=self.config)
+
+
+    def _add_prohibited_lanelets_as_obstacles(
+            self,
+    ) -> None:
+        """
+        Sets permitted lanelet ids in config.
+        """
+        for lanelet in self.config.scenario.lanelet_network.lanelets:
+            if(lanelet.lanelet_id not in self._permitted_lanelet_ids):
+                collision_shape = create_collision_object(lanelet.polygon)
+                self._cc.add_collision_object(collision_shape)
+
+
+
     def goal_reached(self) -> bool:
         """Checks if the currently set initial state of the planner is within the goal configuration"""
         # shift ReactivePlannerState to center for goal check
@@ -169,11 +211,14 @@ class ReactivePlanner(object):
         else:
             return False
 
-    def reset(self, config: ReactivePlannerConfiguration = None,
-              initial_state_cart: ReactivePlannerState = None,
-              initial_state_curv: Tuple[List, List] = None,
-              collision_checker: pycrcc.CollisionChecker = None,
-              coordinate_system: CoordinateSystem = None):
+    def reset(
+            self,
+            config: ReactivePlannerConfiguration = None,
+            initial_state_cart: ReactivePlannerState = None,
+            initial_state_curv: Tuple[List, List] = None,
+            collision_checker: pycrcc.CollisionChecker = None,
+            coordinate_system: CoordinateSystem = None,
+    ) -> None:
         """
         Initializes/resets configuration of the planner for re-planning purposes
         """
@@ -249,11 +294,15 @@ class ReactivePlanner(object):
             else:
                 cc_scenario.add_collision_object(road_boundary_obstacle)
             self._cc: pycrcc.CollisionChecker = cc_scenario
+
         else:
             assert scenario is None, '<ReactivePlanner.set collision checker>: Please provide a CommonRoad scenario ' \
                                      'OR a ' \
                                      'CollisionChecker object to the planner.'
             self._cc: pycrcc.CollisionChecker = collision_checker
+
+        # Add prohibited lanelets
+        self._add_prohibited_lanelets_as_obstacles()
 
     def set_reference_path(self, reference_path: np.ndarray = None, coordinate_system: CoordinateSystem = None):
         """
