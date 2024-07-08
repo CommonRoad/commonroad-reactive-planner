@@ -231,6 +231,8 @@ class ReactivePlanner(object):
         # reset statistics
         self._reset_statistics()
 
+        # reset
+
         # reset collision checker
         if collision_checker is None:
             # create new collision checker from updated scenario
@@ -349,8 +351,8 @@ class ReactivePlanner(object):
     def set_s_sampling_parameters(self, s_min, s_max):
         """
         Sets sample parameters of longitudinal position
-        :param s_min minimum lon position sample bound
-        :param s_max maximum lon position sample bound
+        :param s_min: minimum lon position sample bound
+        :param s_max: maximum lon position sample bound
         """
         self.sampling_space.samples_s = PositionSampling(s_min, s_max, self.sampling_level)
         logger.info("Sampled interval of longitudinal position: {} m - {} m".format(s_min, s_max))
@@ -360,7 +362,7 @@ class ReactivePlanner(object):
         Sets desired velocity and re-calculates velocity samples
         :param desired_velocity: velocity in m/s
         :param current_speed: velocity in m/s
-        :param stopping
+        :param stopping: stopping flag
         :return: velocity in m/s
         """
         # set desired lon position to None if in velocity following mode
