@@ -26,7 +26,7 @@ python = ">=3.8,<3.12"
 
 matplotlib = ">=2.2.2"
 networkx = ">=2.2"
-numpy = ">=1.22"
+numpy = ">=1.22,<2.0"
 methodtools = "^0.4.5"
 omegaconf = ">=2.1.1"
 scipy = ">=1.5.2"
@@ -38,17 +38,23 @@ commonroad-io = ">=2023.2"
 commonroad-drivability-checker = ">=2024.1"
 commonroad_vehicle_models = ">=3.0.2"
 
+
+# docs
 [tool.poetry.group.docs]
 optional = true
 
 [tool.poetry.group.docs.dependencies]
 sphinx = ">=2.2.1"
+mkdocstrings-python = "^1.8.0"
+mkdocs-material = "^9.5.10"
 
+# tests
 [tool.poetry.group.tests]
 optional = true
 
 [tool.poetry.group.tests.dependencies]
 pytest = ">=6.2.5"
+coverage = "^6.5.0"
 
 [build-system]
 requires = ["poetry-core"]
