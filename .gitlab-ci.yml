@@ -30,6 +30,19 @@ unittest:
        coverage_format: cobertura
        path: coverage.xml
 
+# test if pages are buildable
+test_build_pages:
+  stage: test
+  cache: []
+  allow_failure: true
+  script:
+    - mkdocs build
+  artifacts:
+    paths:
+      - site
+  needs: [ ]
+
+
 
 # IMPORTANT --> Empty cache, otherwise unpredictable / racing condition during installs
 test_install:
@@ -49,6 +62,27 @@ test_install:
 
 
 ######## Deploy ####################
+
+# Deploy to gitlab pages
+pages:
+  stage: deploy
+  publish: site
+  only:
+    - master
+    - develop
+  when:
+    manual
+  script:
+    - mkdocs build
+  artifacts:
+    paths:
+      - site
+  environment:
+    name: Gitlab Pages
+    url: https://cps.pages.gitlab.lrz.de/commonroad/commonroad-reactive-planner/
+
+
+
 push_to_internal_pipy_registry:
   # push the development version to the internal pipy registry https://gitlab.lrz.de/cps/reactive-planner/-/packages
   # before manually triggering the job, delete the previous package in case the version number didn't change
