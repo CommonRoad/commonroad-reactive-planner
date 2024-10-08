@@ -152,12 +152,13 @@ def visualize_planner_at_timestep(scenario: Scenario, planning_problem: Planning
         rnd.ax.plot(ref_path[:, 0], ref_path[:, 1], color='g', marker='.', markersize=1, zorder=19, linewidth=0.8,
                     label='reference path')
 
-    # save as .png file
+    # save as image
     if config.debug.save_plots:
         os.makedirs(os.path.join(config.general.path_output, str(scenario.scenario_id)),
                     exist_ok=True)
         plot_dir = os.path.join(config.general.path_output, str(scenario.scenario_id))
-        plt.savefig(f"{plot_dir}/{scenario.scenario_id}_{timestep}.png", format='png', dpi=300,
+        plt.savefig(f"{plot_dir}/{scenario.scenario_id}_{timestep}.{config.debug.plots_file_format}",
+                    format=config.debug.plots_file_format, dpi=300,
                     bbox_inches='tight')
 
     # show plot
@@ -175,7 +176,7 @@ def plot_final_trajectory(scenario: Scenario, planning_problem: PlanningProblem,
     :param state_list: List of trajectory States
     :param config: Configuration object for plot/save settings
     :param ref_path: Reference path as [(nx2) np.ndarray] (optional)
-    :param save_path: Path to save plot as .png (optional)
+    :param plot_limits: limits of map plotting
     """
     # get plot limits from trajectory
     if plot_limits is None:
@@ -229,12 +230,13 @@ def plot_final_trajectory(scenario: Scenario, planning_problem: PlanningProblem,
         rnd.ax.plot(ref_path[:, 0], ref_path[:, 1], color='g', marker='.', markersize=1, zorder=19, linewidth=0.8,
                     label='reference path')
 
-    # save as .png file
+    # save as image
     if config.debug.save_plots:
         os.makedirs(os.path.join(config.general.path_output, str(scenario.scenario_id)),
                     exist_ok=True)
         plot_dir = os.path.join(config.general.path_output, str(scenario.scenario_id))
-        plt.savefig(f"{plot_dir}/{scenario.scenario_id}_final_trajectory.png", format='png', dpi=300,
+        plt.savefig(f"{plot_dir}/{scenario.scenario_id}_final_trajectory.{config.debug.plots_file_format}",
+                    format={config.debug.plots_file_format}, dpi=300,
                     bbox_inches='tight')
 
     # show plot
@@ -266,7 +268,7 @@ def make_gif(config: ReactivePlannerConfiguration, time_steps: Union[range, List
         path_images = os.path.join(config.general.path_output, str(scenario_id))
 
         for step in time_steps:
-            im_path = os.path.join(path_images, str(scenario_id) + "_{}.png".format(step))
+            im_path = os.path.join(path_images, str(scenario_id) + f"_{step}.{config.debug.plots_file_format}")
             filenames.append(im_path)
 
         for filename in filenames:
