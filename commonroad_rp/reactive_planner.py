@@ -116,6 +116,9 @@ class ReactivePlanner(object):
         # set standstill lookahead
         self._standstill_lookahead = config.planning.standstill_lookahead
 
+        # set logging level
+        logger.setLevel(config.debug.logging_level)
+
 
     @property
     def collision_checker(self) -> pycrcc.CollisionChecker:

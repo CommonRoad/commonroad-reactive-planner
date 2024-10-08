@@ -177,6 +177,8 @@ class DebugConfiguration(BaseConfiguration):
     show_plots: bool = False
     # show evaluation plots
     show_evaluation_plots: bool = True
+    # plots file format
+    plots_file_format = "png"
     # draw the reference path
     draw_ref_path: bool = True
     # draw the planning problem
