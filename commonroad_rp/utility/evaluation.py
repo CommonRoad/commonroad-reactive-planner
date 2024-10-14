@@ -205,7 +205,8 @@ def plot_states(config: ReactivePlannerConfiguration, state_list: List[Union[Rea
         plt.plot(list(range(len(reconstructed_states))),
                  [state.velocity for state in reconstructed_states], color="blue", label="reconstructed")
     plt.legend()
-    plt.ylabel("v")
+    plt.ylabel("velocity [m/s]")
+    plt.xlabel("timestep")
 
     # orientation
     plt.subplot(5, 1, 4)

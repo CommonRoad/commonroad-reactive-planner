@@ -19,3 +19,6 @@ evals/
 doc/build
 output/
 dist/
+venv/
+evaluation/logs
+nohup.out

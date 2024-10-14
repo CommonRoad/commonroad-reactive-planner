@@ -4,16 +4,14 @@ import inspect
 import os.path
 from dataclasses import dataclass, field
 from typing import Union, Any, Optional, Dict, List
-import pathlib
+from pathlib import Path
 from omegaconf import OmegaConf
 import warnings
 
-from commonroad.scenario.state import InitialState
 from commonroad_dc.feasibility.vehicle_dynamics import VehicleParameterMapping
 from commonroad.common.solution import VehicleType
 from commonroad.scenario.scenario import Scenario
 from commonroad.planning.planning_problem import PlanningProblem, PlanningProblemSet
-from commonroad_route_planner.route import Route
 from vehiclemodels.vehicle_parameters import VehicleParameters
 
 from commonroad_rp.utility.general import load_scenario_and_planning_problem
@@ -82,7 +80,7 @@ class BaseConfiguration:
             raise KeyError(f"{key} is not a parameter of {self.__class__.__name__}") from e
 
     @classmethod
-    def load(cls, file_path: Union[pathlib.Path, str], scenario_name: Optional[str] = None, validate_types: bool = True) \
+    def load(cls, file_path: Union[Path, str], scenario_name: Optional[str] = None, validate_types: bool = True) \
             -> 'ReactivePlannerConfiguration':
         """
         Loads parameters from a config yaml file and returns the Configuration class.
@@ -93,7 +91,8 @@ class BaseConfiguration:
         :param validate_types:  Boolean indicating whether loaded config should be validated against CARLA parameters.
         :return: Base parameter class.
         """
-        file_path = pathlib.Path(file_path)
+        file_path = Path(file_path)
+
         assert file_path.suffix == ".yaml", f"File type {file_path.suffix} is unsupported! Please use .yaml!"
         loaded_yaml = OmegaConf.load(file_path)
         if validate_types:
@@ -164,6 +163,10 @@ class SamplingConfiguration(BaseConfiguration):
     d_min: float = -3
     d_max: float = 3
 
+    # number of initial velocity samples (in first sampling level)
+    vel_init_samples: int = 3
+    # number of initial position samples (in first sampling level)
+    pos_init_samples: int = 3
 
 @dataclass
 class DebugConfiguration(BaseConfiguration):
@@ -193,6 +196,9 @@ class DebugConfiguration(BaseConfiguration):
     multiproc: bool = True
     # number of workers for multiprocessing
     num_workers: int = 6
+    # number of workers for multiprocessing in visualization
+    num_workers_viz: int = 6
+    max_queue_size: int = 50
 
 
 @dataclass
@@ -248,7 +254,7 @@ class GeneralConfiguration(BaseConfiguration):
     """General parameters for evaluations."""
 
     # paths are relative to the root directory
-    path_scenarios: str = "example_scenarios/"
+    path_scenarios: Optional[str] = Path(__file__).parents[2] / "example_scenarios"
     path_output: str = "output/"
     path_logs: str = "output/logs/"
     path_pickles: str = "output/pickles/"

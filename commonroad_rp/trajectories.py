@@ -543,6 +543,9 @@ class TrajectoryBundle:
         return self._trajectory_bundle
 
     def filter_goals_behind(self):
+        """
+        Filters goals for longitudinal position sampling, which are behind the rear axis of the ego vehicle.
+        """
         valid_trajectories = []
         for traj in self.trajectories:
             if traj.trajectory_long.x_0[0] < traj.trajectory_long.x_d[0]:
