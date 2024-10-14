@@ -6,7 +6,6 @@ __maintainer__ = "Gerald Würsching"
 __email__ = "gerald.wuersching@tum.de"
 __status__ = "Beta"
 
-import copy
 # python packages
 import math
 import time
@@ -17,13 +16,12 @@ from multiprocessing.context import Process
 import logging
 
 # commonroad-io
-from commonroad.common.validity import is_real_number
 from commonroad.geometry.shape import Rectangle
 from commonroad.prediction.prediction import TrajectoryPrediction
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 from commonroad.scenario.trajectory import Trajectory
 from commonroad.scenario.state import CustomState, InputState, InitialState
-from commonroad.scenario.scenario import Scenario, LaneletNetwork, Lanelet
+from commonroad.scenario.scenario import Scenario
 
 # commonroad_dc
 import commonroad_dc.pycrcc as pycrcc
@@ -339,7 +337,9 @@ class ReactivePlanner(object):
         :param delta_d_min: lateral distance lower than reference
         :param delta_d_max: lateral distance higher than reference
         """
-        self.sampling_space.samples_d = PositionSampling(delta_d_min, delta_d_max, self.sampling_level)
+        self.sampling_space.samples_d = PositionSampling(
+            delta_d_min, delta_d_max, self.sampling_level, self.config.sampling.pos_init_samples
+        )
         logger.debug("Sampled interval of lateral position: {} m - {} m".format(delta_d_min, delta_d_max))
 
     def set_v_sampling_parameters(self, v_min, v_max):
@@ -348,7 +348,9 @@ class ReactivePlanner(object):
         :param v_min: minimal velocity sample bound
         :param v_max: maximal velocity sample bound
         """
-        self.sampling_space.samples_v = VelocitySampling(v_min, v_max, self.sampling_level)
+        self.sampling_space.samples_v = VelocitySampling(
+            v_min, v_max, self.sampling_level, self.config.sampling.vel_init_samples
+        )
         logger.info("Sampled interval of velocity: {} m/s - {} m/s".format(v_min, v_max))
 
     def set_s_sampling_parameters(self, s_min, s_max):
@@ -357,7 +359,9 @@ class ReactivePlanner(object):
         :param s_min: minimum lon position sample bound
         :param s_max: maximum lon position sample bound
         """
-        self.sampling_space.samples_s = PositionSampling(s_min, s_max, self.sampling_level)
+        self.sampling_space.samples_s = PositionSampling(
+            s_min, s_max, self.sampling_level, self.config.sampling.pos_init_samples
+        )
         logger.info("Sampled interval of longitudinal position: {} m - {} m".format(s_min, s_max))
 
     def set_desired_velocity(self, desired_velocity: float = None, current_speed: float = None, stopping: bool = False):
@@ -371,7 +375,10 @@ class ReactivePlanner(object):
         # set desired lon position to None if in velocity following mode
         self._desired_lon_position = None
 
-        if desired_velocity is None and self._desired_speed is None:
+        if (desired_velocity is None
+            and (self._desired_speed is None
+                 or (self._desired_speed == 0.0 and self.config.sampling.longitudinal_mode == 'velocity_keeping'))) \
+                or current_speed == 0.0:
             self._desired_speed = retrieve_desired_velocity_from_pp(self.config.planning_problem)
         else:
             self._desired_speed = desired_velocity if desired_velocity is not None else self._desired_speed
@@ -420,6 +427,25 @@ class ReactivePlanner(object):
             delta_s_max = self.config.sampling.s_max
         self.set_s_sampling_parameters(s_min=lon_position + delta_s_min, s_max=lon_position + delta_s_max)
 
+        # Update cost function
+        if hasattr(self.cost_function, "desired_s"):
+            self.cost_function.desired_s = self._desired_lon_position
+        if hasattr(self.cost_function, "desired_speed"):
+            self.cost_function.desired_speed = self._desired_speed
+        # update acceleration weight in cost function
+        if hasattr(self.cost_function, "w_a"):
+            self.cost_function.w_a = 1
+
+    def remove_desired_lon_position(self):
+        """
+        Sets a desired longitudinal position for stopping and re-calculates s position samples
+        NOTE: Currently, the desired longitudinal position is only considered for stopping, target velocity and
+              acceleration are set to 0.0
+        """
+        # set target longitudinal position for stopping
+        self._desired_lon_position = None
+        # set target velocity for stopping
+        self.set_desired_velocity(current_speed=self.x_0.velocity)
         # Update cost function
         if hasattr(self.cost_function, "desired_s"):
             self.cost_function.desired_s = self._desired_lon_position
@@ -700,7 +726,7 @@ class ReactivePlanner(object):
             else:
                 self._optimal_cost = optimal_trajectory.cost
                 relative_costs = None
-                if bundle is not None:
+                if bundle is not None and bundle.trajectories is not None and len(bundle.trajectories) > 0:
                     relative_costs = ((optimal_trajectory.cost - bundle.min_costs().cost) /
                                       (bundle.max_costs().cost - bundle.min_costs().cost))
                 logger.info(f"Found optimal trajectory with costs = {self._optimal_cost:.3f} "

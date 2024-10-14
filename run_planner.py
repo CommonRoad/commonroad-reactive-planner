@@ -65,6 +65,7 @@ def main(
                 i = 1
                 while optimal is None and i <= planner.sampling_level:
                     optimal = planner.plan(i)
+                    i += 1
 
             if not optimal:
                 break

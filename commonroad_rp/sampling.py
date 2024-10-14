@@ -74,11 +74,12 @@ class VelocitySampling(Sampling):
     Sampling steps object for the velocity domain
     """
 
-    def __init__(self, low: float, up: float, num_sampling_levels: int):
+    def __init__(self, low: float, up: float, num_sampling_levels: int, num_init_samples: int = 3):
+        self._num_init_samples = num_init_samples
         super(VelocitySampling, self).__init__(low, up, num_sampling_levels)
 
     def _sample(self):
-        n = 3
+        n = self._num_init_samples
         for i in range(self.num_sampling_levels):
             self._dict_level_to_sample_set[i] = set(np.linspace(self.low, self.up, n))
             n = (n * 2) - 1
@@ -89,11 +90,12 @@ class PositionSampling(Sampling):
     Sampling steps object for the position domain (s or d-coordinate)
     """
 
-    def __init__(self, low: float, up: float, num_sampling_levels: int):
+    def __init__(self, low: float, up: float, num_sampling_levels: int, num_init_samples: int = 3):
+        self._num_init_samples = num_init_samples
         super(PositionSampling, self).__init__(low, up, num_sampling_levels)
 
     def _sample(self):
-        n = 3
+        n = self._num_init_samples
         for i in range(self.num_sampling_levels):
             self._dict_level_to_sample_set[i] = set(np.linspace(self.low, self.up, n))
             n = (n * 2) - 1
@@ -168,7 +170,7 @@ class SamplingSpace(ABC):
             -> List[TrajectorySample]:
         """
         Abstract method to generate a set of trajectories within the sampling space for a given sampling level.
-        Each sampling space implements it's own trajectory generation method.
+        Each sampling space implements its own trajectory generation method.
         This method is called by the reactive planner to generate the trajectory set for the respective sampling space
         configuration.
         """
@@ -194,10 +196,22 @@ class FixedIntervalSampling(SamplingSpace):
         self._longitudinal_mode = None
 
         # initialize and pre-compute samples in t, d, v domains
-        self.samples_t = TimeSampling(config_sampling.t_min, self.horizon, num_sampling_levels, self.dt)
-        self.samples_d = PositionSampling(config_sampling.d_min, config_sampling.d_max, num_sampling_levels)
-        self.samples_v = VelocitySampling(config_sampling.v_min, config_sampling.v_max, num_sampling_levels)
-        self.samples_s = PositionSampling(config_sampling.s_min, config_sampling.s_max, num_sampling_levels)
+        self.samples_t = TimeSampling(config_sampling.t_min,
+                                      self.horizon,
+                                      num_sampling_levels,
+                                      self.dt)
+        self.samples_d = PositionSampling(config_sampling.d_min,
+                                          config_sampling.d_max,
+                                          num_sampling_levels,
+                                          config_sampling.pos_init_samples)
+        self.samples_v = VelocitySampling(config_sampling.v_min,
+                                          config_sampling.v_max,
+                                          num_sampling_levels,
+                                          config_sampling.vel_init_samples)
+        self.samples_s = PositionSampling(config_sampling.s_min,
+                                          config_sampling.s_max,
+                                          num_sampling_levels,
+                                          config_sampling.pos_init_samples)
 
     def generate_trajectories_at_level(self, level_sampling: int, x_0_lon: np.ndarray, x_0_lat: np.ndarray,
                                        longitudinal_mode: str, low_vel_mode: bool) \

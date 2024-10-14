@@ -1,6 +1,5 @@
 import unittest
 import os.path
-from copy import deepcopy
 from pathlib import Path
 
 # commonroad-route-planner
@@ -8,7 +7,6 @@ from commonroad_route_planner.route_planner import RoutePlanner
 
 # reactive planner
 from commonroad_rp.reactive_planner import ReactivePlanner
-from commonroad_rp.utility.visualization import visualize_planner_at_timestep
 from commonroad_rp.utility.evaluation import run_evaluation
 from commonroad_rp.utility.config import ReactivePlannerConfiguration
 
@@ -21,9 +19,8 @@ class TestPermittedLanelets(unittest.TestCase):
         filename = "ZAM_TestPermittedLanes-1_1_T-1.xml"
 
         # Build config object
-        path_config = Path(__file__).parents[1] / "configurations"
-        config = ReactivePlannerConfiguration.load(f"{path_config}/{filename[:-4]}.yaml", filename)
-        config.general.path_scenario = Path(os.path.abspath(Path(__file__).parents[1])) / "example_scenarios" / filename
+        path_config = Path(__file__).parents[1] / "configurations" / f"{filename[:-4]}.yaml"
+        config = ReactivePlannerConfiguration.load(path_config, filename)
         config.general.path_output = Path(os.path.abspath(Path(__file__).parents[1])) / "output"
         config.update()
 
