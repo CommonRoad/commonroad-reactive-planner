@@ -8,20 +8,27 @@ __status__ = "Beta"
 
 import numpy as np
 from abc import ABC, abstractmethod
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Union
 
 from commonroad_rp.utility.config import ReactivePlannerConfiguration
 from commonroad_rp.polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
 from commonroad_rp.trajectories import TrajectorySample
+from commonroad_rp.driving_corridor.corridor_selector import DrivingCorridorSelector
+from commonroad_rp.driving_corridor.cr_reach_interface import ReachableSetCorridor
+from commonroad_rp.driving_corridor.cr_reach_flow_interface import ReachFlowCorridor
 
 try:
     from commonroad_reach.data_structure.reach.driving_corridor import DrivingCorridor
+    from cr_reach_flow.cr_reach_flow_core.driving_corridor import DynamicDrivingCorridor
     import commonroad_reach.utility.reach_operation as util_reach_operation
     cr_reach_installed = True
+    cr_reach_flow_installed = True
 except ImportError:
     DrivingCorridor = None
+    DynamicDrivingCorridor = None
     util_reach_operation = None
     cr_reach_installed = False
+    cr_reach_flow_installed = False
     pass
 
 
@@ -305,7 +312,9 @@ class CorridorSampling(SamplingSpace):
         self.samples_t = TimeSampling(config.sampling.t_min, self.horizon, num_sampling_levels, self.dt)
 
         # driving corridor: needs to be set with setter function
-        self._corridor: Optional[DrivingCorridor] = None
+        self._corridor: Union[DrivingCorridor, DynamicDrivingCorridor] = None
+        # parameter to select correct driving corridor interface class
+        self._corridor_interface: Union[ReachableSetCorridor, ReachFlowCorridor] = None
         self._velocity_constraints: Dict = dict()
 
         # number of samples per level
@@ -317,12 +326,17 @@ class CorridorSampling(SamplingSpace):
         return self._corridor
 
     @driving_corridor.setter
-    def driving_corridor(self, corridor: DrivingCorridor):
-        self._corridor = corridor
-        self._velocity_constraints = dict()
-        for time_idx, connected_reach_set in self._corridor.items():
-            velocity_interval = util_reach_operation.lon_velocity_interval_connected_set(connected_reach_set)
-            self._velocity_constraints[time_idx] = [velocity_interval[0], velocity_interval[1]]
+    def driving_corridor(self, corridor: Union[DrivingCorridor, DynamicDrivingCorridor]):
+        # need to check if interface setter is reqd.
+        self._corridor_interface = DrivingCorridorSelector.select_driving_corridor(corridor)
+        self._corridor = self._corridor_interface._corridor
+
+        # current implementation is for CommonRoad-Reach Driving Corridor
+        if isinstance(self._corridor, DrivingCorridor):
+            self._velocity_constraints = dict()
+            for time_idx, connected_reach_set in self._corridor.items():
+                velocity_interval = util_reach_operation.lon_velocity_interval_connected_set(connected_reach_set)
+                self._velocity_constraints[time_idx] = [velocity_interval[0], velocity_interval[1]]
 
     @SamplingSpace.samples_d.setter
     def samples_d(self, pos_sampling: PositionSampling):

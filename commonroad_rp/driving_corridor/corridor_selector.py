@@ -1,0 +1,40 @@
+from abc import ABC, abstractmethod
+from typing import Optional, Union
+
+import commonroad_rp.driving_corridor as dc
+
+try:
+    from commonroad_reach.data_structure.reach.driving_corridor import DrivingCorridor
+    from cr_reach_flow.cr_reach_flow_core.driving_corridor import DynamicDrivingCorridor
+    cr_reach_installed = True
+    cr_reach_flow_installed = True
+except ImportError:
+    DrivingCorridor = None
+    DynamicDrivingCorridor = None
+    cr_reach_installed = False
+    cr_reach_flow_installed = False
+
+class DrivingCorridorSelector(ABC):
+    """
+    Abstract class for selecting Driving Corridors.
+    """
+    def __init__(self, corridor: Union[DrivingCorridor, DynamicDrivingCorridor]):
+        if not cr_reach_installed:
+            raise ImportError("<ReachableSetCorridor>: Please install CommonRoad-Reach to use driving corridor!")
+        if not cr_reach_flow_installed:
+            raise ImportError("<ReachFlowCorridor>: Please install CommonRoad-Reach-Flow to use driving corridor!")
+        self._corridor: Union[DrivingCorridor, DynamicDrivingCorridor] = corridor
+
+    @abstractmethod
+    def get_bounding_box_at_step(self):
+        pass
+
+    @staticmethod
+    def select_driving_corridor(corridor: Union[DrivingCorridor, DynamicDrivingCorridor]):
+        if isinstance(corridor, DrivingCorridor):
+            return dc.cr_reach_interface.ReachableSetCorridor(corridor)
+        elif isinstance(corridor, DynamicDrivingCorridor):
+            return dc.cr_reach_flow_interface.ReachFlowCorridor(corridor)
+        else:
+            ValueError("Invalid driving corridor specified")
+
