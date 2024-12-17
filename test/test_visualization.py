@@ -74,7 +74,7 @@ class VisualizationTests(unittest.TestCase):
 
                 # reset planner state for re-planning
                 planner.reset(initial_state_cart=planner.record_state_list[-1],
-                              initial_state_curv=(optimal[2][1], optimal[3][1]),
+                              initial_state_curv=(optimal[1][1], optimal[2][1]),
                               collision_checker=planner.collision_checker, coordinate_system=planner.coordinate_system)
 
                 # visualization: create ego Vehicle for planned trajectory and store sampled trajectory set
@@ -95,7 +95,7 @@ class VisualizationTests(unittest.TestCase):
 
                 # reset planner state for re-planning
                 planner.reset(initial_state_cart=planner.record_state_list[-1],
-                              initial_state_curv=(optimal[2][1 + temp], optimal[3][1 + temp]),
+                              initial_state_curv=(optimal[1][1 + temp], optimal[2][1 + temp]),
                               collision_checker=planner.collision_checker, coordinate_system=planner.coordinate_system)
 
             print(f"current time step: {current_count}")
