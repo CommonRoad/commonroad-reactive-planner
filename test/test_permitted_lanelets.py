@@ -58,13 +58,13 @@ class TestPermittedLanelets(unittest.TestCase):
 
                 planner.record_state_and_input(optimal[0].state_list[1])
                 planner.reset(initial_state_cart=planner.record_state_list[-1],
-                              initial_state_curv=(optimal[2][1], optimal[3][1]),
+                              initial_state_curv=(optimal[1][1], optimal[2][1]),
                               collision_checker=planner.collision_checker, coordinate_system=planner.coordinate_system)
             else:
                 temp = current_count % config.planning.replanning_frequency
                 planner.record_state_and_input(optimal[0].state_list[1 + temp])
                 planner.reset(initial_state_cart=planner.record_state_list[-1],
-                              initial_state_curv=(optimal[2][1 + temp], optimal[3][1 + temp]),
+                              initial_state_curv=(optimal[1][1 + temp], optimal[2][1 + temp]),
                               collision_checker=planner.collision_checker, coordinate_system=planner.coordinate_system)
 
             print(f"current time step: {current_count}")

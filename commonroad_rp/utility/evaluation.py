@@ -80,7 +80,9 @@ def create_full_solution_trajectory(config: ReactivePlannerConfiguration, state_
     """
     new_state_list = list()
     for state in state_list:
-        new_state_list.append(state.shift_positions_to_center(config.vehicle.wb_rear_axle))
+        new_state_list.append(
+            ReactivePlannerState.shift_state_to_center(state, config.vehicle.wb_rear_axle)
+        )
     return Trajectory(initial_time_step=new_state_list[0].time_step, state_list=new_state_list)
 
 

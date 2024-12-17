@@ -19,19 +19,40 @@ class ReactivePlannerState(KSState):
     acceleration: FloatExactOrInterval = None
     yaw_rate: FloatExactOrInterval = None
 
-    def shift_positions_to_center(self, wb_rear_axle: float):
+    @classmethod
+    def shift_state_to_center(
+        cls,
+        state: "ReactivePlannerState",
+        wb_rear_axle: float
+    ) -> "ReactivePlannerState":
         """
         Shifts position from rear-axle to vehicle center
+        :param state: original state with position defined on the rear axle
         :param wb_rear_axle: distance between rear-axle and vehicle center
+        :return new state, where the positions are shifted to vehicle center
         """
         # shift positions from rear axle to center
-        orientation = self.orientation
-        state_shifted = self.translate_rotate(np.array([wb_rear_axle * np.cos(orientation),
-                                                        wb_rear_axle * np.sin(orientation)]), 0.0)
-        return state_shifted
+        orientation = state.orientation
+        pos_x = state.position[0] + wb_rear_axle * np.cos(orientation)
+        pos_y = state.position[1] + wb_rear_axle * np.sin(orientation)
+        
+        return ReactivePlannerState(
+            time_step=state.time_step,
+            position=np.array([pos_x, pos_y]),
+            velocity=state.velocity,
+            acceleration=state.acceleration,
+            orientation=state.orientation,
+            steering_angle=state.steering_angle,
+            yaw_rate=state.yaw_rate
+        )
 
     @classmethod
-    def create_from_initial_state(cls, initial_state: InitialState, wheelbase: float, wb_rear_axle: float):
+    def create_from_initial_state(
+        cls,
+        initial_state: InitialState,
+        wheelbase: float,
+        wb_rear_axle: float
+    )-> "ReactivePlannerState":
         """
         Converts InitialState object to ReactivePlannerState object by:
         * adding initial acceleration (if not existing)
