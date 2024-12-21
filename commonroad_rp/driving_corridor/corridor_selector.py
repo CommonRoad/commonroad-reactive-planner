@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Union
+from typing import Optional, Union, Dict
 
 import commonroad_rp.driving_corridor as dc
 
@@ -24,9 +24,16 @@ class DrivingCorridorSelector(ABC):
         if not cr_reach_flow_installed:
             raise ImportError("<ReachFlowCorridor>: Please install CommonRoad-Reach-Flow to use driving corridor!")
         self._corridor: Union[DrivingCorridor, DynamicDrivingCorridor] = corridor
+        self._graph = None
+        self._params = None
+        self._velocity_constraints : Dict = dict()
 
     @abstractmethod
     def get_bounding_box_at_step(self):
+        pass
+
+    @abstractmethod
+    def set_velocity_constraints(self):
         pass
 
     @staticmethod

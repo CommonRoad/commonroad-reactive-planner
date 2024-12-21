@@ -39,3 +39,6 @@ class ReachFlowCorridor(DrivingCorridorSelector):
                 self._params.v_lat_max = node.set.v_lat_max
         return self._params
 
+    def set_velocity_constraints(self):
+        pass
+

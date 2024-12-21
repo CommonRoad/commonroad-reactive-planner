@@ -330,13 +330,8 @@ class CorridorSampling(SamplingSpace):
         # need to check if interface setter is reqd.
         self._corridor_interface = DrivingCorridorSelector.select_driving_corridor(corridor)
         self._corridor = self._corridor_interface._corridor
+        self._velocity_constraints = self._corridor_interface.set_velocity_constraints()
 
-        # current implementation is for CommonRoad-Reach Driving Corridor
-        if isinstance(self._corridor, DrivingCorridor):
-            self._velocity_constraints = dict()
-            for time_idx, connected_reach_set in self._corridor.items():
-                velocity_interval = util_reach_operation.lon_velocity_interval_connected_set(connected_reach_set)
-                self._velocity_constraints[time_idx] = [velocity_interval[0], velocity_interval[1]]
 
     @SamplingSpace.samples_d.setter
     def samples_d(self, pos_sampling: PositionSampling):
@@ -376,6 +371,9 @@ class CorridorSampling(SamplingSpace):
 
         # initialize trajectory list
         list_trajectories = list()
+
+        if not isinstance(self._corridor, DrivingCorridor):
+            return list_trajectories
 
         # get num samples for level
         num_samples = self._dict_level_to_num_samples[level_sampling]
