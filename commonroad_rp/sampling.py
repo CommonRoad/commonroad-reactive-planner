@@ -310,6 +310,7 @@ class CorridorSampling(SamplingSpace):
 
         # intialize and precompute samples in t domain
         self.samples_t = TimeSampling(config.sampling.t_min, self.horizon, num_sampling_levels, self.dt)
+        # self.samples_v = VelocitySampling(config.sampling.v_min, config.sampling.v_max, num_sampling_levels, config.sampling.vel_init_samples)
 
         # driving corridor: needs to be set with setter function
         self._corridor: Union[DrivingCorridor, DynamicDrivingCorridor] = None
@@ -372,16 +373,19 @@ class CorridorSampling(SamplingSpace):
         # initialize trajectory list
         list_trajectories = list()
 
-        if not isinstance(self._corridor, DrivingCorridor):
-            return list_trajectories
-
         # get num samples for level
         num_samples = self._dict_level_to_num_samples[level_sampling]
+        time_samples = self.samples_t.samples_at_level(level_sampling)
+
+        if isinstance(self._corridor, DynamicDrivingCorridor):
+            list_trajectories = self._corridor_interface.generate_trajectories(x_0_lon, x_0_lat, self._v_min, self._v_max, time_samples, num_samples, self.horizon, self.dt)
+            return list_trajectories
 
         # Iterate over pre-stored time samples
-        for t in self.samples_t.samples_at_level(level_sampling):
+        for t in time_samples:
             # get corresponding time step of corridor
             time_step = round(t / self.dt) + min(self._corridor.keys())
+
             # Set sampling constraints for longitudinal velocity
             # low = max(self._min_v_desired, self._lon_vel_constraints[time_step][0])
             # up = min(self._max_v_desired, self._lon_vel_constraints[time_step][1])
@@ -420,6 +424,7 @@ class CorridorSampling(SamplingSpace):
                                 trajectory_sample = TrajectorySample(self.horizon, self.dt, trajectory_long,
                                                                      trajectory_lat)
                                 list_trajectories.append(trajectory_sample)
+
         return list_trajectories
 
 

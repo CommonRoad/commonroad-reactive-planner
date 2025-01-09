@@ -22,134 +22,240 @@ from commonroad_rp.utility.visualization import visualize_planner_at_timestep, m
 from commonroad_rp.utility.evaluation import run_evaluation
 from commonroad_rp.utility.config import ReactivePlannerConfiguration
 import commonroad_rp.utility.logger as util_logger_rp
+from commonroad_rp.driving_corridor.corridor_selector import DrivingCorridorSelector
 
 # commonroad-reach
 from commonroad_reach.data_structure.configuration_builder import ConfigurationBuilder as ReachConfigurationBuilder
 from commonroad_reach.data_structure.reach.reach_interface import ReachableSetInterface
 import commonroad_reach.utility.visualization as util_visual
 
+# commonroad-reach-flow
+import cr_reach_flow.cr_reach_flow_core as core
+from cr_reach_flow.cr_reach_flow_core.driving_corridor import DynamicDrivingCorridorExtractor
+from cr_reach_flow.collision_checker.collision_checker_factory import CollisionCheckerFactory
+from cr_reach_flow.scenario.resampling import resample_scenario
 
-# *************************************
-# Set Configurations
-# *************************************
-# filename = "ZAM_Over-1_1.xml"
-filename = "DEU_Test-1_1_T-1.xml"
+import commonroad_dc.pycrccosy as pycrccosy
 
-# Build planner config object
-config_planner = ReactivePlannerConfiguration.load(f"configurations/{filename[:-4]}.yaml", filename)
-config_planner.update()
-
-# Build reach config object
-path_reach = "/home/gerald/Documents/CommonRoad/cps/commonroad-reachable-set"
-config_reach = ReachConfigurationBuilder(path_root=path_reach).build_configuration(filename[:-4])
-
-# initialize and get logger
-util_logger_rp.initialize_logger(config_planner)
-logger = logging.getLogger("RP_LOGGER")
+from typing import Tuple
 
 
-# *************************************
-# Initialize Planner
-# *************************************
-# run route planner and add reference path to config
-route_planner = RoutePlanner(config_planner.scenario.lanelet_network, config_planner.planning_problem)
-route = route_planner.plan_routes().retrieve_first_route()
+def main():
 
-# initialize reactive planner
-planner = ReactivePlanner(config_planner)
+    # *************************************
+    # Set Configurations
+    # *************************************
+    # filename = "ZAM_Over-1_1.xml"
+    filename = "DEU_Test-1_1_T-1.xml"
 
-# set reference path for curvilinear coordinate system
-planner.set_reference_path(route.reference_path)
+    filepath = "example_scenarios/" + filename
+
+    # Build planner config object
+    config_planner = ReactivePlannerConfiguration.load(f"configurations/{filename[:-4]}.yaml", filename)
+    config_planner.update()
+
+    # Build reach config object
+    # path_reach = "/home/gerald/Documents/CommonRoad/cps/commonroad-reachable-set"
+    path_reach = "/home/kriti/commonroad-reachable-set"
+    config_reach = ReachConfigurationBuilder(path_root=path_reach).build_configuration(filename[:-4])
+
+    # initialize and get logger
+    util_logger_rp.initialize_logger(config_planner)
+    logger = logging.getLogger("RP_LOGGER")
 
 
-# *************************************
-# Initialize Reach Interface
-# *************************************
-# update reach config with planner attributes
-config_reach.update()
-config_reach.planning.steps_computation = config_planner.planning.time_steps_computation
-config_reach.planning_problem = planner.config.planning_problem
-config_reach.print_configuration_summary()
-reach_interface = ReachableSetInterface(config_reach)
+    # *************************************
+    # Initialize Planner
+    # *************************************
+    # run route planner and add reference path to config
+    route_planner = RoutePlanner(config_planner.scenario.lanelet_network, config_planner.planning_problem)
+    route = route_planner.plan_routes().retrieve_first_route()
+
+    # initialize reactive planner
+    planner = ReactivePlanner(config_planner)
+
+    # set reference path for curvilinear coordinate system
+    planner.set_reference_path(route.reference_path)
 
 
-# **************************
-# Run Planning
-# **************************
-# Add first state to recorded state and input list
-planner.record_state_and_input(planner.x_0)
+    # *************************************
+    # Initialize Reach Interface
+    # *************************************
+    # update reach config with planner attributes
+    config_reach.update()
+    config_reach.planning.steps_computation = config_planner.planning.time_steps_computation
+    config_reach.planning_problem = planner.config.planning_problem
+    config_reach.print_configuration_summary()
+    reach_interface = ReachableSetInterface(config_reach)
 
-while not planner.goal_reached():
-    current_count = len(planner.record_state_list) - 1
 
-    # check if planning cycle or not
-    plan_new_trajectory = current_count % config_planner.planning.replanning_frequency == 0
-    if plan_new_trajectory:
-        # reset reach interface at start of each re-planning step
-        config_reach.update(scenario=planner.config.scenario,
-                            state_initial=planner.x_0.shift_positions_to_center(planner.vehicle_params.wb_rear_axle),
-                            CLCS=planner.coordinate_system.ccosy)
-        config_reach.planning_problem = planner.config.planning_problem
-        reach_interface.reset(config_reach)
+    # **************************
+    # Run Planning
+    # **************************
+    # Add first state to recorded state and input list
+    planner.record_state_and_input(planner.x_0)
 
-        # compute reachable sets and get corridor for new planning cycle
-        reach_interface.compute_reachable_sets()
-        corridor = reach_interface.extract_driving_corridors(to_goal_region=False)[0]
+    while not planner.goal_reached():
+        current_count = len(planner.record_state_list) - 1
 
-        # new planning cycle -> plan a new optimal trajectory
-        planner.sampling_space.driving_corridor = corridor
-        planner.set_desired_velocity(current_speed=planner.x_0.velocity)
-        optimal = planner.plan()
-        if not optimal:
-            break
+        # check if planning cycle or not
+        plan_new_trajectory = current_count % config_planner.planning.replanning_frequency == 0
+        if plan_new_trajectory:
+            # reset reach interface at start of each re-planning step
+            config_reach.update(scenario=planner.config.scenario,
+                                #state_initial=planner.x_0.shift_positions_to_center(planner.vehicle_params.wb_rear_axle),
+                                CLCS=planner.coordinate_system.ccosy)
+            config_reach.planning_problem = planner.config.planning_problem
+            reach_interface.reset(config_reach)
 
-        # record state and input
-        planner.record_state_and_input(optimal[0].state_list[1])
+            # compute reachable sets and get corridor for new planning cycle
+            reach_interface.compute_reachable_sets()
+            corridor = reach_interface.extract_driving_corridors(to_goal_region=False)[0]
+            #returns a list of corridors
+            reachflow_corridor = integrate_reach_flow_corridor(config_planner.scenario, config_reach.planning_problem, route, filepath)
 
-        # reset planner state for re-planning
-        planner.reset(initial_state_cart=planner.record_state_list[-1],
-                      initial_state_curv=(optimal[2][1], optimal[3][1]),
-                      collision_checker=planner.collision_checker, coordinate_system=planner.coordinate_system)
+            # new planning cycle -> plan a new optimal trajectory
+            # planner.sampling_space.driving_corridor = corridor
+            planner.sampling_space.driving_corridor = reachflow_corridor[0] #taking 1st corridor
+            planner.set_desired_velocity(current_speed=planner.x_0.velocity)
+            optimal = planner.plan()
+            if not optimal:
+                break
 
-        # visualization: create ego Vehicle for planned trajectory and store sampled trajectory set
-        if config_planner.debug.show_plots or config_planner.debug.save_plots:
-            ego_vehicle = planner.convert_state_list_to_commonroad_object(optimal[0].state_list)
+            # record state and input
+            planner.record_state_and_input(optimal[0].state_list[1])
+
+            # reset planner state for re-planning
+            planner.reset(initial_state_cart=planner.record_state_list[-1],
+                          initial_state_curv=(optimal[2][1], optimal[3][1]),
+                          collision_checker=planner.collision_checker, coordinate_system=planner.coordinate_system)
+
+            # visualization: create ego Vehicle for planned trajectory and store sampled trajectory set
+            if config_planner.debug.show_plots or config_planner.debug.save_plots:
+                ego_vehicle = planner.convert_state_list_to_commonroad_object(optimal[0].state_list)
+                sampled_trajectory_bundle = None
+                if config_planner.debug.draw_traj_set:
+                    sampled_trajectory_bundle = deepcopy(planner.stored_trajectories)
+        else:
+            # simulate scenario one step forward with planned trajectory
             sampled_trajectory_bundle = None
-            if config_planner.debug.draw_traj_set:
-                sampled_trajectory_bundle = deepcopy(planner.stored_trajectories)
-    else:
-        # simulate scenario one step forward with planned trajectory
-        sampled_trajectory_bundle = None
 
-        # continue on optimal trajectory
-        temp = current_count % config_planner.planning.replanning_frequency
+            # continue on optimal trajectory
+            temp = current_count % config_planner.planning.replanning_frequency
 
-        # record state and input
-        planner.record_state_and_input(optimal[0].state_list[1 + temp])
+            # record state and input
+            planner.record_state_and_input(optimal[0].state_list[1 + temp])
 
-        # reset planner state for re-planning
-        planner.reset(initial_state_cart=planner.record_state_list[-1],
-                      initial_state_curv=(optimal[2][1 + temp], optimal[3][1 + temp]),
-                      collision_checker=planner.collision_checker, coordinate_system=planner.coordinate_system)
+            # reset planner state for re-planning
+            planner.reset(initial_state_cart=planner.record_state_list[-1],
+                          initial_state_curv=(optimal[2][1 + temp], optimal[3][1 + temp]),
+                          collision_checker=planner.collision_checker, coordinate_system=planner.coordinate_system)
 
-    print(f"current time step: {current_count}")
+        print(f"current time step: {current_count}")
 
-    # visualize the current time step of the simulation
-    if config_planner.debug.show_plots or config_planner.debug.save_plots:
-        renderer = MPRenderer(figsize=(20, 10))
-        util_visual.draw_driving_corridor_2d(corridor, 0, reach_interface, rnd=renderer)
-        visualize_planner_at_timestep(scenario=config_planner.scenario, planning_problem=config_planner.planning_problem,
-                                      ego=ego_vehicle, traj_set=sampled_trajectory_bundle,
-                                      ref_path=planner.reference_path, timestep=current_count, config=config_planner,
-                                      rnd=renderer)
+        # visualize the current time step of the simulation
+        if config_planner.debug.show_plots or config_planner.debug.save_plots:
+            renderer = MPRenderer(figsize=(20, 10))
+            util_visual.draw_driving_corridor_2d(corridor, 0, reach_interface, rnd=renderer)
+            visualize_planner_at_timestep(scenario=config_planner.scenario, planning_problem=config_planner.planning_problem,
+                                          ego=ego_vehicle, traj_set=sampled_trajectory_bundle,
+                                          ref_path=planner.reference_path, timestep=current_count, config=config_planner,
+                                          rnd=renderer)
 
-# make gif
-# make_gif(config_planner, range(0, planner.record_state_list[-1].time_step))
+    # make gif
+    # make_gif(config_planner, range(0, planner.record_state_list[-1].time_step))
 
 
-# **************************
-# Evaluate results
-# **************************
-evaluate = True
-if evaluate:
-    cr_solution, feasibility_list = run_evaluation(planner.config, planner.record_state_list, planner.record_input_list)
+    # **************************
+    # Evaluate results
+    # **************************
+    evaluate = True
+    if evaluate:
+        cr_solution, feasibility_list = run_evaluation(planner.config, planner.record_state_list, planner.record_input_list)
+
+
+
+def integrate_reach_flow_corridor(scenario, planning_problem, route, scenario_path):
+    # config values
+    dt = 0.1 # same as dt in yaml
+    step_start = 0 # keep at 0 or planning_problem.initial_state.time_step
+    step_end = 15 # match steps to plan trajectory - time_steps_computation in yaml
+    initial_uncertainty = 0.01
+    point_mass_params = core.layers.propagation.PointMassParameters()
+    point_mass_params.a_lon_min = -9.5
+    point_mass_params.a_lon_max = 11.5
+    point_mass_params.a_lat_min = -2.0
+    point_mass_params.a_lat_max = 2.0
+    point_mass_params.v_lon_min = 0.0
+    point_mass_params.v_lon_max = 50.8
+    point_mass_params.v_lat_min = -4.0
+    point_mass_params.v_lat_max = 4.0
+    predicate_config = core.model_checking.PredicateConfiguration()
+    inflation_radius = (
+        predicate_config.ego_width / 2
+        if predicate_config.ego_width < predicate_config.ego_length
+        else predicate_config.ego_length / 2
+    )
+    splitter_params = core.layers.semantic.SemanticSplitterParameters()
+    splitter_params.minimum_region_area = 0.01
+    splitter_params.lanelet_inflation_radius = inflation_radius
+
+    # plan route and create clcs
+    splitter_params.route_lanelet_ids = set(route.lanelet_ids)
+    reference_path = pycrccosy.Util.resample_polyline(route.reference_path, 2.0)
+    clcs = pycrccosy.CurvilinearCoordinateSystem(reference_path)
+
+    # create reach set executor
+    cc = CollisionCheckerFactory(step_start, step_end, inflation_radius).create_curvilinear_collision_checker(
+        scenario, clcs
+    )
+
+    # specs = [
+    #     """
+    #     G (OnMainCarriageway & Behind_V8 & OnAccessRamp_V8 & F OnMainCarriageway_V8 ->
+    #         !(!OnRightLane & F OnRightLane))
+    #     """
+    # ]
+    specs = ["true"]
+    automaton = core.model_checking.FiniteAutomaton(specs)
+    init = core.initializers.base_set.CurvilinearUncertaintyInitializer(clcs, *([initial_uncertainty] * 4))
+    layers = [
+        core.layers.propagation.PointMassPropagator(dt, point_mass_params),
+        core.layers.semantic.SemanticSplitter(automaton, scenario_path, dt, clcs, splitter_params),
+        core.layers.meta.GroupedByAutomatonStates(core.layers.repartition.PositionRepartitioner()),
+        core.layers.collision.CollisionFilter(cc),
+        core.layers.meta.GroupedByAutomatonStates(core.layers.repartition.PositionRepartitioner()),
+    ]
+    post = [
+        core.post_processors.pruning.SemanticFinalStatePruner(automaton),
+        core.post_processors.pruning.DanglingNodePruner(),
+    ]
+
+    rs = core.executors.DynamicReachExecutor(
+        init, core.layers.meta.Sequential(layers), core.post_processors.meta.Sequential(post)
+    )
+
+    # rs = core.executors.DynamicOtfCorridorExtractor(
+    #     init, core.layers.meta.Sequential(layers), core.post_processors.meta.Sequential(post)
+    # )
+
+    state = planning_problem.initial_state
+    params = (state.time_step, state.position[0], state.position[1], state.velocity, 0, state.orientation)
+
+    rs.initialize(*params)
+
+    # compute reachable sets
+    rs.compute(step_start + 1, step_end)
+
+    # create reachability graph
+    graph = rs.get_post_processed_reach_graph()
+
+    # extract driving corridors
+    dc_extractor = core.driving_corridor.DynamicDrivingCorridorExtractor()
+    driving_corridors = dc_extractor.extract(graph)
+
+    return driving_corridors
+
+
+if __name__ == '__main__':
+    main()
