@@ -18,7 +18,7 @@ from commonroad_route_planner.route_planner import RoutePlanner
 
 # reactive planner
 from commonroad_rp.reactive_planner import ReactivePlanner
-from commonroad_rp.utility.visualization import visualize_planner_at_timestep, make_gif, plot_final_trajectory
+from commonroad_rp.utility.visualization import visualize_planner_at_timestep, make_gif
 from commonroad_rp.utility.evaluation import run_evaluation
 from commonroad_rp.utility.config import ReactivePlannerConfiguration
 import commonroad_rp.utility.logger as util_logger_rp
@@ -87,15 +87,19 @@ while not planner.goal_reached():
     if plan_new_trajectory:
         # reset reach interface at start of each re-planning step
         # update scenario and CLCS
-        config_reach.update(scenario=planner.config.scenario,
-                            CLCS=planner.coordinate_system.ccosy)
-        config_reach.planning.step_start = planner.x_0.time_step
-        if planner.x_0_cl is None:
-            planner.x_0_cl = planner._compute_initial_states(planner.x_0)
-        config_reach.planning.p_lon_initial = planner.x_0_cl[0][0]
-        config_reach.planning.v_lon_initial = planner.x_0_cl[0][1]
-        config_reach.planning.p_lat_initial = planner.x_0_cl[1][0]
-        config_reach.planning.v_lat_initial = planner.x_0_cl[1][1]
+        config_reach.update(
+            scenario=planner.config.scenario,
+            planning_problem=planner.config.planning_problem,
+            CLCS=planner.coordinate_system.ccosy
+        )
+
+        # update initial state from planner init state
+        if current_count > 0:
+            config_reach.planning.set_initial_states(
+                step_initial=planner.x_0.time_step,
+                pos_initial=(planner.x_0_cl[0][0], planner.x_0_cl[1][0]),
+                vel_initial=(planner.x_0_cl[0][1], planner.x_0_cl[1][1]),
+            )
         reach_interface.reset(config_reach)
 
         # compute reachable sets and get corridor for new planning cycle
@@ -113,9 +117,12 @@ while not planner.goal_reached():
         planner.record_state_and_input(optimal[0].state_list[1])
 
         # reset planner state for re-planning
-        planner.reset(initial_state_cart=planner.record_state_list[-1],
-                      initial_state_curv=(optimal[1][1], optimal[2][1]),
-                      collision_checker=planner.collision_checker, coordinate_system=planner.coordinate_system)
+        planner.reset(
+            initial_state_cart=planner.record_state_list[-1],
+            initial_state_curv=(optimal[1][1], optimal[2][1]),
+            collision_checker=planner.collision_checker,
+            coordinate_system=planner.coordinate_system
+        )
 
         # visualization: create ego Vehicle for planned trajectory and store sampled trajectory set
         if config_planner.debug.show_plots or config_planner.debug.save_plots:
@@ -134,9 +141,12 @@ while not planner.goal_reached():
         planner.record_state_and_input(optimal[0].state_list[1 + temp])
 
         # reset planner state for re-planning
-        planner.reset(initial_state_cart=planner.record_state_list[-1],
-                      initial_state_curv=(optimal[1][1 + temp], optimal[2][1 + temp]),
-                      collision_checker=planner.collision_checker, coordinate_system=planner.coordinate_system)
+        planner.reset(
+            initial_state_cart=planner.record_state_list[-1],
+            initial_state_curv=(optimal[1][1 + temp], optimal[2][1 + temp]),
+            collision_checker=planner.collision_checker,
+            coordinate_system=planner.coordinate_system
+        )
 
     print(f"current time step: {current_count}")
 
@@ -144,10 +154,16 @@ while not planner.goal_reached():
     if config_planner.debug.show_plots or config_planner.debug.save_plots:
         renderer = MPRenderer(figsize=(20, 10))
         util_visual.draw_driving_corridor_2d(corridor, 0, reach_interface, rnd=renderer)
-        visualize_planner_at_timestep(scenario=config_planner.scenario, planning_problem=config_planner.planning_problem,
-                                      ego=ego_vehicle, traj_set=sampled_trajectory_bundle,
-                                      ref_path=planner.reference_path, timestep=current_count, config=config_planner,
-                                      rnd=renderer)
+        visualize_planner_at_timestep(
+            scenario=config_planner.scenario,
+            planning_problem=config_planner.planning_problem,
+            ego=ego_vehicle,
+            traj_set=sampled_trajectory_bundle,
+            ref_path=planner.reference_path,
+            timestep=current_count,
+            config=config_planner,
+            rnd=renderer
+        )
 
 # make gif
 # make_gif(config_planner, range(0, planner.record_state_list[-1].time_step))
@@ -158,4 +174,8 @@ while not planner.goal_reached():
 # **************************
 evaluate = True
 if evaluate:
-    cr_solution, feasibility_list = run_evaluation(planner.config, planner.record_state_list, planner.record_input_list)
+    cr_solution, feasibility_list = run_evaluation(
+        planner.config,
+        planner.record_state_list,
+        planner.record_input_list
+    )
