@@ -32,8 +32,8 @@ from commonroad_dc.collision.trajectory_queries.trajectory_queries import trajec
 # commonroad_rp imports
 from commonroad_rp.state import ReactivePlannerState
 from commonroad_rp.cost_function import CostFunction, DefaultCostFunction
-from commonroad_rp.sampling import TimeSampling, VelocitySampling, PositionSampling, SamplingSpace, \
-    sampling_space_factory
+from commonroad_rp.sampling.base.base_sampling_space import SamplingSpace
+from commonroad_rp.sampling.factory import sampling_space_factory
 from commonroad_rp.polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
 from commonroad_rp.trajectories import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample, \
     FeasibilityStatus
@@ -356,7 +356,7 @@ class ReactivePlanner(object):
         Sets sample parameters of time domain. Only t_min is set; maximum time sample is given by planner horizon
         :param t_min: minimum of sampled time horizon
         """
-        self.sampling_space.samples_t = TimeSampling(t_min, self.horizon, self.sampling_level, self.dt)
+        self.sampling_space.set_t_sampling(t_min)
         logger.debug("Sampled interval of time: {} s - {} s".format(t_min, self.horizon))
 
     def set_d_sampling_parameters(self, delta_d_min, delta_d_max):
@@ -365,9 +365,7 @@ class ReactivePlanner(object):
         :param delta_d_min: lateral distance lower than reference
         :param delta_d_max: lateral distance higher than reference
         """
-        self.sampling_space.samples_d = PositionSampling(
-            delta_d_min, delta_d_max, self.sampling_level, self.config.sampling.pos_init_samples
-        )
+        self.sampling_space.set_d_sampling(delta_d_min, delta_d_max)
         logger.debug("Sampled interval of lateral position: {} m - {} m".format(delta_d_min, delta_d_max))
 
     def set_v_sampling_parameters(self, v_min, v_max):
@@ -376,9 +374,7 @@ class ReactivePlanner(object):
         :param v_min: minimal velocity sample bound
         :param v_max: maximal velocity sample bound
         """
-        self.sampling_space.samples_v = VelocitySampling(
-            v_min, v_max, self.sampling_level, self.config.sampling.vel_init_samples
-        )
+        self.sampling_space.set_v_sampling(v_min, v_max)
         logger.info("Sampled interval of velocity: {} m/s - {} m/s".format(v_min, v_max))
 
     def set_s_sampling_parameters(self, s_min, s_max):
@@ -387,9 +383,7 @@ class ReactivePlanner(object):
         :param s_min: minimum lon position sample bound
         :param s_max: maximum lon position sample bound
         """
-        self.sampling_space.samples_s = PositionSampling(
-            s_min, s_max, self.sampling_level, self.config.sampling.pos_init_samples
-        )
+        self.sampling_space.set_s_sampling(s_min, s_max)
         logger.info("Sampled interval of longitudinal position: {} m - {} m".format(s_min, s_max))
 
     def set_desired_velocity(self, desired_velocity: float = None, current_speed: float = None, stopping: bool = False):

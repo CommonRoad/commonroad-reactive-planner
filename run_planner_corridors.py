@@ -18,7 +18,7 @@ from commonroad_route_planner.route_planner import RoutePlanner
 
 # reactive planner
 from commonroad_rp.reactive_planner import ReactivePlanner
-from commonroad_rp.utility.visualization import visualize_planner_at_timestep, make_gif
+from commonroad_rp.utility.visualization import visualize_planner_at_timestep, make_gif, plot_final_trajectory
 from commonroad_rp.utility.evaluation import run_evaluation
 from commonroad_rp.utility.config import ReactivePlannerConfiguration
 import commonroad_rp.utility.logger as util_logger_rp
@@ -66,7 +66,7 @@ planner.set_reference_path(route.reference_path)
 # Initialize Reach Interface
 # *************************************
 # update reach config with planner attributes
-config_reach.update()
+config_reach.update(CLCS=planner.coordinate_system.ccosy)
 config_reach.planning.steps_computation = config_planner.planning.time_steps_computation
 config_reach.planning_problem = planner.config.planning_problem
 config_reach.print_configuration_summary()
@@ -86,10 +86,16 @@ while not planner.goal_reached():
     plan_new_trajectory = current_count % config_planner.planning.replanning_frequency == 0
     if plan_new_trajectory:
         # reset reach interface at start of each re-planning step
+        # update scenario and CLCS
         config_reach.update(scenario=planner.config.scenario,
-                            state_initial=planner.x_0.shift_positions_to_center(planner.vehicle_params.wb_rear_axle),
                             CLCS=planner.coordinate_system.ccosy)
-        config_reach.planning_problem = planner.config.planning_problem
+        config_reach.planning.step_start = planner.x_0.time_step
+        if planner.x_0_cl is None:
+            planner.x_0_cl = planner._compute_initial_states(planner.x_0)
+        config_reach.planning.p_lon_initial = planner.x_0_cl[0][0]
+        config_reach.planning.v_lon_initial = planner.x_0_cl[0][1]
+        config_reach.planning.p_lat_initial = planner.x_0_cl[1][0]
+        config_reach.planning.v_lat_initial = planner.x_0_cl[1][1]
         reach_interface.reset(config_reach)
 
         # compute reachable sets and get corridor for new planning cycle
@@ -97,7 +103,7 @@ while not planner.goal_reached():
         corridor = reach_interface.extract_driving_corridors(to_goal_region=False)[0]
 
         # new planning cycle -> plan a new optimal trajectory
-        planner.sampling_space.driving_corridor = corridor
+        planner.sampling_space.set_corridor(corridor)
         planner.set_desired_velocity(current_speed=planner.x_0.velocity)
         optimal = planner.plan()
         if not optimal:
