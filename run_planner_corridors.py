@@ -102,10 +102,13 @@ def main():
         plan_new_trajectory = current_count % config_planner.planning.replanning_frequency == 0
         if plan_new_trajectory:
             # reset reach interface at start of each re-planning step
+            new_planning_problem = deepcopy(planner.config.planning_problem)
+            new_init_state = planner.x_0.shift_positions_to_center(planner.vehicle_params.wb_rear_axle)
+            new_init_state.slip_angle = 0
+            new_planning_problem.initial_state = new_init_state
             config_reach.update(scenario=planner.config.scenario,
-                                #state_initial=planner.x_0.shift_positions_to_center(planner.vehicle_params.wb_rear_axle),
+                                planning_problem=new_planning_problem,
                                 CLCS=planner.coordinate_system.ccosy)
-            config_reach.planning_problem = planner.config.planning_problem
             reach_interface.reset(config_reach)
 
             # compute reachable sets and get corridor for new planning cycle
