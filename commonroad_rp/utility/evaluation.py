@@ -12,11 +12,14 @@ import numpy as np
 import warnings
 
 from commonroad.scenario.trajectory import Trajectory
-from commonroad.scenario.state import InputState, TraceState
+from commonroad.scenario.state import InputState, TraceState, InitialState
+from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 from commonroad.planning.planning_problem import PlanningProblem
 from commonroad.scenario.scenario import Scenario
 from commonroad.common.solution import Solution, PlanningProblemSolution, VehicleModel, \
     VehicleType, CostFunction
+from commonroad.geometry.shape import Rectangle
+from commonroad.prediction.prediction import TrajectoryPrediction
 
 from commonroad_dc.feasibility.feasibility_checker import VehicleDynamics, \
     state_transition_feasibility, position_orientation_objective, position_orientation_feasibility_criteria, _angle_diff
@@ -34,8 +37,14 @@ def run_evaluation(config: ReactivePlannerConfiguration, state_list: List[Reacti
     :return cr_solution: Planner solution as CR solution object
     :return feasibility_list: List[Bool] indicating feasibility of each state transition
     """
-    ego_solution_trajectory = create_full_solution_trajectory(config, state_list)
-    plot_final_trajectory(config.scenario, config.planning_problem, ego_solution_trajectory.state_list, config)
+    ego_vehicle_solution = create_full_solution_ego_vehicle(config, state_list)
+    ego_solution_trajectory = ego_vehicle_solution.prediction.trajectory
+    plot_final_trajectory(
+        config.scenario,
+        config.planning_problem,
+        ego_vehicle_solution.prediction.trajectory.state_list,
+        config,
+        ego_vehicle=ego_vehicle_solution)
     cr_solution, feasibility_list = evaluate_results(config, ego_solution_trajectory, input_list)
 
     return cr_solution, feasibility_list
@@ -71,6 +80,29 @@ def evaluate_results(config: ReactivePlannerConfiguration, ego_solution_trajecto
     print(valid_solution(config.scenario, config.planning_problem_set, solution))
 
     return solution, feasible
+
+
+def create_full_solution_ego_vehicle(
+        config:ReactivePlannerConfiguration,
+        state_list: List[ReactivePlannerState]
+) -> DynamicObstacle:
+    """
+    Create CR Dynamic obstacle for ego vehicle from the recorded state list of the reactive planner
+    """
+    ego_traj = create_full_solution_trajectory(config, state_list)
+    ego_shape = Rectangle(config.vehicle.length, config.vehicle.width)
+    ego_prediction = TrajectoryPrediction(ego_traj, ego_shape)
+    ego_init_state = InitialState()
+    ego_init_state = ego_traj.state_list[0].convert_state_to_state(ego_init_state)
+
+    ego_vehicle = DynamicObstacle(
+        obstacle_id=9999,
+        obstacle_type=ObstacleType.CAR,
+        obstacle_shape=ego_shape,
+        initial_state=ego_init_state,
+        prediction=ego_prediction
+    )
+    return ego_vehicle
 
 
 def create_full_solution_trajectory(config: ReactivePlannerConfiguration, state_list: List[ReactivePlannerState]) -> Trajectory:
