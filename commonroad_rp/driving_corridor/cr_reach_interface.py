@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, List
 
 from commonroad_rp.driving_corridor.corridor_selector import DrivingCorridorSelector
 from commonroad_rp.driving_corridor.parameters import Parameters
@@ -26,20 +26,23 @@ class ReachableSetCorridor(DrivingCorridorSelector):
             raise ImportError("<ReachableSetCorridor>: Please install CommonRoad-Reach to use driving corridor!")
         self._corridor: Optional[DrivingCorridor] = corridor
         self._graph = DrivingCorridor.reach_nodes(corridor)
-        self._params = Parameters()
+        self._params : List(Parameters) = list()
         self._velocity_constraints = dict()
 
     def get_bounding_box_at_step(self):
-        for index in self._graph:
+        params = Parameters()
+        for step in self._graph:
+            index = DrivingCorridor.reach_nodes_at_step(self._corridor, step)
             for node in index:
-                self._params.a_lat_min = node.polygon_lat.p_min
-                self._params.a_lat_max = node.polygon_lat.p_max
-                self._params.a_lon_min = node.polygon_lon.p_min
-                self._params.a_lon_max = node.polygon_lon.p_max
-                self._params.v_lat_min = node.polygon_lat.v_min
-                self._params.v_lat_max = node.polygon_lat.v_max
-                self._params.v_lon_min = node.polygon_lon.v_min
-                self._params.v_lon_max = node.polygon_lon.v_max
+                params.a_lat_min = node.polygon_lat.p_min
+                params.a_lat_max = node.polygon_lat.p_max
+                params.a_lon_min = node.polygon_lon.p_min
+                params.a_lon_max = node.polygon_lon.p_max
+                params.v_lat_min = node.polygon_lat.v_min
+                params.v_lat_max = node.polygon_lat.v_max
+                params.v_lon_min = node.polygon_lon.v_min
+                params.v_lon_max = node.polygon_lon.v_max
+            self._params.append(params)
         return self._params
 
     def set_velocity_constraints(self):

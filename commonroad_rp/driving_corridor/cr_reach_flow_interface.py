@@ -27,20 +27,22 @@ class ReachFlowCorridor(DrivingCorridorSelector):
             raise ImportError("<ReachFlowCorridor>: Please install CommonRoad-Reach-Flow to use driving corridor!")
         self._corridor: Optional[DynamicDrivingCorridor] = corridor
         self._graph = corridor.reach_graph
-        self._params = PointMassParameters()
+        self._params : List(PointMassParameters) = list()
         self._velocity_constraints = dict()
 
     def get_bounding_box_at_step(self):
+        params = PointMassParameters()
         for step in range(self._graph.initial_step, self._graph.final_step + 1):
             for node in self._graph.get_nodes_at_step(step):
-                self._params.a_lon_min = node.set.p_lon_min
-                self._params.a_lon_max = node.set.p_lon_max
-                self._params.a_lat_min = node.set.p_lat_min
-                self._params.a_lat_max = node.set.p_lat_max
-                self._params.v_lon_min = node.set.v_lon_min
-                self._params.v_lon_max = node.set.v_lon_max
-                self._params.v_lat_min = node.set.v_lat_min
-                self._params.v_lat_max = node.set.v_lat_max
+                params.a_lon_min = node.set.p_lon_min
+                params.a_lon_max = node.set.p_lon_max
+                params.a_lat_min = node.set.p_lat_min
+                params.a_lat_max = node.set.p_lat_max
+                params.v_lon_min = node.set.v_lon_min
+                params.v_lon_max = node.set.v_lon_max
+                params.v_lat_min = node.set.v_lat_min
+                params.v_lat_max = node.set.v_lat_max
+            self._params.append(params)
         return self._params
 
     def set_velocity_constraints(self):

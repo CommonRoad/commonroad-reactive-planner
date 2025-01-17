@@ -109,6 +109,7 @@ def main():
             config_reach.update(scenario=planner.config.scenario,
                                 planning_problem=new_planning_problem,
                                 CLCS=planner.coordinate_system.ccosy)
+            config_reach.planning_problem = planner.config.planning_problem
             reach_interface.reset(config_reach)
 
             # compute reachable sets and get corridor for new planning cycle

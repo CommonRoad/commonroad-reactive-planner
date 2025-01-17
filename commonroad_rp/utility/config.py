@@ -136,7 +136,7 @@ class SamplingConfiguration(BaseConfiguration):
     # choose sampling method
     # 1: sampling in fixed intervals (see above)
     # 2: adaptive corridor sampling (requires CommonRoad-Reach)
-    sampling_method: int = 1
+    sampling_method: int = 2
 
     # choose longitudinal driving mode
     # "velocity_keeping": samples around a desired lon. velocity; (default mode)

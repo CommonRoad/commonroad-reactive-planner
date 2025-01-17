@@ -16,16 +16,19 @@ from commonroad_rp.trajectories import TrajectorySample
 from commonroad_rp.driving_corridor.corridor_selector import DrivingCorridorSelector
 from commonroad_rp.driving_corridor.cr_reach_interface import ReachableSetCorridor
 from commonroad_rp.driving_corridor.cr_reach_flow_interface import ReachFlowCorridor
+from commonroad_rp.driving_corridor.parameters import Parameters
 
 try:
     from commonroad_reach.data_structure.reach.driving_corridor import DrivingCorridor
     from cr_reach_flow.cr_reach_flow_core.driving_corridor import DynamicDrivingCorridor
+    from cr_reach_flow.cr_reach_flow_core.layers.propagation import PointMassParameters
     import commonroad_reach.utility.reach_operation as util_reach_operation
     cr_reach_installed = True
     cr_reach_flow_installed = True
 except ImportError:
     DrivingCorridor = None
     DynamicDrivingCorridor = None
+    PointMassParameters = None
     util_reach_operation = None
     cr_reach_installed = False
     cr_reach_flow_installed = False
@@ -310,13 +313,13 @@ class CorridorSampling(SamplingSpace):
 
         # intialize and precompute samples in t domain
         self.samples_t = TimeSampling(config.sampling.t_min, self.horizon, num_sampling_levels, self.dt)
-        # self.samples_v = VelocitySampling(config.sampling.v_min, config.sampling.v_max, num_sampling_levels, config.sampling.vel_init_samples)
 
         # driving corridor: needs to be set with setter function
         self._corridor: Union[DrivingCorridor, DynamicDrivingCorridor] = None
         # parameter to select correct driving corridor interface class
         self._corridor_interface: Union[ReachableSetCorridor, ReachFlowCorridor] = None
         self._velocity_constraints: Dict = dict()
+        self._params: Union[List(Parameters), List(PointMassParameters)] = list()
 
         # number of samples per level
         self._dict_level_to_num_samples: Dict[int, int] = dict()
@@ -328,9 +331,9 @@ class CorridorSampling(SamplingSpace):
 
     @driving_corridor.setter
     def driving_corridor(self, corridor: Union[DrivingCorridor, DynamicDrivingCorridor]):
-        # need to check if interface setter is reqd.
         self._corridor_interface = DrivingCorridorSelector.select_driving_corridor(corridor)
         self._corridor = self._corridor_interface._corridor
+        self._params = self._corridor_interface.get_bounding_box_at_step()
         self._velocity_constraints = self._corridor_interface.set_velocity_constraints()
 
 
