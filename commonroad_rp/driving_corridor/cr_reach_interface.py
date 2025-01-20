@@ -47,6 +47,25 @@ class ReachableSetCorridor(DrivingCorridorSelector):
 
     def set_velocity_constraints(self):
         for time_idx, connected_reach_set in self._corridor.items():
-            velocity_interval = util_reach_operation.lon_velocity_interval_connected_set(connected_reach_set)
+            velocity_interval = self.get_lon_velocity_interval(connected_reach_set)
             self._velocity_constraints[time_idx] = [velocity_interval[0], velocity_interval[1]]
         return self._velocity_constraints
+
+    def get_lon_velocity_interval(self, connected_set):
+        velocity_interval = util_reach_operation.lon_velocity_interval_connected_set(connected_set)
+        return velocity_interval
+
+    def get_initial_step(self):
+        return min(self._corridor.keys())
+
+    def get_overlapping_nodes_with_lon_pos(self, time_step: int, lon_pos: float):
+        overlap_nodes = util_reach_operation.determine_overlapping_nodes_with_lon_pos(self._corridor[time_step], lon_pos)
+        return overlap_nodes
+
+    def get_connected_components(self, overlap_nodes: list()):
+        lat_connected_sets = util_reach_operation.determine_connected_components(overlap_nodes)
+        return lat_connected_sets
+
+    def get_lat_interval(self, connected_set):
+        lat_interval = util_reach_operation.lat_interval_connected_set(connected_set)
+        return lat_interval

@@ -36,6 +36,24 @@ class DrivingCorridorSelector(ABC):
     def set_velocity_constraints(self):
         pass
 
+    @abstractmethod
+    def get_lon_velocity_interval(self, connected_set):
+        pass
+
+    @abstractmethod
+    def get_initial_step(self):
+        pass
+
+    @abstractmethod
+    def get_overlapping_nodes_with_lon_pos(self, time_step: int, lon_pos: float):
+        pass
+
+    def get_connected_components(self, overlap_nodes: list()):
+        pass
+
+    def get_lat_interval(self, connected_set):
+        pass
+
     @staticmethod
     def select_driving_corridor(corridor: Union[DrivingCorridor, DynamicDrivingCorridor]):
         if isinstance(corridor, DrivingCorridor):

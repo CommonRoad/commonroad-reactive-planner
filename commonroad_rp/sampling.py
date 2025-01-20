@@ -380,18 +380,18 @@ class CorridorSampling(SamplingSpace):
         num_samples = self._dict_level_to_num_samples[level_sampling]
         time_samples = self.samples_t.samples_at_level(level_sampling)
 
-        if isinstance(self._corridor, DynamicDrivingCorridor):
-            list_trajectories = self._corridor_interface.generate_trajectories(x_0_lon, x_0_lat, self._v_min, self._v_max, time_samples, num_samples, self.horizon, self.dt)
-            return list_trajectories
-
         # Iterate over pre-stored time samples
         for t in time_samples:
             # get corresponding time step of corridor
-            time_step = round(t / self.dt) + min(self._corridor.keys())
+            step = self._corridor_interface.get_initial_step()
+            time_step = round(t / self.dt) + step
 
             # Set sampling constraints for longitudinal velocity
             # low = max(self._min_v_desired, self._lon_vel_constraints[time_step][0])
             # up = min(self._max_v_desired, self._lon_vel_constraints[time_step][1])
+
+            if time_step >= len(self._velocity_constraints):
+                time_step = len(self._velocity_constraints) - 1
             low = self._velocity_constraints[time_step][0]
             up = self._velocity_constraints[time_step][1]
 
@@ -403,15 +403,14 @@ class CorridorSampling(SamplingSpace):
                 # Sample lateral end states
                 if trajectory_long.coeffs is not None:
                     # Determine connected sets containing long end position by projection on longitudinal domain
-                    reachsets_overlap = util_reach_operation.determine_overlapping_nodes_with_lon_pos(
-                        self._corridor[time_step], end_pos_lon)
+                    reachsets_overlap = self._corridor_interface.get_overlapping_nodes_with_lon_pos(time_step, end_pos_lon)
                     if len(list(reachsets_overlap)) == 0:
                         continue
-                    lat_connected_sets = util_reach_operation.determine_connected_components(list(reachsets_overlap))
+                    lat_connected_sets = self._corridor_interface.get_connected_components(list(reachsets_overlap))
 
                     # Get lateral constraints from base sets
                     for lat_con_set in lat_connected_sets:
-                        lat_interval = util_reach_operation.lat_interval_connected_set(lat_con_set)
+                        lat_interval = self._corridor_interface.get_lat_interval(lat_con_set)
                         # Sample positions within lateral interval
                         if lat_interval[0] < 0 < lat_interval[1]:
                             # include sample on reference path
