@@ -12,9 +12,12 @@ import logging
 
 # commonroad-io
 from commonroad.visualization.mp_renderer import MPRenderer
+from commonroad.planning.planning_problem import PlanningProblem
+from commonroad.scenario.scenario import Scenario
 
 # commonroad-route-planner
 from commonroad_route_planner.route_planner import RoutePlanner
+from commonroad_route_planner.route import Route
 
 # reactive planner
 from commonroad_rp.reactive_planner import ReactivePlanner
@@ -33,7 +36,6 @@ import commonroad_reach.utility.visualization as util_visual
 import cr_reach_flow.cr_reach_flow_core as core
 from cr_reach_flow.cr_reach_flow_core.driving_corridor import DynamicDrivingCorridorExtractor
 from cr_reach_flow.collision_checker.collision_checker_factory import CollisionCheckerFactory
-from cr_reach_flow.scenario.resampling import resample_scenario
 
 import commonroad_dc.pycrccosy as pycrccosy
 
@@ -47,7 +49,7 @@ def main():
     # *************************************
     # filename = "ZAM_Over-1_1.xml"
     filename = "DEU_Test-1_1_T-1.xml"
-
+    # filename = "ZAM_Merge-1_1_T-1.xml"
     filepath = "example_scenarios/" + filename
 
     # Build planner config object
@@ -82,7 +84,7 @@ def main():
     # Initialize Reach Interface
     # *************************************
     # update reach config with planner attributes
-    config_reach.update()
+    config_reach.update(CLCS=planner.coordinate_system.ccosy)
     config_reach.planning.steps_computation = config_planner.planning.time_steps_computation
     config_reach.planning_problem = planner.config.planning_problem
     config_reach.print_configuration_summary()
@@ -109,18 +111,23 @@ def main():
             config_reach.update(scenario=planner.config.scenario,
                                 planning_problem=new_planning_problem,
                                 CLCS=planner.coordinate_system.ccosy)
-            config_reach.planning_problem = planner.config.planning_problem
             reach_interface.reset(config_reach)
 
             # compute reachable sets and get corridor for new planning cycle
             reach_interface.compute_reachable_sets()
             corridor = reach_interface.extract_driving_corridors(to_goal_region=False)[0]
             #returns a list of corridors
-            reachflow_corridor = integrate_reach_flow_corridor(config_planner.scenario, config_reach.planning_problem, route, filepath)
+            reachflow_corridor = integrate_reach_flow_corridor( config_planner.planning.dt,
+                                                                config_planner.scenario,
+                                                                new_planning_problem,
+                                                                route,
+                                                                filepath,
+                                                                planner.coordinate_system.ccosy,
+                                                                config_planner.planning.time_steps_computation)
 
             # new planning cycle -> plan a new optimal trajectory
-            # planner.sampling_space.driving_corridor = corridor
-            planner.sampling_space.driving_corridor = reachflow_corridor[0] #taking 1st corridor
+            planner.sampling_space.driving_corridor = corridor
+            # planner.sampling_space.driving_corridor = reachflow_corridor[0] #taking 1st corridor
             planner.set_desired_velocity(current_speed=planner.x_0.velocity)
             optimal = planner.plan()
             if not optimal:
@@ -179,22 +186,32 @@ def main():
 
 
 
-def integrate_reach_flow_corridor(scenario, planning_problem, route, scenario_path):
+def integrate_reach_flow_corridor(
+        dt: float,
+        scenario: Scenario,
+        planning_problem: PlanningProblem,
+        route: Route,
+        scenario_path: str,
+        ccs: pycrccosy.CurvilinearCoordinateSystem,
+        steps_computation: int
+):
     # config values
-    dt = 0.1 # same as dt in yaml
-    step_start = 0 # keep at 0 or planning_problem.initial_state.time_step
-    step_end = 15 # match steps to plan trajectory - time_steps_computation in yaml
+    step_start = planning_problem.initial_state.time_step
+    step_end = step_start + steps_computation
+
     initial_uncertainty = 0.01
     point_mass_params = core.layers.propagation.PointMassParameters()
     point_mass_params.a_lon_min = -9.5
-    point_mass_params.a_lon_max = 11.5
+    point_mass_params.a_lon_max = 9.5
     point_mass_params.a_lat_min = -2.0
     point_mass_params.a_lat_max = 2.0
     point_mass_params.v_lon_min = 0.0
-    point_mass_params.v_lon_max = 50.8
+    point_mass_params.v_lon_max = 20.8
     point_mass_params.v_lat_min = -4.0
     point_mass_params.v_lat_max = 4.0
     predicate_config = core.model_checking.PredicateConfiguration()
+    predicate_config.ego_length = 4.508
+    predicate_config.ego_width = 1.61
     inflation_radius = (
         predicate_config.ego_width / 2
         if predicate_config.ego_width < predicate_config.ego_length
@@ -203,15 +220,11 @@ def integrate_reach_flow_corridor(scenario, planning_problem, route, scenario_pa
     splitter_params = core.layers.semantic.SemanticSplitterParameters()
     splitter_params.minimum_region_area = 0.01
     splitter_params.lanelet_inflation_radius = inflation_radius
-
-    # plan route and create clcs
     splitter_params.route_lanelet_ids = set(route.lanelet_ids)
-    reference_path = pycrccosy.Util.resample_polyline(route.reference_path, 2.0)
-    clcs = pycrccosy.CurvilinearCoordinateSystem(reference_path)
 
     # create reach set executor
     cc = CollisionCheckerFactory(step_start, step_end, inflation_radius).create_curvilinear_collision_checker(
-        scenario, clcs
+        scenario, ccs
     )
 
     # specs = [
@@ -222,10 +235,10 @@ def integrate_reach_flow_corridor(scenario, planning_problem, route, scenario_pa
     # ]
     specs = ["true"]
     automaton = core.model_checking.FiniteAutomaton(specs)
-    init = core.initializers.base_set.CurvilinearUncertaintyInitializer(clcs, *([initial_uncertainty] * 4))
+    init = core.initializers.base_set.CurvilinearUncertaintyInitializer(ccs, *([initial_uncertainty] * 4))
     layers = [
         core.layers.propagation.PointMassPropagator(dt, point_mass_params),
-        core.layers.semantic.SemanticSplitter(automaton, scenario_path, dt, clcs, splitter_params),
+        core.layers.semantic.SemanticSplitter(automaton, scenario_path, dt, ccs, splitter_params),
         core.layers.meta.GroupedByAutomatonStates(core.layers.repartition.PositionRepartitioner()),
         core.layers.collision.CollisionFilter(cc),
         core.layers.meta.GroupedByAutomatonStates(core.layers.repartition.PositionRepartitioner()),
@@ -239,12 +252,8 @@ def integrate_reach_flow_corridor(scenario, planning_problem, route, scenario_pa
         init, core.layers.meta.Sequential(layers), core.post_processors.meta.Sequential(post)
     )
 
-    # rs = core.executors.DynamicOtfCorridorExtractor(
-    #     init, core.layers.meta.Sequential(layers), core.post_processors.meta.Sequential(post)
-    # )
-
     state = planning_problem.initial_state
-    params = (state.time_step, state.position[0], state.position[1], state.velocity, 0, state.orientation)
+    params = (state.time_step, state.position[0], state.position[1], state.velocity, state.acceleration, state.orientation)
 
     rs.initialize(*params)
 
