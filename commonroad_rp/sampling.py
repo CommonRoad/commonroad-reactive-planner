@@ -21,14 +21,12 @@ from commonroad_rp.driving_corridor.parameters import Parameters
 try:
     from commonroad_reach.data_structure.reach.driving_corridor import DrivingCorridor
     from cr_reach_flow.cr_reach_flow_core.driving_corridor import DynamicDrivingCorridor
-    from cr_reach_flow.cr_reach_flow_core.layers.propagation import PointMassParameters
     import commonroad_reach.utility.reach_operation as util_reach_operation
     cr_reach_installed = True
     cr_reach_flow_installed = True
 except ImportError:
     DrivingCorridor = None
     DynamicDrivingCorridor = None
-    PointMassParameters = None
     util_reach_operation = None
     cr_reach_installed = False
     cr_reach_flow_installed = False
@@ -319,7 +317,7 @@ class CorridorSampling(SamplingSpace):
         # parameter to select correct driving corridor interface class
         self._corridor_interface: Union[ReachableSetCorridor, ReachFlowCorridor] = None
         self._velocity_constraints: Dict = dict()
-        self._params: Union[List(Parameters), List(PointMassParameters)] = list()
+        self._params: List(Parameters)= list()
 
         # number of samples per level
         self._dict_level_to_num_samples: Dict[int, int] = dict()
@@ -383,15 +381,12 @@ class CorridorSampling(SamplingSpace):
         # Iterate over pre-stored time samples
         for t in time_samples:
             # get corresponding time step of corridor
-            step = self._corridor_interface.get_initial_step()
+            step = min(self._corridor_interface.get_time_step())
             time_step = round(t / self.dt) + step
 
             # Set sampling constraints for longitudinal velocity
             # low = max(self._min_v_desired, self._lon_vel_constraints[time_step][0])
             # up = min(self._max_v_desired, self._lon_vel_constraints[time_step][1])
-
-            if time_step >= len(self._velocity_constraints):
-                time_step = len(self._velocity_constraints) - 1
             low = self._velocity_constraints[time_step][0]
             up = self._velocity_constraints[time_step][1]
 

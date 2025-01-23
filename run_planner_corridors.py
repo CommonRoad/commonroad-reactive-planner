@@ -126,8 +126,8 @@ def main():
                                                                 config_planner.planning.time_steps_computation)
 
             # new planning cycle -> plan a new optimal trajectory
-            planner.sampling_space.driving_corridor = corridor
-            # planner.sampling_space.driving_corridor = reachflow_corridor[0] #taking 1st corridor
+            # planner.sampling_space.driving_corridor = corridor
+            planner.sampling_space.driving_corridor = reachflow_corridor[0] #taking 1st corridor
             planner.set_desired_velocity(current_speed=planner.x_0.velocity)
             optimal = planner.plan()
             if not optimal:
@@ -201,8 +201,8 @@ def integrate_reach_flow_corridor(
 
     initial_uncertainty = 0.01
     point_mass_params = core.layers.propagation.PointMassParameters()
-    point_mass_params.a_lon_min = -9.5
-    point_mass_params.a_lon_max = 9.5
+    point_mass_params.a_lon_min = -4.0
+    point_mass_params.a_lon_max = 4.0
     point_mass_params.a_lat_min = -2.0
     point_mass_params.a_lat_max = 2.0
     point_mass_params.v_lon_min = 0.0

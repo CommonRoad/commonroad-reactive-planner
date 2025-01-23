@@ -34,10 +34,10 @@ class ReachableSetCorridor(DrivingCorridorSelector):
         for step in self._graph:
             index = DrivingCorridor.reach_nodes_at_step(self._corridor, step)
             for node in index:
-                params.a_lat_min = node.polygon_lat.p_min
-                params.a_lat_max = node.polygon_lat.p_max
-                params.a_lon_min = node.polygon_lon.p_min
-                params.a_lon_max = node.polygon_lon.p_max
+                params.p_lat_min = node.polygon_lat.p_min
+                params.p_lat_max = node.polygon_lat.p_max
+                params.p_lon_min = node.polygon_lon.p_min
+                params.p_lon_max = node.polygon_lon.p_max
                 params.v_lat_min = node.polygon_lat.v_min
                 params.v_lat_max = node.polygon_lat.v_max
                 params.v_lon_min = node.polygon_lon.v_min
@@ -46,26 +46,28 @@ class ReachableSetCorridor(DrivingCorridorSelector):
         return self._params
 
     def set_velocity_constraints(self):
-        for time_idx, connected_reach_set in self._corridor.items():
-            velocity_interval = self.get_lon_velocity_interval(connected_reach_set)
+        for time_idx in self.get_time_step():
+            reach_node = self._corridor[time_idx]
+            velocity_interval = self.get_lon_velocity_interval(reach_node)
             self._velocity_constraints[time_idx] = [velocity_interval[0], velocity_interval[1]]
         return self._velocity_constraints
 
-    def get_lon_velocity_interval(self, connected_set):
-        velocity_interval = util_reach_operation.lon_velocity_interval_connected_set(connected_set)
+    def get_lon_velocity_interval(self, reach_node):
+        velocity_interval = util_reach_operation.lon_velocity_interval_connected_set(reach_node)
         return velocity_interval
 
-    def get_initial_step(self):
-        return min(self._corridor.keys())
+    def get_time_step(self):
+        return list(self._corridor.keys())
 
     def get_overlapping_nodes_with_lon_pos(self, time_step: int, lon_pos: float):
-        overlap_nodes = util_reach_operation.determine_overlapping_nodes_with_lon_pos(self._corridor[time_step], lon_pos)
+        reach_node = self._corridor[time_step]
+        overlap_nodes = util_reach_operation.determine_overlapping_nodes_with_lon_pos(reach_node, lon_pos)
         return overlap_nodes
 
     def get_connected_components(self, overlap_nodes: list()):
         lat_connected_sets = util_reach_operation.determine_connected_components(overlap_nodes)
         return lat_connected_sets
 
-    def get_lat_interval(self, connected_set):
-        lat_interval = util_reach_operation.lat_interval_connected_set(connected_set)
+    def get_lat_interval(self, reach_node):
+        lat_interval = util_reach_operation.lat_interval_connected_set(reach_node)
         return lat_interval

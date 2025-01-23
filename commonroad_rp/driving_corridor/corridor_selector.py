@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Union, Dict
+from typing import Optional, Union, Dict, List
 
 import commonroad_rp.driving_corridor as dc
 
@@ -25,7 +25,7 @@ class DrivingCorridorSelector(ABC):
             raise ImportError("<ReachFlowCorridor>: Please install CommonRoad-Reach-Flow to use driving corridor!")
         self._corridor: Union[DrivingCorridor, DynamicDrivingCorridor] = corridor
         self._graph = None
-        self._params = None
+        self._params : List = list()
         self._velocity_constraints : Dict = dict()
 
     @abstractmethod
@@ -37,11 +37,11 @@ class DrivingCorridorSelector(ABC):
         pass
 
     @abstractmethod
-    def get_lon_velocity_interval(self, connected_set):
+    def get_lon_velocity_interval(self, reach_node):
         pass
 
     @abstractmethod
-    def get_initial_step(self):
+    def get_time_step(self):
         pass
 
     @abstractmethod
@@ -51,7 +51,7 @@ class DrivingCorridorSelector(ABC):
     def get_connected_components(self, overlap_nodes: list()):
         pass
 
-    def get_lat_interval(self, connected_set):
+    def get_lat_interval(self, reach_node):
         pass
 
     @staticmethod
