@@ -1,6 +1,6 @@
-# Reactive Planner
+# CommonRoad Reactive Planner
 
-This project generates solutions to trajectory planning problems given in the [CommonRoad](https://commonroad.in.tum.de/) scenario format.
+This project provides a trajectory planner for planning problems given in the [CommonRoad](https://commonroad.in.tum.de/) scenario format.
 The trajectories are generated using the sampling-based approach in [1][2]. This approach plans motions by sampling a 
 discrete set of trajectories, represented as quintic polynomials in a Frenet frame and selecting an optimal trajectory according
 to a given cost function.

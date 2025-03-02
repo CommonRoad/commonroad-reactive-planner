@@ -5,12 +5,15 @@ import unittest
 from copy import deepcopy
 from pathlib import Path
 
-from commonroad_route_planner.route_planner import RoutePlanner
-
 from commonroad_rp.reactive_planner import ReactivePlanner
 from commonroad_rp.utility.config import ReactivePlannerConfiguration
 from commonroad_rp.utility.logger import initialize_logger
 from commonroad_rp.utility.visualization import VisualizationHandler
+from commonroad_rp.utility.utils_coordinate_system import (
+    create_coordinate_system,
+    create_initial_ref_path,
+    CoordinateSystem
+)
 
 
 class VisualizationTests(unittest.TestCase):
@@ -31,15 +34,20 @@ class VisualizationTests(unittest.TestCase):
         # *************************************
         # Initialize Planner
         # *************************************
-        # run route planner and add reference path to config
-        route_planner = RoutePlanner(config.scenario.lanelet_network, config.planning_problem)
-        route = route_planner.plan_routes().retrieve_first_route()
+        # create initial reference path via route planner
+        ref_path_orig = create_initial_ref_path(
+            config.scenario.lanelet_network,
+            config.planning_problem
+        )
+
+        # pre-process reference path and create coordinate system
+        rp_cosys: CoordinateSystem = create_coordinate_system(ref_path_orig)
 
         # initialize reactive planner
         planner = ReactivePlanner(config)
 
         # set reference path for curvilinear coordinate system
-        planner.set_reference_path(route.reference_path)
+        planner.set_reference_path(coordinate_system=rp_cosys)
 
         # **************************
         # Run Planning

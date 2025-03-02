@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "commonroad-reactive-planner"
-version = "2024.1"
+version = "2025.1"
 description = "CommonRoad Reactive Planner: Sampling-based Frenet Planner"
 authors = ["Cyber-Physical Systems Group, Technical University of Munich <commonroad@lists.lrz.de>"]
 license = "BSD"
@@ -26,16 +26,17 @@ python = ">=3.9,<3.12"
 
 matplotlib = ">=2.2.2"
 networkx = ">=2.2"
-numpy = ">=1.22,<2.0"
+numpy = ">=1.22"
 methodtools = "^0.4.5"
 omegaconf = ">=2.1.1"
 scipy = ">=1.5.2"
 imageio = ">=2.13.5"
 triangle = ">=20230923"
 
-commonroad-route-planner = ">=2024.2.0"
-commonroad-io = ">=2024.2"
-commonroad-drivability-checker = ">=2024.1"
+commonroad-route-planner = "^2025.1.0"
+commonroad-io = "^2024.3"
+commonroad-drivability-checker = "^2025.1"
+commonroad-clcs = "^2025.1.1"
 commonroad_vehicle_models = ">=3.0.2"
 
 # docs

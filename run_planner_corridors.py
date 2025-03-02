@@ -18,6 +18,11 @@ from commonroad_route_planner.route_planner import RoutePlanner
 
 # reactive planner
 from commonroad_rp.reactive_planner import ReactivePlanner
+from commonroad_rp.utility.utils_coordinate_system import (
+    create_initial_ref_path,
+    create_coordinate_system,
+    CoordinateSystem
+)
 from commonroad_rp.utility.visualization import visualize_planner_at_timestep, make_gif
 from commonroad_rp.utility.evaluation import run_evaluation
 from commonroad_rp.utility.config import ReactivePlannerConfiguration
@@ -51,22 +56,27 @@ logger = logging.getLogger("RP_LOGGER")
 # *************************************
 # Initialize Planner
 # *************************************
-# run route planner and add reference path to config
-route_planner = RoutePlanner(config_planner.scenario.lanelet_network, config_planner.planning_problem)
-route = route_planner.plan_routes().retrieve_first_route()
+# create initial reference path via route planner
+ref_path_orig = create_initial_ref_path(
+    config_planner.scenario.lanelet_network,
+    config_planner.planning_problem
+)
+
+# pre-process reference path and create coordinate system
+rp_cosys: CoordinateSystem = create_coordinate_system(ref_path_orig)
 
 # initialize reactive planner
 planner = ReactivePlanner(config_planner)
 
-# set reference path for curvilinear coordinate system
-planner.set_reference_path(route.reference_path)
+# set curvilinear coordinate system in planner
+planner.set_reference_path(coordinate_system=rp_cosys)
 
 
 # *************************************
 # Initialize Reach Interface
 # *************************************
 # update reach config with planner attributes
-config_reach.update(CLCS=planner.coordinate_system.ccosy)
+config_reach.update(CLCS=planner.coordinate_system)
 config_reach.planning.steps_computation = config_planner.planning.time_steps_computation
 config_reach.planning_problem = planner.config.planning_problem
 config_reach.print_configuration_summary()
@@ -90,7 +100,7 @@ while not planner.goal_reached():
         config_reach.update(
             scenario=planner.config.scenario,
             planning_problem=planner.config.planning_problem,
-            CLCS=planner.coordinate_system.ccosy
+            CLCS=planner.coordinate_system
         )
 
         # update initial state from planner init state
