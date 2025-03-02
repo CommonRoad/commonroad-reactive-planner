@@ -86,7 +86,8 @@ class SamplingSpace(ABC):
             # iterate over longitudinal samples
             for lon_sample in self._get_lon_samples(level_sampling,
                                                     longitudinal_mode,
-                                                    t_sample=t):
+                                                    t_sample=t,
+                                                    x_0=x_0_lon):
                 # create longitudinal trajectory
                 trajectory_long = self._generate_lon_trajectory(
                     delta_tau=t,

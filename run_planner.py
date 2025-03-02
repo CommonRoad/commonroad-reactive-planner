@@ -10,16 +10,17 @@ __status__ = "Beta"
 from copy import deepcopy
 import logging
 
-# commonroad-route-planner
-from commonroad_route_planner.route_planner import RoutePlanner
-
 # reactive planner
 from commonroad_rp.reactive_planner import ReactivePlanner
-from commonroad_rp.utility.visualization import visualize_planner_at_timestep, make_gif
+from commonroad_rp.utility.visualization import visualize_planner_at_timestep
 from commonroad_rp.utility.evaluation import run_evaluation
 from commonroad_rp.utility.config import ReactivePlannerConfiguration
-
 from commonroad_rp.utility.logger import initialize_logger
+from commonroad_rp.utility.utils_coordinate_system import (
+    CoordinateSystem,
+    create_initial_ref_path,
+    create_coordinate_system
+)
 
 
 def main(
@@ -32,15 +33,20 @@ def main(
     # *************************************
     # Initialize Planner
     # *************************************
-    # run route planner and add reference path to config
-    route_planner = RoutePlanner(config.scenario.lanelet_network, config.planning_problem)
-    route = route_planner.plan_routes().retrieve_first_route()
+    # create initial reference path via route planner
+    ref_path_orig = create_initial_ref_path(
+        config.scenario.lanelet_network,
+        config.planning_problem
+    )
+
+    # pre-process reference path and create coordinate system
+    rp_cosys: CoordinateSystem = create_coordinate_system(ref_path_orig)
 
     # initialize reactive planner
     planner = ReactivePlanner(config)
 
-    # set reference path for curvilinear coordinate system
-    planner.set_reference_path(route.reference_path)
+    # set coordinate system in planner
+    planner.set_reference_path(coordinate_system=rp_cosys)
 
     # **************************
     # Run Planning
@@ -107,15 +113,12 @@ def main(
                                           ego=ego_vehicle, traj_set=sampled_trajectory_bundle,
                                           ref_path=planner.reference_path, timestep=current_count, config=config)
 
-    # make gif
-    # make_gif(config, range(0, planner.record_state_list[-1].time_step))
-
     # **************************
     # Evaluate results
     # **************************
     evaluate = True
     if evaluate:
-        cr_solution, feasibility_list = run_evaluation(planner.config, planner.record_state_list,
+        _, _ = run_evaluation(planner.config, planner.record_state_list,
                                                        planner.record_input_list)
 
 
@@ -129,6 +132,4 @@ if __name__ == "__main__":
     rp_config = ReactivePlannerConfiguration.load(f"configurations/{filename[:-4]}.yaml", filename)
     rp_config.update()
 
-    main(
-        config=rp_config
-    )
+    main(config=rp_config)

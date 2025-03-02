@@ -6,10 +6,6 @@ from dataclasses import dataclass, field, fields
 from typing import Union, Any, Optional, Dict, List, Callable
 from pathlib import Path
 
-from commonroad.geometry.shape import Rectangle
-from commonroad.prediction.prediction import TrajectoryPrediction
-from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
-from commonroad.scenario.trajectory import Trajectory
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
 import warnings
