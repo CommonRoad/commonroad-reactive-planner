@@ -1,6 +1,6 @@
 __author__ = "Gerald Würsching"
 __copyright__ = "TUM Cyber-Physical Systems Group"
-__version__ = "2024.1"
+__version__ = "2025.1"
 __maintainer__ = "Gerald Würsching"
 __email__ = "commonroad@lists.lrz.de"
 __status__ = "Beta"
@@ -12,11 +12,14 @@ import numpy as np
 import warnings
 
 from commonroad.scenario.trajectory import Trajectory
-from commonroad.scenario.state import InputState, TraceState
+from commonroad.scenario.state import InputState, TraceState, InitialState
+from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 from commonroad.planning.planning_problem import PlanningProblem
 from commonroad.scenario.scenario import Scenario
 from commonroad.common.solution import Solution, PlanningProblemSolution, VehicleModel, \
     VehicleType, CostFunction
+from commonroad.geometry.shape import Rectangle
+from commonroad.prediction.prediction import TrajectoryPrediction
 
 from commonroad_dc.feasibility.feasibility_checker import VehicleDynamics, \
     state_transition_feasibility, position_orientation_objective, position_orientation_feasibility_criteria, _angle_diff
@@ -34,8 +37,14 @@ def run_evaluation(config: ReactivePlannerConfiguration, state_list: List[Reacti
     :return cr_solution: Planner solution as CR solution object
     :return feasibility_list: List[Bool] indicating feasibility of each state transition
     """
-    ego_solution_trajectory = create_full_solution_trajectory(config, state_list)
-    plot_final_trajectory(config.scenario, config.planning_problem, ego_solution_trajectory.state_list, config)
+    ego_vehicle_solution = create_full_solution_ego_vehicle(config, state_list)
+    ego_solution_trajectory = ego_vehicle_solution.prediction.trajectory
+    plot_final_trajectory(
+        config.scenario,
+        config.planning_problem,
+        ego_vehicle_solution.prediction.trajectory.state_list,
+        config,
+        ego_vehicle=ego_vehicle_solution)
     cr_solution, feasibility_list = evaluate_results(config, ego_solution_trajectory, input_list)
 
     return cr_solution, feasibility_list
@@ -60,7 +69,7 @@ def evaluate_results(config: ReactivePlannerConfiguration, ego_solution_trajecto
     reconstructed_states = reconstruct_states(config, ego_solution_trajectory.state_list, reconstructed_inputs)
 
     # check acceleration correctness
-    check_acceleration(config, ego_solution_trajectory.state_list, plot=True)
+    check_acceleration(config, ego_solution_trajectory.state_list)
 
     # plot
     plot_states(config, ego_solution_trajectory.state_list, reconstructed_states, plot_bounds=False)
@@ -73,6 +82,29 @@ def evaluate_results(config: ReactivePlannerConfiguration, ego_solution_trajecto
     return solution, feasible
 
 
+def create_full_solution_ego_vehicle(
+        config:ReactivePlannerConfiguration,
+        state_list: List[ReactivePlannerState]
+) -> DynamicObstacle:
+    """
+    Create CR Dynamic obstacle for ego vehicle from the recorded state list of the reactive planner
+    """
+    ego_traj = create_full_solution_trajectory(config, state_list)
+    ego_shape = Rectangle(config.vehicle.length, config.vehicle.width)
+    ego_prediction = TrajectoryPrediction(ego_traj, ego_shape)
+    ego_init_state = InitialState()
+    ego_init_state = ego_traj.state_list[0].convert_state_to_state(ego_init_state)
+
+    ego_vehicle = DynamicObstacle(
+        obstacle_id=9999,
+        obstacle_type=ObstacleType.CAR,
+        obstacle_shape=ego_shape,
+        initial_state=ego_init_state,
+        prediction=ego_prediction
+    )
+    return ego_vehicle
+
+
 def create_full_solution_trajectory(config: ReactivePlannerConfiguration, state_list: List[ReactivePlannerState]) -> Trajectory:
     """
     Create CR solution trajectory from recorded state list of the reactive planner
@@ -80,7 +112,9 @@ def create_full_solution_trajectory(config: ReactivePlannerConfiguration, state_
     """
     new_state_list = list()
     for state in state_list:
-        new_state_list.append(state.shift_positions_to_center(config.vehicle.wb_rear_axle))
+        new_state_list.append(
+            ReactivePlannerState.shift_state_to_center(state, config.vehicle.wb_rear_axle)
+        )
     return Trajectory(initial_time_step=new_state_list[0].time_step, state_list=new_state_list)
 
 
@@ -135,7 +169,7 @@ def reconstruct_inputs(config: ReactivePlannerConfiguration, pps: PlanningProble
     return feasible_state_list, reconstructed_inputs
 
 
-def check_acceleration(config: ReactivePlannerConfiguration, state_list:  List[Union[ReactivePlannerState, TraceState]], plot=False):
+def check_acceleration(config: ReactivePlannerConfiguration, state_list:  List[Union[ReactivePlannerState, TraceState]]):
     """Checks whether the computed acceleration the trajectory matches the velocity difference (dv/dt), i.e., assuming
     piecewise constant acceleration input"""
     # computed acceleration of trajectory
@@ -149,7 +183,7 @@ def check_acceleration(config: ReactivePlannerConfiguration, state_list:  List[U
     acc_correct = np.all(diff < 1e-01)
     print("Acceleration correct: %s, with max deviation %s" % (acc_correct, np.max(diff)))
 
-    if plot:
+    if config.debug.show_evaluation_plots:
         plt.figure(figsize=(7, 3.5))
         plt.suptitle("Acceleration check")
         plt.plot(list(range(len(a_planned[1:]))),
@@ -205,7 +239,8 @@ def plot_states(config: ReactivePlannerConfiguration, state_list: List[Union[Rea
         plt.plot(list(range(len(reconstructed_states))),
                  [state.velocity for state in reconstructed_states], color="blue", label="reconstructed")
     plt.legend()
-    plt.ylabel("v")
+    plt.ylabel("velocity [m/s]")
+    plt.xlabel("timestep")
 
     # orientation
     plt.subplot(5, 1, 4)
@@ -226,7 +261,9 @@ def plot_states(config: ReactivePlannerConfiguration, state_list: List[Union[Rea
              reconstructed_yaw_rate, color="blue", label="reconstructed")
     plt.ylabel("theta_dot")
     plt.tight_layout()
-    plt.show()
+
+    if config.debug.show_evaluation_plots:
+        plt.show()
 
     # plot errors in position, velocity, orientation
     if reconstructed_states:
@@ -256,7 +293,9 @@ def plot_states(config: ReactivePlannerConfiguration, state_list: List[Union[Rea
                                                 for i in range(len(state_list))], color="black")
         plt.ylabel("theta error")
         plt.tight_layout()
-        plt.show()
+
+        if config.debug.show_evaluation_plots:
+            plt.show()
 
 
 def plot_inputs(config: ReactivePlannerConfiguration, input_list: List[InputState], reconstructed_inputs=None, plot_bounds=False):
@@ -298,4 +337,6 @@ def plot_inputs(config: ReactivePlannerConfiguration, input_list: List[InputStat
                  color="red")
     plt.ylabel("a_long in m/s^2")
     plt.tight_layout()
-    plt.show()
+
+    if config.debug.show_evaluation_plots:
+        plt.show()

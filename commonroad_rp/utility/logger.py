@@ -5,6 +5,18 @@ import sys
 from commonroad_rp.utility.config import ReactivePlannerConfiguration
 
 
+# dictionary to log computation times of planner modules
+logging_dict: dict = {
+    "total_planning": 0.0,
+    "total_checking": 0.0,
+    "sorting": 0.0,
+    "kinematic_check": 0.0,
+    "collision_check": 0.0,
+    "rule_check": 0.0,
+    "type_conversions": 0.0
+}
+
+
 def initialize_logger(config: ReactivePlannerConfiguration) -> logging.Logger:
     """
     Initializes the logging module and returns a logger.
