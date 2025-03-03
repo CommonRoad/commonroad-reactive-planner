@@ -1,7 +1,7 @@
 __author__ = "Christian Pek, Gerald Würsching"
 __copyright__ = "TUM Cyber-Physical Systems Group"
 __credits__ = ["BMW Group CAR@TUM, interACT"]
-__version__ = "2024.1"
+__version__ = "2025.1"
 __maintainer__ = "Gerald Würsching"
 __email__ = "commonroad@lists.lrz.de"
 __status__ = "Beta"
@@ -12,6 +12,7 @@ import numpy as np
 from abc import ABC, abstractmethod
 import math
 
+from commonroad_rp.state import ReactivePlannerState
 from commonroad_rp.polynomial_trajectory import PolynomialTrajectory
 
 
@@ -20,6 +21,7 @@ class FeasibilityStatus(Enum):
     FEASIBLE = 'feasible'
     INFEASIBLE_KINEMATIC = 'infeasible_kinematic'
     INFEASIBLE_COLLISION = "infeasible_collision"
+    INFEASIBLE_RULE = "infeasible_rule"
 
 
 class Sample(ABC):
@@ -195,6 +197,32 @@ class CartesianSample(Sample):
         self.x[self.current_time_step:] = self.x[last_time_step] + np.cumsum(dt * v_temp * math.cos(self.theta[last_time_step]))
         self.y[self.current_time_step:] = self.y[last_time_step] + np.cumsum(dt * v_temp * math.sin(self.theta[last_time_step]))
         self.current_time_step = self.length()
+
+    def convert_to_rp_state_list(
+        self,
+        init_time_step: int,
+        init_yaw_rate: float,
+        dt: float,
+        wheelbase: float,
+        scaling_factor: float = 1.0,
+    ) -> List[ReactivePlannerState]:
+        """
+        Converts the CartesianSample (internal representation) to a CommonRoad state list of type ReactivePlannerState
+        (output representation)
+        """
+        cr_state_list = list()
+        for i in range(len(self.x)):
+            cr_state_dict = {
+                "time_step": init_time_step + scaling_factor * i,
+                "position": np.array([self.x[i], self.y[i]]),
+                "orientation": self.theta[i],
+                "velocity": self.v[i],
+                "acceleration": self.a[i],
+                "steering_angle": np.arctan2(wheelbase * self.kappa[i], 1.0),
+                "yaw_rate": (self.theta[i] - self.theta[i - 1]) / dt if i > 0 else init_yaw_rate,
+            }
+            cr_state_list.append(ReactivePlannerState(**cr_state_dict))
+        return cr_state_list
 
 
 class CurviLinearSample(Sample):
@@ -543,6 +571,9 @@ class TrajectoryBundle:
         return self._trajectory_bundle
 
     def filter_goals_behind(self):
+        """
+        Filters goals for longitudinal position sampling, which are behind the rear axis of the ego vehicle.
+        """
         valid_trajectories = []
         for traj in self.trajectories:
             if traj.trajectory_long.x_0[0] < traj.trajectory_long.x_d[0]:

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "commonroad-reactive-planner"
-version = "2024.1"
+version = "2025.1"
 description = "CommonRoad Reactive Planner: Sampling-based Frenet Planner"
 authors = ["Cyber-Physical Systems Group, Technical University of Munich <commonroad@lists.lrz.de>"]
 license = "BSD"
@@ -22,7 +22,7 @@ packages = [{include = "commonroad_rp"}]
 Source = "https://gitlab.lrz.de/tum-cps/commonroad-reactive-planner"
 
 [tool.poetry.dependencies]
-python = ">=3.8,<3.12"
+python = ">=3.9,<3.12"
 
 matplotlib = ">=2.2.2"
 networkx = ">=2.2"
@@ -33,22 +33,28 @@ scipy = ">=1.5.2"
 imageio = ">=2.13.5"
 triangle = ">=20230923"
 
-commonroad-route-planner = ">=2024.1.1"
-commonroad-io = ">=2023.2"
-commonroad-drivability-checker = ">=2024.1"
+commonroad-route-planner = "^2025.1.0"
+commonroad-io = "^2024.3"
+commonroad-drivability-checker = "^2025.1"
+commonroad-clcs = "^2025.1.1"
 commonroad_vehicle_models = ">=3.0.2"
 
+# docs
 [tool.poetry.group.docs]
 optional = true
 
 [tool.poetry.group.docs.dependencies]
 sphinx = ">=2.2.1"
+mkdocstrings-python = "^1.8.0"
+mkdocs-material = "^9.5.10"
 
+# tests
 [tool.poetry.group.tests]
 optional = true
 
 [tool.poetry.group.tests.dependencies]
 pytest = ">=6.2.5"
+coverage = "^6.5.0"
 
 [build-system]
 requires = ["poetry-core"]
