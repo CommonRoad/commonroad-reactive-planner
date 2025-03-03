@@ -48,7 +48,7 @@ def initialize_logger(config: ReactivePlannerConfiguration) -> logging.Logger:
     stream_handler.setLevel(loglevel)
 
     # create stream formatter
-    stream_formatter = logging.Formatter("%(levelname)-8s [ReactivePlanner]: %(message)s")
+    stream_formatter = logging.Formatter("%(levelname)-8s [REACTIVE-PLANNER]: %(message)s")
     stream_handler.setFormatter(stream_formatter)
 
     # add handlers

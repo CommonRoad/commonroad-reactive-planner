@@ -13,9 +13,6 @@ import logging
 # commonroad-io
 from commonroad.visualization.mp_renderer import MPRenderer
 
-# commonroad-route-planner
-from commonroad_route_planner.route_planner import RoutePlanner
-
 # reactive planner
 from commonroad_rp.reactive_planner import ReactivePlanner
 from commonroad_rp.utility.utils_coordinate_system import (
@@ -32,6 +29,7 @@ import commonroad_rp.utility.logger as util_logger_rp
 from commonroad_reach.data_structure.configuration_builder import ConfigurationBuilder as ReachConfigurationBuilder
 from commonroad_reach.data_structure.reach.reach_interface import ReachableSetInterface
 import commonroad_reach.utility.visualization as util_visual
+import commonroad_reach.utility.logger as util_logger_reach
 
 
 # *************************************
@@ -48,9 +46,8 @@ config_planner.update()
 path_reach = "/home/gerald/Documents/CommonRoad/cps/commonroad-reachable-set"
 config_reach = ReachConfigurationBuilder(path_root=path_reach).build_configuration(filename[:-4])
 
-# initialize and get logger
+# initialize logger for reactive planner
 util_logger_rp.initialize_logger(config_planner)
-logger = logging.getLogger("RP_LOGGER")
 
 
 # *************************************
@@ -81,6 +78,9 @@ config_reach.planning.steps_computation = config_planner.planning.time_steps_com
 config_reach.planning_problem = planner.config.planning_problem
 config_reach.print_configuration_summary()
 reach_interface = ReachableSetInterface(config_reach)
+
+# initialize logger for cr-reach
+util_logger_reach.initialize_logger(config_reach)
 
 
 # **************************
