@@ -7,7 +7,10 @@ __email__ = "commonroad@lists.lrz.de"
 __status__ = "Alpha"
 
 from copy import deepcopy
+from typing import Tuple, List
+
 import numpy as np
+from commonroad.geometry.shape import Polygon
 from scipy.interpolate import splprep, splev
 import logging
 
@@ -81,6 +84,48 @@ def smooth_ref_path(ref_path: np.ndarray, smoothing_factor=0.0, resample_step: f
     ref_path = np.array([x_new, y_new]).transpose()
     reference = resample_polyline(ref_path, resample_step)
     return reference
+
+def convert_to_cartesian_polygons(
+    rectangle: Tuple[float, float, float, float], CLCS: CurvilinearCoordinateSystem, split_wrt_angle: bool
+) -> List[Polygon]:
+    """Converts a curvilinear rectangle into list of cartesian polygons.
+
+    If split_wrt_angle is set to True, the converted rectangle will be recursively split if its upper and lower edges
+    have a difference in angle greater than the threshold. This is to smoothen the plotting.
+    """
+    p_lon_min, p_lat_min, p_lon_max, p_lat_max = rectangle
+
+    try:
+        vertex1 = CLCS.convert_to_cartesian_coords(p_lon_min, p_lat_min)
+        vertex2 = CLCS.convert_to_cartesian_coords(p_lon_max, p_lat_min)
+        vertex3 = CLCS.convert_to_cartesian_coords(p_lon_max, p_lat_max)
+        vertex4 = CLCS.convert_to_cartesian_coords(p_lon_min, p_lat_max)
+
+    except ValueError:
+        return []
+
+    else:
+        vector_p_lon_min = vertex1 - vertex4
+        vector_p_lon_max = vertex2 - vertex3
+        unit_vector_1 = vector_p_lon_min / np.linalg.norm(vector_p_lon_min)
+        unit_vector_2 = vector_p_lon_max / np.linalg.norm(vector_p_lon_max)
+        dot_product = np.dot(unit_vector_1, unit_vector_2)
+        angle = np.arccos(dot_product)
+
+        if split_wrt_angle and np.abs(angle) > 0.2:
+            p_lon_mid = (p_lon_min + p_lon_max) / 2
+
+            list_polygons_p_lon_min = convert_to_cartesian_polygons(
+                (p_lon_min, p_lat_min, p_lon_mid, p_lat_max), CLCS, True
+            )
+            list_polygon_p_lon_max = convert_to_cartesian_polygons(
+                (p_lon_mid, p_lat_min, p_lon_max, p_lat_max), CLCS, True
+            )
+
+            return list_polygons_p_lon_min + list_polygon_p_lon_max
+
+        else:
+            return [Polygon(np.array((vertex1, vertex2, vertex3, vertex4)))]
 
 
 class CoordinateSystem:

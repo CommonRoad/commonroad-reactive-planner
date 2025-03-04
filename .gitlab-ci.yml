@@ -9,8 +9,10 @@ stages:
   - install_test
   - deploy
 
-
 before_script:
+  - apt-get update && apt-get install -y git ffmpeg libsm6 libxext6 build-essential git pkg-config wget libomp-dev gcovr doxygen graphviz cppcheck libeigen3-dev libboost-all-dev uuid-dev libcgal-dev libspdlog-dev ffmpeg default-jre default-jdk gcc
+  - git config --global url."https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.lrz.de/".insteadOf "git@gitlab.lrz.de:"
+  - git config --global url."https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.lrz.de".insteadOf "ssh://git@gitlab.lrz.de"
   - pip install poetry
   - poetry config virtualenvs.in-project true
   - poetry install --with tests,docs
@@ -19,7 +21,9 @@ before_script:
 ########## Test ###############
 unittest:
   stage: test
+  cache: []
   script:
+    - pip install git+ssh://git@gitlab.lrz.de/cps/commonroad/commonroad-monitor.git
     - coverage run --source=./commonroad_rp -m unittest discover test
     - coverage report -m || true
     - coverage xml
@@ -51,7 +55,7 @@ test_install:
   stage: install_test
   parallel:
     matrix:
-      - PYTHON_VERSIONS: ["3.9", "3.10", "3.11"]
+      - PYTHON_VERSIONS: ["3.10"]
   script:
     - pip install poetry
     - poetry config virtualenvs.in-project true

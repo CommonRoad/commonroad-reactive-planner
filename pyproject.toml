@@ -22,7 +22,7 @@ packages = [{include = "commonroad_rp"}]
 Source = "https://gitlab.lrz.de/tum-cps/commonroad-reactive-planner"
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.12"
+python = ">=3.10, <3.11"
 
 matplotlib = ">=2.2.2"
 networkx = ">=2.2"
@@ -33,10 +33,18 @@ scipy = ">=1.5.2"
 imageio = ">=2.13.5"
 triangle = ">=20230923"
 
-commonroad-route-planner = ">=2024.2.0"
+commonroad-route-planner = ">=2025.0.1"
 commonroad-io = ">=2024.2"
 commonroad-drivability-checker = ">=2024.1"
 commonroad_vehicle_models = ">=3.0.2"
+
+commonroad-monitor = { git = "git@gitlab.lrz.de:cps/commonroad/commonroad-monitor.git", branch = "develop" }
+commonroad-velocity-planner = { git = "git@gitlab.lrz.de:cps/commonroad/commonroad-velocity-planner.git", branch = "develop"}
+
+commonroad-reach = { version = "^2024.1", optional = true }
+
+[tool.poetry.extras]
+reach = ["commonroad-reach"]
 
 # docs
 [tool.poetry.group.docs]

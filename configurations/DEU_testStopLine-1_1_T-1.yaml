@@ -1,0 +1,18 @@
+planning:
+  replanning_frequency: 1
+
+debug:
+  show_plots: False
+  save_plots: False
+  draw_traj_set: False
+  draw_icons: True
+  multiproc: False
+  num_workers: 6
+
+vehicle:
+  # CR vehicle type (see commonroad-vehicle-models): #1: Ford Escort, #2: BMW 320i, 3 = VW Vanagon
+  id_type_vehicle: 2
+
+monitor:
+  with_rule_monitoring: True
+  activated_traffic_rules: ['R_U1']

@@ -1,0 +1,17 @@
+planning:
+  replanning_frequency: 5
+  time_steps_computation: 60
+
+vehicle:
+  # CR vehicle type (see commonroad-vehicle-models): #1: Ford Escort, #2: BMW 320i, 3 = VW Vanagon
+  id_type_vehicle: 2
+
+sampling:
+  v_max: 30
+  d_min: -1
+  d_max: 1
+
+debug:
+  show_plots: False
+  save_plots: True
+  draw_ref_path: True

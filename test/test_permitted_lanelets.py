@@ -3,7 +3,8 @@ import os.path
 from pathlib import Path
 
 # commonroad-route-planner
-from commonroad_route_planner.route_planner import RoutePlanner
+import commonroad_route_planner.fast_api.fast_api as rfapi
+from commonroad_route_planner.reference_path import ReferencePath
 
 # reactive planner
 from commonroad_rp.reactive_planner import ReactivePlanner
@@ -25,13 +26,15 @@ class TestPermittedLanelets(unittest.TestCase):
         config.update()
 
         # route planner
-        route_planner = RoutePlanner(config.scenario.lanelet_network, config.planning_problem)
-        route = route_planner.plan_routes().retrieve_first_route()
+        reference_path: ReferencePath = rfapi.generate_reference_path_from_lanelet_network_and_planning_problem(
+            lanelet_network=config.scenario.lanelet_network,
+            planning_problem=config.planning_problem
+        )
 
         # Reactive planner
         planner = ReactivePlanner(config)
         planner.set_permitted_lanelet_ids([7, 22, 8, 12, 10, 20, 17, 19, 11])
-        planner.set_reference_path(route.reference_path)
+        planner.set_reference_path(reference_path.reference_path)
 
 
         # Run planner
@@ -58,13 +61,13 @@ class TestPermittedLanelets(unittest.TestCase):
 
                 planner.record_state_and_input(optimal[0].state_list[1])
                 planner.reset(initial_state_cart=planner.record_state_list[-1],
-                              initial_state_curv=(optimal[2][1], optimal[3][1]),
+                              initial_state_curv=(optimal[1][1], optimal[2][1]),
                               collision_checker=planner.collision_checker, coordinate_system=planner.coordinate_system)
             else:
                 temp = current_count % config.planning.replanning_frequency
                 planner.record_state_and_input(optimal[0].state_list[1 + temp])
                 planner.reset(initial_state_cart=planner.record_state_list[-1],
-                              initial_state_curv=(optimal[2][1 + temp], optimal[3][1 + temp]),
+                              initial_state_curv=(optimal[1][1 + temp], optimal[2][1 + temp]),
                               collision_checker=planner.collision_checker, coordinate_system=planner.coordinate_system)
 
             print(f"current time step: {current_count}")

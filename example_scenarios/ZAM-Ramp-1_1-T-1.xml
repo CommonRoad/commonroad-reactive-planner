@@ -9308,8 +9308,8 @@
     <initialState>
       <position>
         <point>
-          <x>0.0</x>
-          <y>1.75</y>
+          <x>110.0</x>
+          <y>-2.0</y>
         </point>
       </position>
       <orientation>
@@ -9319,7 +9319,7 @@
         <exact>0</exact>
       </time>
       <velocity>
-        <exact>0.0</exact>
+        <exact>11.0</exact>
       </velocity>
       <yawRate>
         <exact>0.0</exact>
@@ -9335,7 +9335,7 @@
           <width>3.5</width>
           <orientation>0.0</orientation>
           <center>
-            <x>50.0</x>
+            <x>220.0</x>
             <y>1.75</y>
           </center>
         </rectangle>

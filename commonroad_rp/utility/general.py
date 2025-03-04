@@ -16,7 +16,14 @@ def load_scenario_and_planning_problem(path_scenario, idx_planning_problem: Opti
     :param idx_planning_problem: index of the planning problem (if none provided, first planning problem is returned)
     :return: scenario and planning problem and planning problem set
     """
-    scenario, planning_problem_set = CommonRoadFileReader(path_scenario).open()
+    if '.pb' in path_scenario:
+        scenario, planning_problem_set, _ = CommonRoadFileReader(
+            filename_scenario=path_scenario[:-3] + "-SC.pb",
+            filename_map='_'.join(path_scenario.split('_')[:-2]) + '.pb',
+            filename_dynamic=path_scenario,
+        ).open_all()
+    else:
+        scenario, planning_problem_set = CommonRoadFileReader(path_scenario).open()
     if idx_planning_problem is not None:
         try:
             planning_problem = planning_problem_set.find_planning_problem_by_id(idx_planning_problem)

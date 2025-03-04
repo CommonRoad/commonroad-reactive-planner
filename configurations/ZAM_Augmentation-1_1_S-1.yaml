@@ -1,39 +1,39 @@
 planning:
   dt: 0.1
-  replanning_frequency: 3
-  time_steps_computation: 15
+  replanning_frequency: 1
+  time_steps_computation: 30
 
 vehicle:
   # CR vehicle type (see commonroad-vehicle-models): #1: Ford Escort, #2: BMW 320i, 3 = VW Vanagon
   id_type_vehicle: 2
 
 sampling:
-  sampling_method: 2
+  sampling_method: 1
+  num_sampling_levels: 4
   t_min: 0.4
+  d_min: -1.5
+  d_max: 3.5
+  max_deceleration_ratio: 0.125
 
 debug:
   show_plots: False
   save_plots: True
   draw_traj_set: True
   draw_icons: True
-  multiproc: True
+  multiproc: False
   num_workers: 6
   traj_vis_filter: ["INFEASIBLE_KINEMATIC"]
-  complete_rule_eval: False
-  complete_collision_eval: False
+  complete_rule_eval: True
+  complete_collision_eval: True
   draw_ref_path: False
   draw_planning_problem: False
   plots_file_format: "svg"
   draw_prediction_others: True
-  traj_color:
-    FEASIBLE: green
-    INFEASIBLE_COLLISION: red
-    INFEASIBLE_RULE: orange
+  traj_color: { "FEASIBLE": "green", "INFEASIBLE_COLLISION": "red" }
 
 monitor:
   with_rule_monitoring: True
-  activated_traffic_rules: [ 'R_I5' ]
-  set_based: False
+  activated_traffic_rules: [ 'R_GS1' ]
+  set_based: True
   trace_reset_option: "always"
-  log_level: "DEBUG"
   history_size: 0

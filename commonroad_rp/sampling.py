@@ -8,7 +8,7 @@ __status__ = "Beta"
 
 import numpy as np
 from abc import ABC, abstractmethod
-from typing import Dict, Optional, List, Union
+from typing import Dict, Optional, List, Union, Tuple
 
 from commonroad_rp.utility.config import ReactivePlannerConfiguration
 from commonroad_rp.polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
@@ -30,7 +30,6 @@ except ImportError:
     util_reach_operation = None
     cr_reach_installed = False
     cr_reach_flow_installed = False
-    pass
 
 
 class Sampling(ABC):
@@ -432,5 +431,149 @@ def sampling_space_factory(config: ReactivePlannerConfiguration):
         return FixedIntervalSampling(config)
     elif sampling_method == 2:
         return CorridorSampling(config)
+    elif sampling_method == 3:
+        return CorridorSamplingSimplfied(config)
     else:
         ValueError("Invalid sampling method specified")
+
+
+# **************************************
+# IEEE Proceedings Simplified Version
+# **************************************
+class CorridorSamplingSimplfied(SamplingSpace):
+    def __init__(self, config: ReactivePlannerConfiguration):
+        num_sampling_levels = config.sampling.num_sampling_levels
+        super(CorridorSamplingSimplfied, self).__init__(num_sampling_levels)
+
+        # time step and horizon
+        self.dt = config.planning.dt
+        self.horizon = config.planning.dt * config.planning.time_steps_computation
+
+        # intialize and precompute samples in t domain
+        self.samples_t = TimeSampling(config.sampling.t_min, self.horizon, num_sampling_levels, self.dt)
+
+        # driving corridor: needs to be set with setter function
+        self._corridor: Optional[Dict[List[Dict]]] = None
+        self._velocity_constraints: Dict = dict()
+
+        # number of samples per level
+        self._dict_level_to_num_samples: Dict[int, int] = dict()
+        self._set_dict_number_of_samples()
+
+    @property
+    def driving_corridor(self):
+        return self._corridor
+
+    @driving_corridor.setter
+    def driving_corridor(self, corridor: Dict):
+        self._corridor = corridor
+        self._velocity_constraints = dict()
+        for time_idx, connected_reach_set in self._corridor.items():
+            velocity_interval = self._lon_velocity_interval_connected_set(connected_reach_set)
+            self._velocity_constraints[time_idx] = [velocity_interval[0], velocity_interval[1]]
+
+    @staticmethod
+    def _lon_velocity_interval_connected_set(con_set: List[Dict]) -> Tuple[float, float]:
+        # get min and max values for each reach set in the connected set
+        min_max_array = np.asarray([[reach_node["v_lon_min"], reach_node["v_lon_max"]]
+                                    for reach_node in con_set])
+
+        # get minimum and maximum value for the connected set
+        min_connected_set = np.min(min_max_array[:, 0])
+        max_connected_set = np.max(min_max_array[:, 1])
+
+        return min_connected_set, max_connected_set
+
+    @staticmethod
+    def _determine_overlapping_nodes_with_lon_pos(con_set: List[Dict], lon_pos: float) -> List[Dict]:
+        list_nodes_overlap = list()
+
+        for node_reach in con_set:
+            if np.greater_equal(round(lon_pos * 10.0 ** 2), np.floor(node_reach["p_lon_min"] * 10.0 ** 2)) and \
+                    np.greater_equal(np.ceil(node_reach["p_lon_max"] * 10.0 ** 2), round(lon_pos * 10.0 ** 2)):
+                list_nodes_overlap.append(node_reach)
+
+        return list_nodes_overlap
+
+    @staticmethod
+    def _lat_interval_connected_set(con_set: List[Dict]) -> Tuple[float, float]:
+        # get min and max values for each reachable set in the connected set
+        min_max_array = np.asarray([[reach_node["p_lat_min"], reach_node["p_lat_max"]]
+                                    for reach_node in con_set])
+
+        # get minimum and maximum value for the connected set
+        min_connected_set = np.min(min_max_array[:, 0])
+        max_connected_set = np.max(min_max_array[:, 1])
+
+        return min_connected_set, max_connected_set
+
+    def _set_dict_number_of_samples(self, n_min: int = 3, dict_level_to_num_samples: dict = None):
+        """
+        store number of samples per sampling level
+        """
+        if dict_level_to_num_samples is not None:
+            for level in range(self.num_sampling_levels):
+                assert level in dict_level_to_num_samples.keys(), f"<SamplingSpace.set_dict_number_of_samples()>:" \
+                                                                  f"input dictionary does not contain sampling level:" \
+                                                                  f"{level}"
+        else:
+            n = n_min
+            for i in range(self.num_sampling_levels):
+                self._dict_level_to_num_samples[i] = n
+                n = (n * 2) - 1
+
+    def generate_trajectories_at_level(self, level_sampling: int, x_0_lon: np.ndarray, x_0_lat: np.ndarray,
+                                       longitudinal_mode: str, low_vel_mode: bool) \
+            -> List[TrajectorySample]:
+        """
+        Implements trajectory generation method for sampling trajectories within driving corridor
+        """
+        if self._corridor is None:
+            raise AttributeError
+
+        # initialize trajectory list
+        list_trajectories = list()
+
+        # get num samples for level
+        num_samples = self._dict_level_to_num_samples[level_sampling]
+
+        # Iterate over pre-stored time samples
+        for t in self.samples_t.samples_at_level(level_sampling):
+            # get corresponding time step of corridor
+            time_step = round(t / self.dt) + min(self._corridor.keys())
+            # Set sampling constraints for longitudinal velocity
+            # low = max(self._min_v_desired, self._lon_vel_constraints[time_step][0])
+            # up = min(self._max_v_desired, self._lon_vel_constraints[time_step][1])
+            low = self._velocity_constraints[time_step][0]
+            up = self._velocity_constraints[time_step][1]
+
+            # Iterate over velocity samples
+            for v in set(np.linspace(low, up, num_samples)):
+                trajectory_long = QuarticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lon), x_d=np.array([v, 0]))
+                end_pos_lon = trajectory_long.calc_position(t, t ** 2, t ** 3, t ** 4, t ** 5)
+
+                # Sample lateral end states
+                if trajectory_long.coeffs is not None:
+                    # Determine connected sets containing long end position by projection on longitudinal domain
+                    reachsets_overlap = self._determine_overlapping_nodes_with_lon_pos(
+                        self._corridor[time_step], end_pos_lon)
+                    if len(list(reachsets_overlap)) == 0:
+                        continue
+
+                    # Get lateral constraints from base sets
+                    lat_interval = self._lat_interval_connected_set(reachsets_overlap)
+                    # Sample positions within lateral interval
+                    if lat_interval[0] < 0 < lat_interval[1]:
+                        # include sample on reference path
+                        d_samples = set(np.linspace(lat_interval[0], lat_interval[1], num_samples)).union({0})
+                    else:
+                        d_samples = set(np.linspace(lat_interval[0], lat_interval[1], num_samples))
+                    for d in d_samples:
+                        # Switch to sampling over t for high velocities
+                        trajectory_lat = QuinticTrajectory(tau_0=0, delta_tau=t, x_0=np.array(x_0_lat),
+                                                           x_d=np.array([d, 0.0, 0.0]))
+                        if trajectory_lat.coeffs is not None:
+                            trajectory_sample = TrajectorySample(self.horizon, self.dt, trajectory_long,
+                                                                 trajectory_lat)
+                            list_trajectories.append(trajectory_sample)
+        return list_trajectories

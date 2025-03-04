@@ -10,6 +10,8 @@ __status__ = "Beta"
 from copy import deepcopy
 import logging
 
+import crmonitor
+
 # commonroad-io
 from commonroad.visualization.mp_renderer import MPRenderer
 from commonroad.planning.planning_problem import PlanningProblem
@@ -17,7 +19,8 @@ from commonroad.scenario.scenario import Scenario
 
 # commonroad-route-planner
 from commonroad_route_planner.route_planner import RoutePlanner
-from commonroad_route_planner.route import Route
+from commonroad_route_planner.reference_path import ReferencePath
+import commonroad_route_planner.fast_api.fast_api as rfapi
 
 # reactive planner
 from commonroad_rp.reactive_planner import ReactivePlanner
@@ -26,6 +29,7 @@ from commonroad_rp.utility.evaluation import run_evaluation
 from commonroad_rp.utility.config import ReactivePlannerConfiguration
 import commonroad_rp.utility.logger as util_logger_rp
 from commonroad_rp.driving_corridor.corridor_selector import DrivingCorridorSelector
+from commonroad_rp.state import ReactivePlannerState
 
 # commonroad-reach
 from commonroad_reach.data_structure.configuration_builder import ConfigurationBuilder as ReachConfigurationBuilder
@@ -40,6 +44,7 @@ from cr_reach_flow.collision_checker.collision_checker_factory import CollisionC
 import commonroad_dc.pycrccosy as pycrccosy
 
 from typing import Tuple
+from matplotlib import pyplot as plt
 
 
 def main():
@@ -48,8 +53,8 @@ def main():
     # Set Configurations
     # *************************************
     # filename = "ZAM_Over-1_1.xml"
-    filename = "DEU_Test-1_1_T-1.xml"
-    # filename = "ZAM_Merge-1_1_T-1.xml"
+    # filename = "DEU_Test-1_1_T-1.xml"
+    filename = "ZAM_Merge-1_1_T-1.xml"
     filepath = "example_scenarios/" + filename
 
     # Build planner config object
@@ -70,8 +75,11 @@ def main():
     # Initialize Planner
     # *************************************
     # run route planner and add reference path to config
-    route_planner = RoutePlanner(config_planner.scenario.lanelet_network, config_planner.planning_problem)
-    route = route_planner.plan_routes().retrieve_first_route()
+    # route_planner = RoutePlanner(config_planner.scenario.lanelet_network, config_planner.planning_problem)
+    # route = route_planner.plan_routes().retrieve_first_route()
+
+    route = rfapi.generate_reference_path_from_lanelet_network_and_planning_problem(
+        config_planner.scenario.lanelet_network, config_planner.planning_problem)
 
     # initialize reactive planner
     planner = ReactivePlanner(config_planner)
@@ -105,7 +113,7 @@ def main():
         if plan_new_trajectory:
             # reset reach interface at start of each re-planning step
             new_planning_problem = deepcopy(planner.config.planning_problem)
-            new_init_state = planner.x_0.shift_positions_to_center(planner.vehicle_params.wb_rear_axle)
+            new_init_state = ReactivePlannerState.shift_state_to_center(planner.x_0, planner.vehicle_params.wb_rear_axle)
             new_init_state.slip_angle = 0
             new_planning_problem.initial_state = new_init_state
             config_reach.update(scenario=planner.config.scenario,
@@ -138,7 +146,7 @@ def main():
 
             # reset planner state for re-planning
             planner.reset(initial_state_cart=planner.record_state_list[-1],
-                          initial_state_curv=(optimal[2][1], optimal[3][1]),
+                          initial_state_curv=(optimal[1][1], optimal[2][1]),
                           collision_checker=planner.collision_checker, coordinate_system=planner.coordinate_system)
 
             # visualization: create ego Vehicle for planned trajectory and store sampled trajectory set
@@ -159,7 +167,7 @@ def main():
 
             # reset planner state for re-planning
             planner.reset(initial_state_cart=planner.record_state_list[-1],
-                          initial_state_curv=(optimal[2][1 + temp], optimal[3][1 + temp]),
+                          initial_state_curv=(optimal[1][1 + temp], optimal[2][1 + temp]),
                           collision_checker=planner.collision_checker, coordinate_system=planner.coordinate_system)
 
         print(f"current time step: {current_count}")
@@ -172,6 +180,13 @@ def main():
                                           ego=ego_vehicle, traj_set=sampled_trajectory_bundle,
                                           ref_path=planner.reference_path, timestep=current_count, config=config_planner,
                                           rnd=renderer)
+
+        # to use when configuration contains monitor specifications
+
+        if planner.config.monitor.trace_reset_option_val is crmonitor.TraceResetOptions.filter:
+            planner.config.rule_monitor.propagate_trace()  # we use filter option to keep computed props of other traffic participants within cycle
+        planner.config.rule_monitor.get_world().propagate(ego=False)  # ego needs to be propagated inside planner since otherwise invalid planned trajectory of ego is executed
+        planner.prepare_initial_state_monitor()
 
     # make gif
     # make_gif(config_planner, range(0, planner.record_state_list[-1].time_step))
@@ -190,7 +205,7 @@ def integrate_reach_flow_corridor(
         dt: float,
         scenario: Scenario,
         planning_problem: PlanningProblem,
-        route: Route,
+        route: ReferencePath,
         scenario_path: str,
         ccs: pycrccosy.CurvilinearCoordinateSystem,
         steps_computation: int
@@ -249,7 +264,7 @@ def integrate_reach_flow_corridor(
     ]
 
     rs = core.executors.DynamicReachExecutor(
-        init, core.layers.meta.Sequential(layers), core.post_processors.meta.Sequential(post)
+        step_start, step_end, init, core.layers.meta.Sequential(layers), core.post_processors.meta.Sequential(post)
     )
 
     state = planning_problem.initial_state
@@ -258,14 +273,15 @@ def integrate_reach_flow_corridor(
     rs.initialize(*params)
 
     # compute reachable sets
-    rs.compute(step_start + 1, step_end)
+    rs.compute()
 
     # create reachability graph
     graph = rs.get_post_processed_reach_graph()
+    component_graph = core.graphs.DynamicComponentGraph(graph)
 
     # extract driving corridors
     dc_extractor = core.driving_corridor.DynamicDrivingCorridorExtractor()
-    driving_corridors = dc_extractor.extract(graph)
+    driving_corridors = dc_extractor.extract(component_graph)
 
     return driving_corridors
 

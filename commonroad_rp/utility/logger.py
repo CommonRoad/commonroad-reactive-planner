@@ -5,7 +5,19 @@ import sys
 from commonroad_rp.utility.config import ReactivePlannerConfiguration
 
 
-def initialize_logger(config: ReactivePlannerConfiguration) -> logging.Logger:
+# dictionary to log computation times of planner modules
+logging_dict: dict = {
+    "total_planning": 0.0,
+    "total_checking": 0.0,
+    "sorting": 0.0,
+    "kinematic_check": 0.0,
+    "collision_check": 0.0,
+    "rule_check": 0.0,
+    "type_conversions": 0.0
+}
+
+
+def initialize_logger(config: ReactivePlannerConfiguration, logger_name = "RP_LOGGER") -> logging.Logger:
     """
     Initializes the logging module and returns a logger.
     """
@@ -13,7 +25,7 @@ def initialize_logger(config: ReactivePlannerConfiguration) -> logging.Logger:
     os.makedirs(config.general.path_logs, exist_ok=True)
 
     # create logger
-    logger = logging.getLogger("RP_LOGGER")
+    logger = logging.Logger(logger_name)
 
     # create file handler (outputs to file)
     string_date_time = datetime.now().strftime("_%Y_%m_%d_%H-%M-%S")

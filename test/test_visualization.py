@@ -5,7 +5,8 @@ import unittest
 from copy import deepcopy
 from pathlib import Path
 
-from commonroad_route_planner.route_planner import RoutePlanner
+import commonroad_route_planner.fast_api.fast_api as rfapi
+from commonroad_route_planner.reference_path import ReferencePath
 
 from commonroad_rp.reactive_planner import ReactivePlanner
 from commonroad_rp.utility.config import ReactivePlannerConfiguration
@@ -32,14 +33,16 @@ class VisualizationTests(unittest.TestCase):
         # Initialize Planner
         # *************************************
         # run route planner and add reference path to config
-        route_planner = RoutePlanner(config.scenario.lanelet_network, config.planning_problem)
-        route = route_planner.plan_routes().retrieve_first_route()
+        reference_path: ReferencePath = rfapi.generate_reference_path_from_lanelet_network_and_planning_problem(
+            lanelet_network=config.scenario.lanelet_network,
+            planning_problem=config.planning_problem
+        )
 
         # initialize reactive planner
         planner = ReactivePlanner(config)
 
         # set reference path for curvilinear coordinate system
-        planner.set_reference_path(route.reference_path)
+        planner.set_reference_path(reference_path.reference_path)
 
         # **************************
         # Run Planning
@@ -74,7 +77,7 @@ class VisualizationTests(unittest.TestCase):
 
                 # reset planner state for re-planning
                 planner.reset(initial_state_cart=planner.record_state_list[-1],
-                              initial_state_curv=(optimal[2][1], optimal[3][1]),
+                              initial_state_curv=(optimal[1][1], optimal[2][1]),
                               collision_checker=planner.collision_checker, coordinate_system=planner.coordinate_system)
 
                 # visualization: create ego Vehicle for planned trajectory and store sampled trajectory set
@@ -95,7 +98,7 @@ class VisualizationTests(unittest.TestCase):
 
                 # reset planner state for re-planning
                 planner.reset(initial_state_cart=planner.record_state_list[-1],
-                              initial_state_curv=(optimal[2][1 + temp], optimal[3][1 + temp]),
+                              initial_state_curv=(optimal[1][1 + temp], optimal[2][1 + temp]),
                               collision_checker=planner.collision_checker, coordinate_system=planner.coordinate_system)
 
             print(f"current time step: {current_count}")

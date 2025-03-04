@@ -9,18 +9,18 @@ __status__ = "Beta"
 # python packages
 import math
 import time
+
 import numpy as np
 from typing import List, Union, Optional, Tuple, Type, Dict
 import multiprocessing
 from multiprocessing.context import Process
-import logging
 
 # commonroad-io
 from commonroad.geometry.shape import Rectangle
 from commonroad.prediction.prediction import TrajectoryPrediction
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 from commonroad.scenario.trajectory import Trajectory
-from commonroad.scenario.state import CustomState, InputState, InitialState
+from commonroad.scenario.state import InputState, InitialState
 from commonroad.scenario.scenario import Scenario
 
 # commonroad_dc
@@ -37,12 +37,12 @@ from commonroad_rp.sampling import TimeSampling, VelocitySampling, PositionSampl
 from commonroad_rp.polynomial_trajectory import QuinticTrajectory, QuarticTrajectory
 from commonroad_rp.trajectories import TrajectoryBundle, TrajectorySample, CartesianSample, CurviLinearSample, \
     FeasibilityStatus
+from commonroad_rp.utility.logger import initialize_logger
 from commonroad_rp.utility.utils_coordinate_system import CoordinateSystem, interpolate_angle
 from commonroad_rp.utility.general import shift_orientation, retrieve_desired_velocity_from_pp
 from commonroad_rp.utility.config import ReactivePlannerConfiguration, VehicleConfiguration
+from commonroad_rp.utility.logger import logging_dict
 
-# get logger
-logger = logging.getLogger("RP_LOGGER")
 
 # precision value
 _EPS = 1e-5
@@ -75,11 +75,14 @@ class ReactivePlanner(object):
         self._cc: Optional[pycrcc.CollisionChecker] = None
 
         # statistics
+        self._total_count_samples: int = 0
         self._infeasible_count_collision: int = 0
+        self._infeasible_count_rules: int = 0
         self._infeasible_count_kinematics: int = 0
         self._infeasible_reason_dict: Dict = dict()
         self._optimal_cost: float = 0.0
         self._planning_times_list: List = list()
+        self._journal: Dict[str, float] = logging_dict
         self._record_state_list: List[ReactivePlannerState] = list()
         self._record_input_list: List[InputState] = list()
 
@@ -114,9 +117,8 @@ class ReactivePlanner(object):
         # set standstill lookahead
         self._standstill_lookahead = config.planning.standstill_lookahead
 
-        # set logging level
-        logger.setLevel(config.debug.logging_level)
-
+        # Logging
+        self.logger = initialize_logger(config)
 
     @property
     def collision_checker(self) -> pycrcc.CollisionChecker:
@@ -131,9 +133,18 @@ class ReactivePlanner(object):
         return self._co.reference
 
     @property
+    def total_count_samples(self) -> int:
+        return self._total_count_samples
+
+    @property
     def infeasible_count_collision(self) -> float:
         """Number of colliding trajectories"""
         return self._infeasible_count_collision
+
+    @property
+    def infeasible_count_rules(self) -> float:
+        """Number of traffic rule violating trajectories"""
+        return self._infeasible_count_rules
 
     @property
     def infeasible_count_kinematics(self) -> float:
@@ -154,6 +165,11 @@ class ReactivePlanner(object):
     def planning_times(self) -> List:
         """List of planning computation times"""
         return self._planning_times_list
+
+    @property
+    def journal(self) -> Dict:
+        """Dict of planning module runtimes"""
+        return self._journal
 
     @property
     def record_state_list(self) -> List:
@@ -182,7 +198,7 @@ class ReactivePlanner(object):
         :param permitted_lanelet_ids: ids of permitted lanelets.
         """
         # sanity check
-        if(len(permitted_lanelet_ids) == 0):
+        if len(permitted_lanelet_ids) == 0:
             raise ValueError("No permitted lanelets set")
 
         self._permitted_lanelet_ids = permitted_lanelet_ids
@@ -196,7 +212,7 @@ class ReactivePlanner(object):
         Sets permitted lanelet ids in config.
         """
         for lanelet in self.config.scenario.lanelet_network.lanelets:
-            if(lanelet.lanelet_id not in self._permitted_lanelet_ids):
+            if lanelet.lanelet_id not in self._permitted_lanelet_ids:
                 collision_shape = create_collision_object(lanelet.polygon)
                 self._cc.add_collision_object(collision_shape)
 
@@ -205,9 +221,12 @@ class ReactivePlanner(object):
     def goal_reached(self) -> bool:
         """Checks if the currently set initial state of the planner is within the goal configuration"""
         # shift ReactivePlannerState to center for goal check
-        x_0_shifted = self.x_0.shift_positions_to_center(self.vehicle_params.wb_rear_axle)
+        x_0_shifted = ReactivePlannerState.shift_state_to_center(
+            self.x_0,
+            self.vehicle_params.wb_rear_axle
+        )
         if self.config.planning_problem.goal.is_reached(x_0_shifted):
-            logger.info("Goal of planning problem reached")
+            self.logger.info("Goal of planning problem reached")
             return True
         else:
             return False
@@ -263,8 +282,12 @@ class ReactivePlanner(object):
         # convert Cartesian initial state or pass given curvilinear initial state
         self.x_0_cl = initial_state_curv if initial_state_curv is not None else self._compute_initial_states(self.x_0)
 
-    def set_collision_checker(self, scenario: Scenario = None, collision_checker: pycrcc.CollisionChecker = None,
-                              road_boundary_obstacle=None):
+    def set_collision_checker(
+            self,
+            scenario: Scenario = None,
+            collision_checker: pycrcc.CollisionChecker = None,
+            road_boundary_obstacle=None
+    ):
         """
         Sets the collision checker used by the planner using either of the two options:
         If a collision_checker object is passed, then it is used directly by the planner.
@@ -284,7 +307,15 @@ class ReactivePlanner(object):
                 obs = create_collision_object(co)
                 cc_scenario.add_collision_object(obs)
             for co in scenario.dynamic_obstacles:
-                tvo = create_collision_object(co)
+                buffer_obstacles = True if self.config.planning.safety_margin_dynamic_obstacles > 0.0 else False
+                co_params = None
+                if buffer_obstacles:
+                    co_params = dict()
+                    co_params["minkowski_sum_circle"] = True
+                    co_params["minkowski_sum_circle_radius"] = self.config.planning.safety_margin_dynamic_obstacles
+                    co_params["resolution"] = 4
+                    co_params["triangulation_method"] = "gpc"
+                tvo = create_collision_object(co, params=co_params)
                 if self.config.planning.continuous_collision_check:
                     tvo, err = trajectory_preprocess_obb_sum(tvo)
                     if err == -1:
@@ -329,7 +360,7 @@ class ReactivePlanner(object):
         :param t_min: minimum of sampled time horizon
         """
         self.sampling_space.samples_t = TimeSampling(t_min, self.horizon, self.sampling_level, self.dt)
-        logger.debug("Sampled interval of time: {} s - {} s".format(t_min, self.horizon))
+        self.logger.debug("Sampled interval of time: {} s - {} s".format(t_min, self.horizon))
 
     def set_d_sampling_parameters(self, delta_d_min, delta_d_max):
         """
@@ -340,7 +371,7 @@ class ReactivePlanner(object):
         self.sampling_space.samples_d = PositionSampling(
             delta_d_min, delta_d_max, self.sampling_level, self.config.sampling.pos_init_samples
         )
-        logger.debug("Sampled interval of lateral position: {} m - {} m".format(delta_d_min, delta_d_max))
+        self.logger.debug("Sampled interval of lateral position: {} m - {} m".format(delta_d_min, delta_d_max))
 
     def set_v_sampling_parameters(self, v_min, v_max):
         """
@@ -351,7 +382,7 @@ class ReactivePlanner(object):
         self.sampling_space.samples_v = VelocitySampling(
             v_min, v_max, self.sampling_level, self.config.sampling.vel_init_samples
         )
-        logger.info("Sampled interval of velocity: {} m/s - {} m/s".format(v_min, v_max))
+        self.logger.info("Sampled interval of velocity: {} m/s - {} m/s".format(v_min, v_max))
 
     def set_s_sampling_parameters(self, s_min, s_max):
         """
@@ -362,7 +393,7 @@ class ReactivePlanner(object):
         self.sampling_space.samples_s = PositionSampling(
             s_min, s_max, self.sampling_level, self.config.sampling.pos_init_samples
         )
-        logger.info("Sampled interval of longitudinal position: {} m - {} m".format(s_min, s_max))
+        self.logger.info("Sampled interval of longitudinal position: {} m - {} m".format(s_min, s_max))
 
     def set_desired_velocity(self, desired_velocity: float = None, current_speed: float = None, stopping: bool = False):
         """
@@ -390,9 +421,15 @@ class ReactivePlanner(object):
         if not stopping:
             reference_speed = current_speed if current_speed is not None else self._desired_speed
 
-            min_v = max(0, reference_speed - (0.125 * self.horizon * self.vehicle_params.a_max))
+            min_v = max(0, reference_speed - (self.config.sampling.max_deceleration_ratio * self.horizon *
+                                              self.vehicle_params.a_max))
             # max_v = max(min_v + 5.0, reference_speed + (0.25 * self.horizon * self.constraints.a_max))
-            max_v = max(min_v + 5.0, reference_speed + 2)
+
+            max_v = max(min_v + 10.0, reference_speed + 2)
+
+            print(f"Minimum velocity is: {min_v}")
+            print(f"Maximum velocity is: {max_v}")
+
             self.set_v_sampling_parameters(min_v, max_v)
         else:
             self.set_v_sampling_parameters(v_min=self._desired_speed, v_max=self._desired_speed)
@@ -493,6 +530,7 @@ class ReactivePlanner(object):
         self._optimal_cost = 0
         self._infeasible_count_kinematics = 0
         self._infeasible_count_collision = 0
+        self._infeasible_count_rules = 0
 
         # reset dictionary for counting infeasible trajectories for each constraint
         for constraint in self.config.planning.constraints_to_check:
@@ -510,8 +548,8 @@ class ReactivePlanner(object):
 
         NOTE: Here, no collision or feasibility check is done!
         """
-        logger.info("===== Sampling trajectories ... =====")
-        logger.info(f"Sampling density {samp_level + 1} of {self.sampling_level}")
+        self.logger.info("===== Sampling trajectories ... =====")
+        self.logger.info(f"Sampling density {samp_level + 1} of {self.sampling_level}")
 
         trajectories = self.sampling_space.generate_trajectories_at_level(samp_level, x_0_lon, x_0_lat,
                                                                           self.config.sampling.longitudinal_mode,
@@ -520,7 +558,7 @@ class ReactivePlanner(object):
         # create trajectory bundle
         trajectory_bundle = TrajectoryBundle(trajectories, cost_function=self.cost_function)
 
-        logger.info(f"Number of trajectory samples: {len(trajectory_bundle.trajectories)}")
+        self.logger.info(f"Number of trajectory samples: {len(trajectory_bundle.trajectories)}")
         return trajectory_bundle
 
     def _compute_initial_states(self, x_0: ReactivePlannerState) -> (np.ndarray, np.ndarray):
@@ -537,7 +575,7 @@ class ReactivePlanner(object):
         try:
             s, d = self._co.convert_to_curvilinear_coords(x_0.position[0], x_0.position[1])
         except ValueError:
-            logger.critical("Initial state could not be transformed.")
+            self.logger.critical("Initial state could not be transformed.")
             raise ValueError("Initial state could not be transformed.")
 
         # factor for interpolation
@@ -591,61 +629,39 @@ class ReactivePlanner(object):
 
         return x_0_lon, x_0_lat
 
-    def _compute_trajectory_pair(self, trajectory: TrajectorySample) -> Tuple[Trajectory, Trajectory, List, List]:
+    def _create_output(self, trajectory: TrajectorySample) -> Tuple[Trajectory, List, List]:
         """
-        Computes the output required for visualizing in CommonRoad framework
-        :param trajectory: the optimal trajectory
-        :return: (CartesianTrajectory, FrenetTrajectory, lon sample, lat sample)
+        Creates the output of the planning result in the CommonRoad format
+        :param trajectory: the optimal trajectory sample
+        :return: Tuple of (CartesianTrajectory, lon state list, lat state list)
         """
-        # go along state list
-        cart_list = list()
-        cl_list = list()
+        # convert Cartesian sample to state list
+        cart_state_list: List[ReactivePlannerState] = trajectory.cartesian.convert_to_rp_state_list(
+            init_time_step=self.x_0.time_step,
+            init_yaw_rate=self.x_0.yaw_rate,
+            dt=self.dt,
+            wheelbase=self.vehicle_params.wheelbase,
+            scaling_factor=self.config.planning.factor
+        )
 
-        lon_list = list()
-        lat_list = list()
+        # create Cartesian output trajectory
+        cart_traj: Trajectory = Trajectory(self.x_0.time_step, cart_state_list)
 
-        scaling_factor = self.config.planning.factor
-        for i in range(len(trajectory.cartesian.x)):
-            # create Cartesian state
-            cart_states = dict()
-            cart_states['time_step'] = self.x_0.time_step + scaling_factor * i
-            cart_states['position'] = np.array([trajectory.cartesian.x[i], trajectory.cartesian.y[i]])
-            cart_states['orientation'] = trajectory.cartesian.theta[i]
-            cart_states['velocity'] = trajectory.cartesian.v[i]
-            cart_states['acceleration'] = trajectory.cartesian.a[i]
-            if i > 0:
-                cart_states['yaw_rate'] = (trajectory.cartesian.theta[i] - trajectory.cartesian.theta[i - 1]) / self.dt
-            else:
-                cart_states['yaw_rate'] = self.x_0.yaw_rate
-            cart_states['steering_angle'] = np.arctan2(self.vehicle_params.wheelbase *
-                                                       trajectory.cartesian.kappa[i], 1.0)
-            cart_list.append(ReactivePlannerState(**cart_states))
+        # correct orientations of Cartesian output trajectory
+        cart_traj_corrected = shift_orientation(
+            cart_traj,
+            interval_start=self.x_0.orientation - np.pi,
+            interval_end=self.x_0.orientation + np.pi
+        )
 
-            # create curvilinear state
-            # TODO: This is not correct
-            cl_states = dict()
-            cl_states['time_step'] = self.x_0.time_step + scaling_factor * i
-            cl_states['position'] = np.array([trajectory.curvilinear.s[i], trajectory.curvilinear.d[i]])
-            cl_states['velocity'] = trajectory.cartesian.v[i]
-            cl_states['acceleration'] = trajectory.cartesian.a[i]
-            cl_states['orientation'] = trajectory.cartesian.theta[i]
-            cl_states['yaw_rate'] = trajectory.cartesian.kappa[i]
-            cl_list.append(CustomState(**cl_states))
+        # Curvilinear longitudinal and lateral state list
+        curv_sample = trajectory.curvilinear
+        lon_list = [(curv_sample.s[i], curv_sample.s_dot[i], curv_sample.s_ddot[i])
+                    for i in range(curv_sample.length())]
+        lat_list = [(curv_sample.d[i], curv_sample.d_dot[i], curv_sample.d_ddot[i])
+                    for i in range(curv_sample.length())]
 
-            lon_list.append(
-                [trajectory.curvilinear.s[i], trajectory.curvilinear.s_dot[i], trajectory.curvilinear.s_ddot[i]])
-            lat_list.append(
-                [trajectory.curvilinear.d[i], trajectory.curvilinear.d_dot[i], trajectory.curvilinear.d_ddot[i]])
-
-        # make Cartesian and Curvilinear Trajectory
-        cartTraj = Trajectory(self.x_0.time_step, cart_list)
-        cvlnTraj = Trajectory(self.x_0.time_step, cl_list)
-
-        # correct orientations of cartesian output trajectory
-        cartTraj_corrected = shift_orientation(cartTraj, interval_start=self.x_0.orientation - np.pi,
-                                               interval_end=self.x_0.orientation + np.pi)
-
-        return cartTraj_corrected, cvlnTraj, lon_list, lat_list
+        return cart_traj_corrected, lon_list, lat_list
 
     def plan(self, current_sampling_level: int = None) -> tuple:
         """
@@ -653,9 +669,6 @@ class ReactivePlanner(object):
         :param current_sampling_level: A specific sampling level to evaluate (no iteration)
         :return: Optimal trajectory as tuple
         """
-        # start timer
-        planning_start_time = time.time()
-
         # check if cartesian initial state is provided
         assert self.x_0 is not None, "<ReactivePlanner.plan(): Planner Cartesian initial state is empty!>"
 
@@ -673,21 +686,23 @@ class ReactivePlanner(object):
         # set low velocity mode given initial velocity in self.x_0
         self._low_vel_mode = True if self.x_0.velocity < self.config.planning.low_vel_mode_threshold else False
 
-        logger.info("===============================================================")
-        logger.info("=================== Starting Planning Cycle ===================")
-        logger.info(f"==== Initial state Cartesian ====")
-        logger.info(f"time_step={self.x_0.time_step}")
-        logger.info(
+        self.logger.info("===============================================================")
+        self.logger.info("=================== Starting Planning Cycle ===================")
+        self.logger.info(f"==== Initial state Cartesian ====")
+        self.logger.info(f"time_step={self.x_0.time_step}")
+        self.logger.info(
             f"position={self.x_0.position}, steering_angle={self.x_0.steering_angle}, velocity={self.x_0.velocity}")
-        logger.info(
+        self.logger.info(
             f"orientation={self.x_0.orientation}, acceleration={self.x_0.acceleration}, yaw_rate={self.x_0.yaw_rate}")
-        logger.info(f"==== Initial state Curvilinear ====")
-        logger.info(f"longitudinal state = {x_0_lon}")
-        logger.info(f"lateral state = {x_0_lat}")
-        logger.info(f"==== Target states ====")
-        logger.info(f"longitudinal driving mode: {self.config.sampling.longitudinal_mode}")
-        logger.info(f"desired velocity: {self._desired_speed} m/s")
-        logger.info(f"desired longitudinal position: {self._desired_lon_position} m")
+        self.logger.info(f"==== Initial state Curvilinear ====")
+        self.logger.info(f"longitudinal state = {x_0_lon}")
+        self.logger.info(f"lateral state = {x_0_lat}")
+        self.logger.info(f"==== Target states ====")
+        self.logger.info(f"longitudinal driving mode: {self.config.sampling.longitudinal_mode}")
+        self.logger.info(f"desired velocity: {self._desired_speed} m/s")
+        self.logger.info(f"desired longitudinal position: {self._desired_lon_position} m")
+        self.logger.info(f"==== Sampling Settings ====")
+        self.logger.info(f"sampling mode: {self.config.sampling.sampling_method}")
 
         # initialize optimal trajectory dummy
         optimal_trajectory = None
@@ -695,20 +710,28 @@ class ReactivePlanner(object):
         # initial index of sampling set to use
         i = 1 if current_sampling_level is None else current_sampling_level
 
+        # start timer
+        planning_start_time = time.perf_counter()
+
         while optimal_trajectory is None and i < self.sampling_level:
             # sample trajectory bundle
             bundle = self._create_trajectory_bundle(x_0_lon, x_0_lat, samp_level=i)
 
+            self._total_count_samples = len(bundle.trajectories)
+
             # find optimal trajectory (kinematic check/sorting/collision check)
-            t0 = time.time()
+            t0 = time.perf_counter()
             optimal_trajectory = self._get_optimal_trajectory(bundle)
 
-            logger.info("===== Planning result =====")
-            logger.info(f"Total checking time: {time.time() - t0:.7f}")
-            logger.info(f"Rejected {self.infeasible_count_kinematics} infeasible trajectories due to kinematics")
+            self.logger.info("===== Planning result =====")
+            self._journal["total_checking"] = time.perf_counter() - t0
+            self.logger.info(f"Total checking time: \t{self._journal['total_checking']:.7f}")
+            self.logger.info(f"Type conversion time: \t{self._journal['type_conversions']:.7f}")
+            self.logger.info(f"Rejected {self.infeasible_count_kinematics} infeasible trajectories due to kinematics")
             for constraint in self.config.planning.constraints_to_check:
-                logger.debug(f"\tInfeasible {constraint}: {self._infeasible_reason_dict[constraint]}")
-            logger.info(f"Rejected {self.infeasible_count_collision} infeasible trajectories due to collisions")
+                self.logger.debug(f"\tInfeasible {constraint}: {self._infeasible_reason_dict[constraint]}")
+            self.logger.info(f"Rejected {self.infeasible_count_collision} infeasible trajectories due to collisions")
+            self.logger.info(f"Rejected {self.infeasible_count_rules} infeasible trajectories due to rule violations")
 
             if current_sampling_level is not None:
                 break
@@ -717,30 +740,31 @@ class ReactivePlanner(object):
 
         if (optimal_trajectory is None or optimal_trajectory.cartesian.v[self._standstill_lookahead] <= 0.05) \
                 and self.x_0.velocity <= 0.05:
-            logger.info("Planning standstill for the current scenario")
+            self.logger.info("Planning standstill for the current scenario")
             optimal_trajectory = self._compute_standstill_trajectory()
 
             # check if feasible trajectory exists -> emergency mode
             if optimal_trajectory is None and current_sampling_level == self.sampling_level:
-                logger.warning(f"Could not find a valid trajectory")
-            else:
-                self._optimal_cost = optimal_trajectory.cost
-                relative_costs = None
-                if bundle is not None and bundle.trajectories is not None and len(bundle.trajectories) > 0:
-                    relative_costs = ((optimal_trajectory.cost - bundle.min_costs().cost) /
-                                      (bundle.max_costs().cost - bundle.min_costs().cost))
-                logger.info(f"Found optimal trajectory with costs = {self._optimal_cost:.3f} "
-                            f"({relative_costs:.3f} of seen costs)")
+                self.logger.warning(f"Could not find a valid trajectory")
 
-        # compute output
-        planning_result = self._compute_trajectory_pair(optimal_trajectory) if optimal_trajectory is not None else None
+        if optimal_trajectory is not None:
+            self._optimal_cost = optimal_trajectory.cost
+            if bundle is not None and bundle.trajectories is not None and len(bundle.trajectories) > 0:
+                relative_costs = ((optimal_trajectory.cost - bundle.min_costs().cost) /
+                                  (bundle.max_costs().cost - bundle.min_costs().cost))
+                self.logger.info(f"Found optimal trajectory with costs = {self._optimal_cost:.3f} " +
+                        f"({relative_costs:.3f} of seen costs)")
 
         # end timer
-        self._planning_times_list.append(time.time() - planning_start_time)
-        logger.info(f"Total planning time: {self.planning_times[-1]:.7f}")
+        self._planning_times_list.append(time.perf_counter() - planning_start_time)
+        self._journal["total_planning"] = self.planning_times[-1]
+        self.logger.info(f"Total planning time: \t{self.planning_times[-1]:.7f}")
+
+        # compute output
+        planning_result = self._create_output(optimal_trajectory) if optimal_trajectory is not None else None
 
         if planning_result is None:
-            logger.warning(f"Planner failed to find an optimal trajectory with given sampling configuration!")
+            self.logger.warning(f"Planner failed to find an optimal trajectory with given sampling configuration!")
 
         return planning_result
 
@@ -754,10 +778,10 @@ class ReactivePlanner(object):
         x_0_lon, x_0_lat = self.x_0_cl
 
         # create artificial standstill trajectory
-        logger.info("Adding standstill trajectory")
-        logger.info(f"Initial state: x_0 is {x_0}")
-        logger.info(f"Longitudinal initial state is x_0_lon is {x_0_lon}")
-        logger.info(f"Lateral initial state is x_0_lat is {x_0_lat}")
+        self.logger.info("Adding standstill trajectory")
+        self.logger.info(f"Initial state: x_0 is {x_0}")
+        self.logger.info(f"Longitudinal initial state is x_0_lon is {x_0_lon}")
+        self.logger.info(f"Lateral initial state is x_0_lat is {x_0_lat}")
 
         # create lon and lat polynomial
         traj_lon = QuarticTrajectory(tau_0=0, delta_tau=self.horizon, x_0=np.asarray(x_0_lon),
@@ -993,7 +1017,7 @@ class ReactivePlanner(object):
                         y[i] = pos[1]
                     else:
                         feasible = False
-                        logger.debug("<ReactivePlanner.check_kinematics()> Out of projection domain")
+                        self.logger.debug("<ReactivePlanner.check_kinematics()> Out of projection domain")
                         break
 
                 if feasible:
@@ -1096,51 +1120,142 @@ class ReactivePlanner(object):
                 return False
         return True
 
-    def _check_collisions(self, trajectory_bundle: TrajectoryBundle) -> Union[TrajectorySample, None]:
+    def _check_collisions(self, trajectory_bundle: TrajectoryBundle) -> list[TrajectorySample] | None:
         """
         Lazy check: Iterates over the sorted list of trajectory samples and returns the first non-colliding sample.
         If all samples collide, returns None.
         :param trajectory_bundle: (Sorted) Bundle of trajectory samples
         """
+        # go through sorted list of trajectories and check for collisions
+        final_traj = None
+        for trajectory in trajectory_bundle.get_sorted_list():
+            # check collision for trajectory sample
+            collide = self._check_collision_traj_sample(trajectory)
+            if not collide and not self.config.debug.complete_collision_eval:
+                self.logger.info(f"Collision checks took:  \t{self._journal['collision_check']:.7f}s")
+                return trajectory
+            else:
+                final_traj = trajectory if final_traj is None else final_traj
+        return final_traj
+
+    def _check_collision_traj_sample(self, trajectory: TrajectorySample) -> bool:
+        """Checks collision for a single trajectory sample"""
         # collision object dimensions
         half_length = 0.5 * self.vehicle_params.length
         half_width = 0.5 * self.vehicle_params.width
 
-        # go through sorted list of trajectories and check for collisions
-        t0 = time.time()
+        # compute position and orientation
+        pos1 = trajectory.cartesian.x + self.vehicle_params.wb_rear_axle * np.cos(trajectory.cartesian.theta)
+        pos2 = trajectory.cartesian.y + self.vehicle_params.wb_rear_axle * np.sin(trajectory.cartesian.theta)
+        theta = trajectory.cartesian.theta
+
+        collide = False
+        # check each pose for collisions
+        for i in range(len(pos1)):
+            t0 = time.perf_counter()
+            ego_collision_rect = pycrcc.RectOBB(half_length, half_width, theta[i], pos1[i], pos2[i])
+            self._journal["type_conversions"] += time.perf_counter() - t0
+
+            t0 = time.perf_counter()
+            is_collision = self._cc.time_slice(self.x_0.time_step + i).collide(ego_collision_rect)
+            self._journal["collision_check"] += time.perf_counter() - t0
+            if is_collision:
+                self._infeasible_count_collision += 1
+                collide = True
+                trajectory.feasibility_label = FeasibilityStatus.INFEASIBLE_COLLISION
+                break
+
+        # additional continuous collision check if no collision has been detected before already
+        if self.config.planning.continuous_collision_check and not collide:
+            ego_tvo = pycrcc.TimeVariantCollisionObject(self.x_0.time_step)
+            [ego_tvo.append_obstacle(
+                pycrcc.RectOBB(half_length, half_width, theta[i], pos1[i], pos2[i])) for i in range(len(pos1))]
+            ego_tvo, err = trajectory_preprocess_obb_sum(ego_tvo)
+            if self._cc.collide(ego_tvo):
+                self._infeasible_count_collision += 1
+                collide = True
+                trajectory.feasibility_label = FeasibilityStatus.INFEASIBLE_COLLISION
+
+        return collide
+
+    def _monitor_verify_traj(self, trajectory: TrajectorySample) -> bool:
+        """
+        Checks a single trajectory sample for traffic rule compliance via monitoring
+
+        :param trajectory: The trajectory sample
+        :return: Boolean stating if the trajectory is valid
+        """
+        if (not self.config.monitor.activated_traffic_rules
+                or (self.config.monitor.activated_traffic_rules and len(
+                    self.config.monitor.activated_traffic_rules) == 0)):
+            return True
+
+        t0 = time.perf_counter()
+        actual_result = self.config.rule_monitor.evaluate_trajectory_with_translation(
+            self._prepare_rule_eval(trajectory), self.vehicle_params.wb_rear_axle, self.record_state_list[-1].time_step + 1)
+        t1 = time.perf_counter()
+        self._journal["rule_check"] += (t1 - t0)
+        valid = True
+        ego_result = actual_result[str(self.config.scenario.scenario_id)][self.config.planning.ego_id]
+        for rule in ego_result:
+            for obstacle in ego_result[rule]:
+                if len(ego_result[rule][obstacle]) != 0 \
+                        and any(x >= self.x_0.time_step for x in ego_result[rule][obstacle]):
+                    self._infeasible_count_rules += 1
+                    valid = False
+                    trajectory.feasibility_label = FeasibilityStatus.INFEASIBLE_RULE
+                    break
+            else:
+                continue
+            break
+
+        return valid
+
+    def _prepare_rule_eval(self, trajectory: TrajectorySample) -> Dict[str, np.array]:
+        """
+        Updates internal traffic rule monitor world.
+        :param trajectory: The trajectory to evaluate.
+        """
+        theta = trajectory.cartesian.theta
+        orientation = self.x_0.orientation
+        theta_adjusted = np.where(theta < orientation - np.pi, theta + 2 * np.pi, theta)
+        theta_adjusted = np.where(theta_adjusted > orientation + np.pi, theta_adjusted - 2 * np.pi, theta_adjusted)
+        state_elements = {
+            'x': trajectory.cartesian.x,
+            'y': trajectory.cartesian.y,
+            'orientation': theta_adjusted,
+            'velocity': trajectory.cartesian.v,
+            'acceleration': trajectory.cartesian.a
+        }
+        return state_elements
+
+    def _check_collision_and_rules(self, trajectory_bundle: TrajectoryBundle):
+        """Check for combined collision and traffic rule checking"""
+        final_traj = None
         for trajectory in trajectory_bundle.get_sorted_list():
-            # compute position and orientation
-            pos1 = trajectory.cartesian.x + self.vehicle_params.wb_rear_axle * np.cos(trajectory.cartesian.theta)
-            pos2 = trajectory.cartesian.y + self.vehicle_params.wb_rear_axle * np.sin(trajectory.cartesian.theta)
-            theta = trajectory.cartesian.theta
+            # check collision for trajectory sample
+            collide = self._check_collision_traj_sample(trajectory)
+            # check traffic rules with monitor for trajectory sample
+            if not collide or self.config.debug.complete_rule_eval:
+                rule_compliant = self._monitor_verify_traj(trajectory)
+                if rule_compliant:
+                    if not self.config.debug.complete_rule_eval:
+                        self.logger.info(f"Collision checks took:  \t{self._journal['collision_check']:.7f}s")
+                        self.logger.info(f"Traffic Rule checks took:  \t{self._journal['rule_check']:.7f}s")
+                        return trajectory
+                    if not collide and self.config.debug.complete_rule_eval:
+                        final_traj = trajectory if final_traj is None else final_traj
+        return final_traj
 
-            collide = False
-            # check each pose for collisions
-            for i in range(len(pos1)):
-                ego = pycrcc.TimeVariantCollisionObject(self.x_0.time_step + i * self.config.planning.factor)
-                ego.append_obstacle(pycrcc.RectOBB(half_length, half_width, theta[i], pos1[i], pos2[i]))
-                if self._cc.collide(ego):
-                    self._infeasible_count_collision += 1
-                    collide = True
-                    trajectory.feasibility_label = FeasibilityStatus.INFEASIBLE_COLLISION
-                    break
-
-            # additional continuous collision check if no collision has been detected before already
-            if self.config.planning.continuous_collision_check and not collide:
-                ego_tvo = pycrcc.TimeVariantCollisionObject(self.x_0.time_step)
-                [ego_tvo.append_obstacle(
-                    pycrcc.RectOBB(half_length, half_width, theta[i], pos1[i], pos2[i])) for i in range(len(pos1))]
-                ego_tvo, err = trajectory_preprocess_obb_sum(ego_tvo)
-                if self._cc.collide(ego_tvo):
-                    self._infeasible_count_collision += 1
-                    collide = True
-                    trajectory.feasibility_label = FeasibilityStatus.INFEASIBLE_COLLISION
-                    break
-
-            if not collide:
-                logger.info(f"Collision checks took:  \t{time.time() - t0:.7f}s")
-                return trajectory
-        return None
+    def prepare_initial_state_monitor(self):
+        """Adds initial/current state to internal traffic rule monitor world."""
+        initial_state = ReactivePlannerState.shift_state_to_center(
+            self.record_state_list[-1],
+            self.vehicle_params.wb_rear_axle
+        )
+        # obstacle predicates -> trace needs to be reset manually
+        world = self.config.rule_monitor.get_world()
+        world.ego_vehicles[0].update_current_state(initial_state)
 
     def _get_optimal_trajectory(self, trajectory_bundle: TrajectoryBundle) -> Union[TrajectorySample, None]:
         """
@@ -1148,7 +1263,7 @@ class ReactivePlanner(object):
         :param trajectory_bundle: The trajectory bundle
         :return: The optimal trajectory if exists (otherwise None)
         """
-        logger.info("===== Checking trajectories ... =====")
+        self.logger.info("===== Checking trajectories ... =====")
         # reset statistics
         self._reset_statistics()
 
@@ -1160,7 +1275,7 @@ class ReactivePlanner(object):
 
         # ==== Kinematic checking
         # check kinematics of each trajectory
-        t0 = time.time()
+        t0 = time.perf_counter()
         if self.config.debug.multiproc:
             # with multiprocessing
             # divide trajectory_bundle.trajectories into chunks
@@ -1193,7 +1308,8 @@ class ReactivePlanner(object):
             # without multiprocessing
             feasible_trajectories, infeasible_trajectories = self._check_kinematics(trajectory_bundle.trajectories)
 
-        logger.info(f"Kinematic checks took:  \t{time.time() - t0:.7f}s")
+        self._journal["kinematic_check"] = time.perf_counter() - t0
+        self.logger.info(f"Kinematic checks took:  \t{self._journal['kinematic_check']:.7f}s")
 
         # update number of infeasible trajectories
         self._infeasible_count_kinematics = len(trajectory_bundle.trajectories) - len(feasible_trajectories)
@@ -1207,13 +1323,19 @@ class ReactivePlanner(object):
 
         # ==== Sorting
         # sort trajectories according to their costs
-        t0 = time.time()
+        t0 = time.perf_counter()
         trajectory_bundle.sort()
-        logger.info(f"Sort trajectories took:  \t{time.time() - t0:.7f}s")
+        self._journal["sorting"] = time.perf_counter() - t0
+        self.logger.info(f"Sort trajectories took:  \t{self._journal['sorting']:.7f}s")
 
-        # ==== Collision checking
-        collision_free_trajectory: Optional[TrajectorySample] = self._check_collisions(trajectory_bundle)
-        return collision_free_trajectory
+
+        if not self.config.monitor.with_rule_monitoring:
+            # ==== Only Collision checking
+            valid_trajectory: Optional[TrajectorySample] = self._check_collisions(trajectory_bundle)
+        else:
+            # ==== Collision + Monitoring
+            valid_trajectory: Optional[TrajectorySample] = self._check_collision_and_rules(trajectory_bundle)
+        return valid_trajectory
 
     def convert_state_list_to_commonroad_object(self, state_list: List[ReactivePlannerState], obstacle_id: int = 42):
         """
@@ -1225,7 +1347,9 @@ class ReactivePlanner(object):
         # shift trajectory positions to center
         new_state_list = list()
         for state in state_list:
-            new_state_list.append(state.shift_positions_to_center(self.vehicle_params.wb_rear_axle))
+            new_state_list.append(
+                ReactivePlannerState.shift_state_to_center(state, self.vehicle_params.wb_rear_axle)
+            )
 
         trajectory = Trajectory(initial_time_step=new_state_list[0].time_step, state_list=new_state_list)
         # get shape of vehicle

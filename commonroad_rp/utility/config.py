@@ -2,10 +2,16 @@ import numpy as np
 import dataclasses
 import inspect
 import os.path
-from dataclasses import dataclass, field
-from typing import Union, Any, Optional, Dict, List
+from dataclasses import dataclass, field, fields
+from typing import Union, Any, Optional, Dict, List, Callable
 from pathlib import Path
+
+from commonroad.geometry.shape import Rectangle
+from commonroad.prediction.prediction import TrajectoryPrediction
+from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
+from commonroad.scenario.trajectory import Trajectory
 from omegaconf import OmegaConf
+from omegaconf.dictconfig import DictConfig
 import warnings
 
 from commonroad_dc.feasibility.vehicle_dynamics import VehicleParameterMapping
@@ -14,7 +20,12 @@ from commonroad.scenario.scenario import Scenario
 from commonroad.planning.planning_problem import PlanningProblem, PlanningProblemSet
 from vehiclemodels.vehicle_parameters import VehicleParameters
 
+from commonroad_rp.trajectories import FeasibilityStatus
 from commonroad_rp.utility.general import load_scenario_and_planning_problem
+
+# crmonitor and cpp env model for traffic rule checks
+import crmonitor
+import crcpp
 
 
 def _dict_to_params(dict_params: Dict[str, Any], cls: Any) -> Any:
@@ -35,7 +46,8 @@ def _dict_to_params(dict_params: Dict[str, Any], cls: Any) -> Any:
             kwargs[k] = _dict_to_params(dict_params[k], cls_map[k])
         else:
             kwargs[k] = dict_params[k]
-    return cls(**kwargs)
+    obj = cls(**kwargs)
+    return obj
 
 
 @dataclass
@@ -79,29 +91,6 @@ class BaseConfiguration:
         except AttributeError as e:
             raise KeyError(f"{key} is not a parameter of {self.__class__.__name__}") from e
 
-    @classmethod
-    def load(cls, file_path: Union[Path, str], scenario_name: Optional[str] = None, validate_types: bool = True) \
-            -> 'ReactivePlannerConfiguration':
-        """
-        Loads parameters from a config yaml file and returns the Configuration class.
-
-        :param file_path: Path to yaml file containing config parameters.
-        :param scenario_name: Name of scenario which should be used. If provided, scenario and planning problem are
-                              loaded from a CR scenario XML file.
-        :param validate_types:  Boolean indicating whether loaded config should be validated against CARLA parameters.
-        :return: Base parameter class.
-        """
-        file_path = Path(file_path)
-
-        assert file_path.suffix == ".yaml", f"File type {file_path.suffix} is unsupported! Please use .yaml!"
-        loaded_yaml = OmegaConf.load(file_path)
-        if validate_types:
-            OmegaConf.merge(OmegaConf.structured(ReactivePlannerConfiguration), loaded_yaml)
-        params = _dict_to_params(OmegaConf.to_object(loaded_yaml), cls)
-        if scenario_name:
-            params.general.set_path_scenario(scenario_name)
-        return params
-
 
 @dataclass
 class PlanningConfiguration(BaseConfiguration):
@@ -111,7 +100,6 @@ class PlanningConfiguration(BaseConfiguration):
     dt: float = 0.1
     # time_steps_computation * dt = horizon. e.g. 20 * 0.1 = 2s
     time_steps_computation: int = 60
-    planning_horizon: float = dt * time_steps_computation
     # replanning frequency (in time steps)
     replanning_frequency: int = 3
     # continuous collision checking
@@ -127,6 +115,13 @@ class PlanningConfiguration(BaseConfiguration):
         field(default_factory=lambda: ["velocity", "acceleration", "kappa", "kappa_dot", "yaw_rate"])
     # lookahead in dt*standstill_lookahead seconds if current velocity <= 0.1 and after specified time too
     standstill_lookahead: int = 10
+    # safety margin for dynamic obstacles
+    safety_margin_dynamic_obstacles: float = 0.0
+    # ego_vehicle ID
+    ego_id = 42
+
+    def __post_init__(self):
+        self.planning_horizon: float = self.dt * self.time_steps_computation
 
 
 @dataclass
@@ -153,6 +148,9 @@ class SamplingConfiguration(BaseConfiguration):
     # minimum time sampling in [s] (t_max is given by planning horizon)
     t_min: float = 0.4
     # longitudinal velocity sampling interval in [m/s] (interval determined by setting desired velocity)
+    # ratio of vehicle a_max which is used for deceleration, i.e., computing v_min for sampling
+    # (value in interval ]0, 1])
+    max_deceleration_ratio: float = 0.125
     v_min: float = 0
     v_max: float = 0
     # longitudinal position sampling interval around a desired stop point in [m]
@@ -181,15 +179,27 @@ class DebugConfiguration(BaseConfiguration):
     # show evaluation plots
     show_evaluation_plots: bool = True
     # plots file format
-    plots_file_format = "png"
+    plots_file_format: str = "png"
     # draw the reference path
     draw_ref_path: bool = True
     # draw the planning problem
     draw_planning_problem: bool = True
     # draw obstacles with vehicle icons
-    draw_icons: bool = False
+    draw_icons: bool = True
+    # evaluate all trajectories for rule compliance (otherwise we return after the first valid trajectory)
+    complete_rule_eval: bool = False
+    # evaluate all trajectories for collision (otherwise we return after the first valid trajectory)
+    complete_collision_eval: bool = False
+    # draws prediction of other obstacles as dots
+    draw_prediction_others: bool = True
+    # draw trajectory occupancies of other vehicles
+    draw_occupancies_other: bool = False
     # draw sampled trajectory set
     draw_traj_set: bool = False
+    # filter which FeasibilityStatus should be ignored for visualization
+    traj_vis_filter: List[str] = field(default_factory=lambda: [])
+    # color settings for trajectories
+    traj_color: Dict[str, str] = field(default_factory=lambda: {})
     # logging settings - Options: NOTSET, DEBUG, INFO, WARNING, ERROR, CRITICAL
     logging_level: str = "INFO"
     # use multiprocessing True/False
@@ -199,6 +209,17 @@ class DebugConfiguration(BaseConfiguration):
     # number of workers for multiprocessing in visualization
     num_workers_viz: int = 6
     max_queue_size: int = 50
+
+    def __post_init__(self):
+        dict_traj_status_to_color = {
+            FeasibilityStatus.FEASIBLE.name: 'blue',
+            FeasibilityStatus.INFEASIBLE_KINEMATIC.name: 'purple',
+            FeasibilityStatus.INFEASIBLE_COLLISION.name: 'red',
+            FeasibilityStatus.INFEASIBLE_RULE.name: 'red'
+        }
+        for key, value in dict_traj_status_to_color.items():
+            if key not in self.traj_color:
+                self.traj_color[key] = value
 
 
 @dataclass
@@ -224,29 +245,86 @@ class VehicleConfiguration(BaseConfiguration):
     v_delta_min: float = -0.4
     v_delta_max: float = 0.4
 
-    # wheelbase
-    wheelbase: float = wb_front_axle + wb_rear_axle
-
     def __post_init__(self):
+        self._update_computed_params()
+
+    def _update_computed_params(self):
+        """Update additional params which are computed from configurable parameters"""
+        # wheelbase
+        self.wheelbase: float = self.wb_front_axle + self.wb_rear_axle
+        # max curvature
+        self.kappa_max: float = np.tan(self.delta_max) / self.wheelbase
+
+    def update_vehicle_config(self, yaml_config: DictConfig):
+        """
+        Overwrites the vehicle parameters which have not been passed explicitly via the YAML file
+        with default values from the CommonRoad vehicle model (specified by id_type_vehicle)
+        """
         # get vehicle parameters from CommonRoad vehicle models given cr_vehicle_id
         vehicle_parameters: VehicleParameters = \
             VehicleParameterMapping.from_vehicle_type(VehicleType(self.id_type_vehicle))
 
-        # overwrite parameters according to specified vehicle type
-        self.length = vehicle_parameters.l
-        self.width = vehicle_parameters.w
-        self.wb_front_axle = vehicle_parameters.a
-        self.wb_rear_axle = vehicle_parameters.b
-        self.a_max = vehicle_parameters.longitudinal.a_max
-        self.v_switch = vehicle_parameters.longitudinal.v_switch
-        self.delta_min = vehicle_parameters.steering.min
-        self.delta_max = vehicle_parameters.steering.max
-        self.v_delta_min = vehicle_parameters.steering.v_min
-        self.v_delta_max = vehicle_parameters.steering.v_max
-        self.wheelbase = self.wb_front_axle + self.wb_rear_axle
+        # map param names to CR vehicle params
+        name_to_cr_veh_param: Dict["str", float] = {
+            "length": vehicle_parameters.l,
+            "width": vehicle_parameters.w,
+            "wb_front_axle": vehicle_parameters.a,
+            "wb_rear_axle": vehicle_parameters.b,
+            "a_max": vehicle_parameters.longitudinal.a_max,
+            "v_switch": vehicle_parameters.longitudinal.v_switch,
+            "delta_min": vehicle_parameters.steering.min,
+            "delta_max": vehicle_parameters.steering.max,
+            "v_delta_min": vehicle_parameters.steering.v_min,
+            "v_delta_max": vehicle_parameters.steering.v_max,
+        }
 
-        # compute maximum curvature from steering limit and wheelbase
-        self.kappa_max = np.tan(self.delta_max) / self.wheelbase
+        # overwrite params
+        for f in fields(self):
+            if (f.name not in yaml_config.keys() and
+                    name_to_cr_veh_param.get(f.name) is not None):
+                setattr(self, f.name, name_to_cr_veh_param[f.name])
+
+        # update computed values
+        self._update_computed_params()
+
+
+@dataclass
+class MonitorConfiguration(BaseConfiguration):
+    """Traffic Rule Monitor parameters for evaluations."""
+
+    activated_traffic_rules: List[str] = field(default_factory=lambda: [])
+    config_path: str = ''
+    log_level: str = "info"
+    with_rule_monitoring: bool = False
+    lazy_eval: bool = True
+    formula_evaluation_mode: str = "globally_early_termination"
+    short_circuiting: bool = True
+    hydra_reordering: bool = True
+    hydra_connected_evaluation: bool = True
+    performance_measurement: bool = False
+    check_ego_valid: bool = False
+    check_obstacle_valid: bool = False
+    remove_vru: bool = False
+    trace_reset_option: str = "filter"
+    field_of_view_front: float = 250.0
+    field_of_view_rear: float = 250.0
+    history_size: int = 101
+    reaction_time: float = 0.3
+    set_based: bool = False
+
+    def __post_init__(self):
+        formula_evaluation_mode_map = {
+            "globally": crmonitor.FormulaEvaluationMode.globally,
+            "globally_early_termination": crmonitor.FormulaEvaluationMode.globally_early_termination,
+            "initial_step": crmonitor.FormulaEvaluationMode.initial_step,
+        }
+        self.formula_evaluation_mode_val = formula_evaluation_mode_map.get(self.formula_evaluation_mode, crmonitor.FormulaEvaluationMode.globally_early_termination)
+        trace_reset_options_map = {
+            "filter": crmonitor.TraceResetOptions.filter,
+            "always": crmonitor.TraceResetOptions.always,
+            "keepComplete": crmonitor.TraceResetOptions.keepComplete
+        }
+        self.trace_reset_option_val = trace_reset_options_map.get(self.trace_reset_option, crmonitor.TraceResetOptions.filter)
 
 
 @dataclass
@@ -267,7 +345,10 @@ class GeneralConfiguration(BaseConfiguration):
 
         :param scenario_name: Name of CommonRoad scenario.
         """
-        self.path_scenario = os.path.join(self.path_scenarios, scenario_name)
+        if '.pb' in scenario_name:
+            self.path_scenario = os.path.join(self.path_scenarios, scenario_name[:-9], scenario_name)
+        else:
+            self.path_scenario = os.path.join(self.path_scenarios, scenario_name)
 
 
 @dataclass
@@ -279,15 +360,43 @@ class ReactivePlannerConfiguration(BaseConfiguration):
     sampling: SamplingConfiguration = field(default_factory=SamplingConfiguration)
     debug: DebugConfiguration = field(default_factory=DebugConfiguration)
     general: GeneralConfiguration = field(default_factory=GeneralConfiguration)
+    monitor: MonitorConfiguration = field(default_factory=MonitorConfiguration)
 
     def __post_init__(self):
         self.scenario: Optional[Scenario] = None
         self.planning_problem: Optional[PlanningProblem] = None
         self.planning_problem_set: Optional[PlanningProblemSet] = None
+        self.rule_monitor: Optional[crmonitor.Monitor] = None
 
     @property
     def name_scenario(self) -> str:
         return self.general.name_scenario
+
+    @classmethod
+    def load(cls, file_path: Union[Path, str], scenario_name: Optional[str] = None, validate_types: bool = True) \
+            -> 'ReactivePlannerConfiguration':
+        """
+        Loads parameters from a config yaml file and returns the Configuration class.
+
+        :param file_path: Path to yaml file containing config parameters.
+        :param scenario_name: Name of scenario which should be used. If provided, scenario and planning problem are
+                              loaded from a CR scenario XML file.
+        :param validate_types:  Boolean indicating whether loaded config should be validated against CARLA parameters.
+        :return: Base parameter class.
+        """
+        file_path = Path(file_path)
+
+        assert file_path.suffix == ".yaml", f"File type {file_path.suffix} is unsupported! Please use .yaml!"
+        loaded_yaml = OmegaConf.load(file_path)
+        if validate_types:
+            OmegaConf.merge(OmegaConf.structured(ReactivePlannerConfiguration), loaded_yaml)
+        params = _dict_to_params(OmegaConf.to_object(loaded_yaml), cls)
+        # add path to scenario file to config
+        if scenario_name:
+            params.general.set_path_scenario(scenario_name)
+        # update vehicle configuration params
+        params.vehicle.update_vehicle_config(loaded_yaml["vehicle"])
+        return params
 
     def update(self, scenario: Scenario = None, planning_problem: PlanningProblem = None,
                idx_planning_problem: Optional[int] = None):
@@ -315,3 +424,56 @@ class ReactivePlannerConfiguration(BaseConfiguration):
 
         # Check that a scenario is set (planning problem can be set afterwards)
         assert self.scenario is not None, "<Configuration.update()>: no scenario has been specified"
+
+        if self.monitor.with_rule_monitoring:
+            # Init monitor
+            if self.rule_monitor is None:
+                if self.scenario:
+                    predicate_cost = {}
+                    temporal_parameters = {}
+                    predicate_parameter = {}
+                    monitor_config = crmonitor.MonitorConfiguration()
+                    monitor_config.shortCircuiting = self.monitor.short_circuiting
+                    monitor_config.hydraReordering = self.monitor.hydra_reordering
+                    monitor_config.formulaEvaluationMode = self.monitor.formula_evaluation_mode_val
+                    monitor_config.hydraConnectedEvaluation = self.monitor.hydra_connected_evaluation
+                    monitor_config.performanceMeasurement = self.monitor.performance_measurement
+                    sim_param = crmonitor.MonitorSimulationParameters()
+                    sim_param.performanceMeasurement = self.monitor.performance_measurement
+                    sim_param.log_level = self.monitor.log_level
+                    sim_param.removeVRU = False
+                    sim_param.storeEvalResults = False
+                    sim_param.checkEgoValid = False
+                    sim_param.checkObstacleValid = False
+                    sim_param.trace_reset_option = self.monitor.trace_reset_option_val
+                    sim_param.set_based = self.monitor.set_based
+                    wp = crcpp.WorldParameters(
+                        crcpp.RoadNetworkParameters(),
+                        crcpp.SensorParameters(self.monitor.field_of_view_front, self.monitor.field_of_view_rear),
+                        crcpp.ActuatorParameters.ego_defaults(),
+                        crcpp.TimeParameters(self.monitor.history_size, self.monitor.reaction_time, self.scenario.dt),
+                        crcpp.ActuatorParameters.vehicle_defaults(),
+                    )
+                    sim_param.world_parameters = wp
+                    self.rule_monitor = crmonitor.Monitor()
+                    self.rule_monitor.set_config(sim_param, monitor_config, predicate_cost, predicate_parameter, temporal_parameters)
+                    self.rule_monitor.activate_rule_sets(self.monitor.activated_traffic_rules)
+                else:
+                    raise Exception("Tried to init monitor without scenario.")
+
+            # Update scenario in monitor
+            if self.scenario:
+                self.rule_monitor.set_world(crcpp.World(self.scenario))
+                initial_state = self.planning_problem.initial_state
+                trajectory = Trajectory(initial_time_step=initial_state.time_step, state_list=[initial_state]) # add dummy trajectory
+                shape = Rectangle(self.vehicle.length, self.vehicle.width)
+                prediction = TrajectoryPrediction(trajectory, shape)
+                ego_vehicle =  DynamicObstacle(self.planning.ego_id, ObstacleType.CAR, shape, self.planning_problem.initial_state, prediction)
+                ego = crcpp.Obstacle(ego_vehicle)
+                ego.actuator_parameters = crcpp.ActuatorParameters.ego_defaults()
+                ego.sensor_parameters = crcpp.SensorParameters(self.monitor.field_of_view_front, self.monitor.field_of_view_rear)
+                ego.time_parameters = crcpp.TimeParameters(self.monitor.history_size, self.monitor.reaction_time, self.scenario.dt)
+                self.rule_monitor.set_ego_vehicle(ego)
+            else:
+                pass
+

@@ -1,0 +1,13 @@
+debug:
+  show_plots: False
+  save_plots: False
+  draw_traj_set: False
+  draw_icons: True
+  multiproc: False
+  num_workers: 6
+  logging_level: "ERROR"
+
+monitor:
+  with_rule_monitoring: True
+  activated_traffic_rules: ["R_I3"]
+  log_level: "error"

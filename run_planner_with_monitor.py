@@ -9,9 +9,11 @@ __status__ = "Beta"
 # standard imports
 from copy import deepcopy
 import logging
+from pathlib import Path
 
 # commonroad-route-planner
 import commonroad_route_planner.fast_api.fast_api as rfapi
+import crmonitor
 from commonroad_route_planner.reference_path import ReferencePath
 
 # reactive planner
@@ -68,7 +70,6 @@ def main(
                 i = 1
                 while optimal is None and i <= planner.sampling_level:
                     optimal = planner.plan(i)
-                    i += 1
 
             if not optimal:
                 break
@@ -110,6 +111,11 @@ def main(
                                           ego=ego_vehicle, traj_set=sampled_trajectory_bundle,
                                           ref_path=planner.reference_path, timestep=current_count, config=config)
 
+        if planner.config.monitor.trace_reset_option_val is crmonitor.TraceResetOptions.filter:
+            planner.config.rule_monitor.propagate_trace()  # we use filter option to keep computed props of other traffic participants within cycle
+        planner.config.rule_monitor.get_world().propagate(ego=False)  # ego needs to be propagated inside planner since otherwise invalid planned trajectory of ego is executed
+        planner.prepare_initial_state_monitor()
+
     # make gif
     # make_gif(config, range(0, planner.record_state_list[-1].time_step))
 
@@ -118,18 +124,18 @@ def main(
     # **************************
     evaluate = True
     if evaluate:
-        cr_solution, feasibility_list = run_evaluation(planner.config, planner.record_state_list,
-                                                       planner.record_input_list)
+        run_evaluation(planner.config, planner.record_state_list, planner.record_input_list)
 
 
 # *************************************
 # Run planning
 # *************************************
 if __name__ == "__main__":
-    filename = "ZAM_Over-1_1.xml"
+    scenario = "DEU_testStopLine-1_1_T-1.pb"
+    config_path = Path(__file__).parents[0] / "configurations/DEU_testStopLine-1_1_T-1.yaml"
 
     # Build config object
-    rp_config = ReactivePlannerConfiguration.load(f"configurations/{filename[:-4]}.yaml", filename)
+    rp_config = ReactivePlannerConfiguration.load(config_path, scenario)
     rp_config.update()
 
     main(
