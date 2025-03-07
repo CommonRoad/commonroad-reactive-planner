@@ -31,10 +31,24 @@ from commonroad.prediction.prediction import Occupancy
 
 # commonroad_dc
 from commonroad_dc import pycrcc
+from commonroad_dc.pycrccosy import CurvilinearCoordinateSystem
 
 # commonroad-rp
 from commonroad_rp.trajectories import TrajectorySample, FeasibilityStatus
 from commonroad_rp.utility.config import ReactivePlannerConfiguration
+from commonroad_rp.driving_corridor.corridor_selector import DrivingCorridorSelector
+import commonroad_rp.utility.utils_coordinate_system as util_cosy
+
+try:
+    from commonroad_reach.data_structure.reach.driving_corridor import DrivingCorridor
+    from cr_reach_flow.cr_reach_flow_core.driving_corridor import DynamicDrivingCorridor
+    cr_reach_installed = True
+    cr_reach_flow_installed = True
+except ImportError:
+    DrivingCorridor = None
+    DynamicDrivingCorridor = None
+    cr_reach_installed = False
+    cr_reach_flow_installed = False
 
 
 logger = logging.getLogger("RP_LOGGER")
@@ -379,6 +393,19 @@ def worker(task_queue):
             break
         visualize(task)
 
+def plot_driving_corridor(rnd: MPRenderer, corridor: Union[DrivingCorridor, DynamicDrivingCorridor], CLCS: Optional[CurvilinearCoordinateSystem] = None) -> None:
+    draw_params = ShapeParams(facecolor="cadetblue", edgecolor="teal")
+    corridor_interface = DrivingCorridorSelector.select_driving_corridor(corridor)
+    for time_step in corridor_interface.get_time_step():
+        rectangles = corridor_interface.get_drivable_area(time_step)
+        if CLCS is not None:
+            rectangles = [
+                res
+                for rect in rectangles
+                for res in util_cosy.convert_to_cartesian_polygons(rect, CLCS, True)
+            ]
+        for rect in rectangles:
+            rect.draw(rnd, draw_params)
 
 def visualize(task):
     """

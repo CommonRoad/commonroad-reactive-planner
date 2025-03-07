@@ -48,10 +48,16 @@ class DrivingCorridorSelector(ABC):
     def get_overlapping_nodes_with_lon_pos(self, time_step: int, lon_pos: float):
         pass
 
+    @abstractmethod
     def get_connected_components(self, overlap_nodes: list()):
         pass
 
+    @abstractmethod
     def get_lat_interval(self, reach_node):
+        pass
+
+    @abstractmethod
+    def get_drivable_area(self, time_step: int):
         pass
 
     @staticmethod

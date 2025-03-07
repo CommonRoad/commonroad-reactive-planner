@@ -26,7 +26,7 @@ class ReachFlowCorridor(DrivingCorridorSelector):
             raise ImportError("<ReachFlowCorridor>: Please install CommonRoad-Reach-Flow to use driving corridor!")
         self._corridor: Optional[DynamicDrivingCorridor] = corridor
         self._graph = corridor.reach_graph
-        self._params : List(Parameters) = list()
+        self._params : List[Parameters] = list()
         self._velocity_constraints = dict()
 
     def get_bounding_box_at_step(self):
@@ -90,7 +90,6 @@ class ReachFlowCorridor(DrivingCorridorSelector):
                 added_idx.add(idx + 1)
         return connected_components
 
-
     def get_lat_interval(self, reach_node):
         min_max_array = np.asarray([[node.set.p_lat_min, node.set.p_lat_max]
                                    for node in reach_node])
@@ -98,3 +97,9 @@ class ReachFlowCorridor(DrivingCorridorSelector):
         min_connected_set = np.min(min_max_array[:,0])
         max_connected_set = np.max(min_max_array[:,1])
         return min_connected_set, max_connected_set
+
+    def get_drivable_area(self, time_step: int):
+        area = list()
+        for reach_node in self._corridor.get_nodes_at_step(time_step):
+            area.append(reach_node.set.position_rectangle.bounds)
+        return area

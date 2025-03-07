@@ -24,7 +24,7 @@ import commonroad_route_planner.fast_api.fast_api as rfapi
 
 # reactive planner
 from commonroad_rp.reactive_planner import ReactivePlanner
-from commonroad_rp.utility.visualization import visualize_planner_at_timestep, make_gif
+from commonroad_rp.utility.visualization import visualize_planner_at_timestep, make_gif, plot_driving_corridor
 from commonroad_rp.utility.evaluation import run_evaluation
 from commonroad_rp.utility.config import ReactivePlannerConfiguration
 import commonroad_rp.utility.logger as util_logger_rp
@@ -175,14 +175,18 @@ def main():
         # visualize the current time step of the simulation
         if config_planner.debug.show_plots or config_planner.debug.save_plots:
             renderer = MPRenderer(figsize=(20, 10))
-            util_visual.draw_driving_corridor_2d(corridor, 0, reach_interface, rnd=renderer)
+            plt.rc("axes", axisbelow=True)
+            ax = plt.gca()
+            ax.set_aspect("equal")
+            plt.margins(0, 0)
+            # util_visual.draw_driving_corridor_2d(corridor, 0, reach_interface, rnd=renderer)
+            plot_driving_corridor(renderer, corridor, planner.coordinate_system.ccosy)  # alternate visualization
             visualize_planner_at_timestep(scenario=config_planner.scenario, planning_problem=config_planner.planning_problem,
                                           ego=ego_vehicle, traj_set=sampled_trajectory_bundle,
                                           ref_path=planner.reference_path, timestep=current_count, config=config_planner,
                                           rnd=renderer)
 
         # to use when configuration contains monitor specifications
-
         if planner.config.monitor.trace_reset_option_val is crmonitor.TraceResetOptions.filter:
             planner.config.rule_monitor.propagate_trace()  # we use filter option to keep computed props of other traffic participants within cycle
         planner.config.rule_monitor.get_world().propagate(ego=False)  # ego needs to be propagated inside planner since otherwise invalid planned trajectory of ego is executed

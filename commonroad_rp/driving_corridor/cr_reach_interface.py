@@ -26,7 +26,7 @@ class ReachableSetCorridor(DrivingCorridorSelector):
             raise ImportError("<ReachableSetCorridor>: Please install CommonRoad-Reach to use driving corridor!")
         self._corridor: Optional[DrivingCorridor] = corridor
         self._graph = DrivingCorridor.reach_nodes(corridor)
-        self._params : List(Parameters) = list()
+        self._params : List[Parameters] = list()
         self._velocity_constraints = dict()
 
     def get_bounding_box_at_step(self):
@@ -71,3 +71,9 @@ class ReachableSetCorridor(DrivingCorridorSelector):
     def get_lat_interval(self, reach_node):
         lat_interval = util_reach_operation.lat_interval_connected_set(reach_node)
         return lat_interval
+
+    def get_drivable_area(self, time_step: int):
+        area = list()
+        for reach_node in self._corridor.reach_nodes_at_step(time_step):
+            area.append(reach_node.position_rectangle.bounds)
+        return area
