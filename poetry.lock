@@ -295,43 +295,6 @@ files = [
 markers = {main = "platform_system == \"Windows\"", tests = "sys_platform == \"win32\""}
 
 [[package]]
-name = "commonroad-clcs"
-version = "2025.1.1"
-description = "Curvilinear (Frenet) Coordinate System for motion planning."
-optional = false
-python-versions = "<3.12,>=3.9"
-groups = ["main"]
-files = [
-    {file = "commonroad_clcs-2025.1.1-cp310-cp310-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:bbdeba22c8314a3997b0dd4a6d77b1d80bbce9ad09a19a3dfe4fa50bd6f05e85"},
-    {file = "commonroad_clcs-2025.1.1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:530acaf6803a1bcdd49b9f461848e8747ee3ba91adaec4e6e5f54778684f3e79"},
-    {file = "commonroad_clcs-2025.1.1-cp310-cp310-musllinux_1_1_i686.whl", hash = "sha256:ab9259f7b03025f7e225471acbe7b9ca9a3470cb174a9dc7bf2b632f101b6693"},
-    {file = "commonroad_clcs-2025.1.1-cp310-cp310-musllinux_1_1_x86_64.whl", hash = "sha256:de4b55359da4b601c78f9ff98b19bb60a92c374e26a064d93ca87ff3cf5e3fe4"},
-    {file = "commonroad_clcs-2025.1.1-cp311-cp311-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:7cbf46df76cb26778758064a3b23f4e0542a859d2f8b0fadd00685d59404403d"},
-    {file = "commonroad_clcs-2025.1.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:23f8dbdd9019e5e81ce379ae5720045d76483bbb1ad740bd68471d382366047c"},
-    {file = "commonroad_clcs-2025.1.1-cp311-cp311-musllinux_1_1_i686.whl", hash = "sha256:045f32b8993dbfa6b86dfd34fba28ec67aa8af72982c0a5a00611b0a2d892321"},
-    {file = "commonroad_clcs-2025.1.1-cp311-cp311-musllinux_1_1_x86_64.whl", hash = "sha256:8ebd87564db071956db7809788ca138e7f2f67696f749b4be02e8670649cd5a1"},
-    {file = "commonroad_clcs-2025.1.1-cp39-cp39-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:dcbb3026893ed901d2f9bbfeedff5142c1bd77f00bdcebf427107c4ecef32cf9"},
-    {file = "commonroad_clcs-2025.1.1-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e441d935263ff2b3e2d69b82b1ef9dff4c85d5575bcae431ad478023d52feaa2"},
-    {file = "commonroad_clcs-2025.1.1-cp39-cp39-musllinux_1_1_i686.whl", hash = "sha256:0c9f5bc2d8ab1954b2748600948299c96489d38afc7470930364043ed287cdcd"},
-    {file = "commonroad_clcs-2025.1.1-cp39-cp39-musllinux_1_1_x86_64.whl", hash = "sha256:cc1c7e21639b3aa8e5fe1a341b307b2d130f31202f1af459f9799c11844586e8"},
-    {file = "commonroad_clcs-2025.1.1.tar.gz", hash = "sha256:6266b56091d0d68cb2081539a18884d8059421538844b6ccc620a47bb12bc6bf"},
-]
-
-[package.dependencies]
-commonroad-io = ">=2023.1"
-matplotlib = ">=3.3.3"
-numpy = ">=1.19.2"
-omegaconf = ">=2.1.1"
-osqp = ">=0.6.5,<0.7.0"
-scipy = ">=1.4.1"
-shapely = ">=2.0.0"
-
-[package.extras]
-build = ["cmake (>=3.24)", "pathspec (>=0.12.1)", "pybind11 (>=2.12.0,<2.13.0)", "pyproject-metadata (>=0.7.1)", "scikit-build-core (>=0.8.0,<0.9.0)"]
-docs = ["mkdocs (>=1.6.1,<2.0.0)", "mkdocs-material (>=9.5.10,<10.0.0)", "mkdocstrings-python (>=1.8.0,<2.0.0)"]
-test = ["parameterized (>=0.9.0,<0.10.0)", "pytest (>=3.8.0)"]
-
-[[package]]
 name = "commonroad_cpp"
 version = "2023.0rc6.dev329+gbfa2b7eb"
 description = "CommonRoad C++ Environment Model"
@@ -495,22 +458,22 @@ test = ["pytest (>=3.8.0)"]
 
 [[package]]
 name = "commonroad-route-planner"
-version = "2025.1.0"
+version = "2025.0.1"
 description = "Route and reference path planning tool for CommonRoad scenarios"
 optional = false
-python-versions = "<3.12,>=3.9"
+python-versions = "<4.0,>=3.8"
 groups = ["main"]
 files = [
-    {file = "commonroad_route_planner-2025.1.0-py3-none-any.whl", hash = "sha256:88b314882c94b9cf1adb060c3c58b1ef18c42224c4fd5cdc350421527fadf097"},
-    {file = "commonroad_route_planner-2025.1.0.tar.gz", hash = "sha256:677a9eaeebeb9e7595e2bd44adf1c65b5832e8267140fdc09c7a6f18e36d1c5d"},
+    {file = "commonroad_route_planner-2025.0.1-py3-none-any.whl", hash = "sha256:42bd2998e1237cd707cd870cdf65c12e701cf16cbb6d682137a7b6bd9a29ab7a"},
+    {file = "commonroad_route_planner-2025.0.1.tar.gz", hash = "sha256:328751b0a530d273faa00bc987cc27c49fc207058babea5952755339cababe02"},
 ]
 
 [package.dependencies]
-commonroad-clcs = ">=2025.1.0,<2026.0.0"
+commonroad-drivability-checker = ">=2023.1"
 commonroad-io = ">=2022.2"
-matplotlib = ">=3.1.2"
+matplotlib = ">=3.1.2,<3.9"
 networkx = ">=2.4"
-numpy = ">=1.17.4"
+numpy = ">=1.17.4,<2.0"
 shapely = ">=1.6.4.post2"
 
 [[package]]
@@ -3517,4 +3480,4 @@ reach = ["commonroad-reach"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10, <3.11"
-content-hash = "f534353bb4e69b075ec691f75f575bb04531be00a23bb6aa491e1ec24971167f"
+content-hash = "acec234447777e0d729c32d1349a5b18a1cb281220c0aa2dcc30361bb11dda1b"
