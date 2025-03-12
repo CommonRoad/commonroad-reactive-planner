@@ -267,7 +267,6 @@ class GeneralConfiguration(BaseConfiguration):
     path_logs: str = "output/logs/"
     path_pickles: str = "output/pickles/"
     path_scenario: Optional[str] = None
-    name_scenario: Optional[str] = None
 
     def set_path_scenario(self, scenario_name: str):
         """
@@ -292,10 +291,6 @@ class ReactivePlannerConfiguration(BaseConfiguration):
         self.scenario: Optional[Scenario] = None
         self.planning_problem: Optional[PlanningProblem] = None
         self.planning_problem_set: Optional[PlanningProblemSet] = None
-
-    @property
-    def name_scenario(self) -> str:
-        return self.general.name_scenario
 
     @classmethod
     def load(cls, file_path: Union[Path, str], scenario_name: Optional[str] = None, validate_types: bool = True) \

@@ -27,9 +27,12 @@ def initialize_logger(config: ReactivePlannerConfiguration) -> logging.Logger:
     # create logger
     logger = logging.getLogger("RP_LOGGER")
 
+    # scenario name
+    name_scenario = config.scenario.scenario_id
+
     # create file handler (outputs to file)
     string_date_time = datetime.now().strftime("_%Y_%m_%d_%H-%M-%S")
-    path_log = os.path.join(config.general.path_logs, f"{config.name_scenario}{string_date_time}.log")
+    path_log = os.path.join(config.general.path_logs, f"{name_scenario}{string_date_time}.log")
     file_handler = logging.FileHandler(path_log)
 
     # set logging levels
