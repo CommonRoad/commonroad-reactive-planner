@@ -23,7 +23,6 @@ unittest:
   stage: test
   cache: []
   script:
-    - pip install git+ssh://git@gitlab.lrz.de/cps/commonroad/commonroad-monitor.git
     - coverage run --source=./commonroad_rp -m unittest discover test
     - coverage report -m || true
     - coverage xml
