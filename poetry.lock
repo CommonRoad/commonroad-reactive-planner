@@ -376,7 +376,7 @@ resolved_reference = "897f0f979fa9267da23f3b185c6fc4d97a505270"
 
 [[package]]
 name = "commonroad_monitor"
-version = "2023.0rc2.dev350+g7968750d"
+version = "2023.0rc2.dev365+gb400a4bf"
 description = "Traffic Rule Monitor for CommonRoad Scenarios"
 optional = false
 python-versions = "<3.12,>=3.9"
@@ -405,8 +405,8 @@ test = ["pytest (>=5.3.2)"]
 [package.source]
 type = "git"
 url = "ssh://git@gitlab.lrz.de/cps/commonroad/commonroad-monitor.git"
-reference = "develop"
-resolved_reference = "7968750d2c6cbef7f9a6b6f914749ab06de76f33"
+reference = "feature/initial-step-evaluation"
+resolved_reference = "b400a4bf7ddcc6cb90f05ec930755db8e0e9d539"
 
 [[package]]
 name = "commonroad-reach"
@@ -3480,4 +3480,4 @@ reach = ["commonroad-reach"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10, <3.11"
-content-hash = "acec234447777e0d729c32d1349a5b18a1cb281220c0aa2dcc30361bb11dda1b"
+content-hash = "e09607d161da1ddd4682ca74466fc1d5a20f6656dbf8e42fe2d2bdf6590d5e13"

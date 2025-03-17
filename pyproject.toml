@@ -38,7 +38,7 @@ commonroad-io = ">=2024.2"
 commonroad-drivability-checker = ">=2024.1"
 commonroad_vehicle_models = ">=3.0.2"
 
-commonroad-monitor = { git = "git@gitlab.lrz.de:cps/commonroad/commonroad-monitor.git", branch = "develop" }
+commonroad-monitor = { git = "git@gitlab.lrz.de:cps/commonroad/commonroad-monitor.git", branch = "feature/initial-step-evaluation" }
 commonroad-velocity-planner = { git = "git@gitlab.lrz.de:cps/commonroad/commonroad-velocity-planner.git", branch = "develop"}
 
 commonroad-reach = { version = "^2024.1", optional = true }
