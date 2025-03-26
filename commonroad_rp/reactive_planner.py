@@ -1135,10 +1135,12 @@ class ReactivePlanner(object):
         for i in range(len(pos1)):
             t0 = time.perf_counter()
             ego_collision_rect = pycrcc.RectOBB(half_length, half_width, theta[i], pos1[i], pos2[i])
+            ego = pycrcc.TimeVariantCollisionObject(self.x_0.time_step + i * self.config.planning.factor)
+            ego.append_obstacle(ego_collision_rect)
             self._journal["type_conversions"] += time.perf_counter() - t0
 
             t0 = time.perf_counter()
-            is_collision = self._cc.time_slice(self.x_0.time_step + i).collide(ego_collision_rect)
+            is_collision = self._cc.collide(ego)
             self._journal["collision_check"] += time.perf_counter() - t0
             if is_collision:
                 self._infeasible_count_collision += 1
