@@ -255,21 +255,32 @@ def integrate_reach_flow_corridor(
     specs = ["true"]
     automaton = core.model_checking.FiniteAutomaton(specs)
     init = core.initializers.base_set.CurvilinearUncertaintyInitializer(ccs, *([initial_uncertainty] * 4))
-    layers = [
-        core.layers.propagation.PointMassPropagator(dt, point_mass_params),
-        core.layers.semantic.SemanticSplitter(automaton, scenario_path, dt, ccs, splitter_params),
-        core.layers.meta.GroupedByAutomatonStates(core.layers.repartition.PositionRepartitioner()),
-        core.layers.collision.CollisionFilter(cc),
-        core.layers.meta.GroupedByAutomatonStates(core.layers.repartition.PositionRepartitioner()),
-    ]
-    post = [
-        core.post_processors.pruning.SemanticFinalStatePruner(automaton),
-        core.post_processors.pruning.DanglingNodePruner(),
-    ]
 
-    rs = core.executors.DynamicReachExecutor(
-        step_start, step_end, init, core.layers.meta.Sequential(layers), core.post_processors.meta.Sequential(post)
+    layers = {
+        "propagation": core.layers.propagation.PointMassPropagator(dt, point_mass_params),
+        "splitting": core.layers.semantic.SemanticSplitter(automaton, scenario_path, dt, ccs, splitter_params),
+        "repartitioning": core.layers.meta.GroupedByAutomatonStates(core.layers.repartition.PositionRepartitioner()),
+        "collision_checking": core.layers.collision.CollisionFilter(cc),
+    }
+    layers = {key: core.layers.meta.Timed(value) for key, value in layers.items()}
+    layer = core.layers.meta.Sequential(
+        [
+            layers["propagation"],
+            layers["splitting"],
+            layers["repartitioning"],
+            layers["collision_checking"],
+            layers["repartitioning"],
+        ]
     )
+
+    post = core.post_processors.meta.Sequential(
+        [
+            core.post_processors.pruning.SemanticFinalStatePruner(automaton),
+            core.post_processors.pruning.DanglingNodePruner(),
+        ]
+    )
+
+    rs = core.executors.DynamicReachExecutor(step_start, step_end, init, layer, post)
 
     state = planning_problem.initial_state
     params = (state.time_step, state.position[0], state.position[1], state.velocity, state.acceleration, state.orientation)
