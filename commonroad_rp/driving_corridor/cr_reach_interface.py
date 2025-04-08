@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional, List
+from typing import Optional, List, Dict, Tuple
 
 from commonroad_rp.driving_corridor.corridor_selector import DrivingCorridorSelector
 from commonroad_rp.driving_corridor.parameters import Parameters
@@ -21,15 +21,20 @@ class ReachableSetCorridor(DrivingCorridorSelector):
     Wrapper class for CommonRoad-Reach - DrivingCorridor class
     """
     def __init__(self, corridor: DrivingCorridor):
+        """
+        Create a new ReachableSetCorridor.
+
+        :param corridor: Driving corridor from CommonRoad-Reach.
+        """
         super().__init__(corridor)
         if not cr_reach_installed:
             raise ImportError("<ReachableSetCorridor>: Please install CommonRoad-Reach to use driving corridor!")
         self._corridor: Optional[DrivingCorridor] = corridor
         self._graph = DrivingCorridor.reach_nodes(corridor)
         self._params : List[Parameters] = list()
-        self._velocity_constraints = dict()
+        self._velocity_constraints : Dict = dict()
 
-    def get_bounding_box_at_step(self):
+    def get_bounding_box_at_step(self) -> List[Parameters]:
         params = Parameters()
         for step in self._graph:
             index = DrivingCorridor.reach_nodes_at_step(self._corridor, step)
@@ -45,34 +50,34 @@ class ReachableSetCorridor(DrivingCorridorSelector):
             self._params.append(params)
         return self._params
 
-    def set_velocity_constraints(self):
+    def set_velocity_constraints(self) -> Dict:
         for time_idx in self.get_time_step():
             reach_node = self._corridor[time_idx]
             velocity_interval = self.get_lon_velocity_interval(reach_node)
             self._velocity_constraints[time_idx] = [velocity_interval[0], velocity_interval[1]]
         return self._velocity_constraints
 
-    def get_lon_velocity_interval(self, reach_node):
+    def get_lon_velocity_interval(self, reach_node) -> Tuple[float, float]:
         velocity_interval = util_reach_operation.lon_velocity_interval_connected_set(reach_node)
         return velocity_interval
 
-    def get_time_step(self):
+    def get_time_step(self) -> List[int]:
         return list(self._corridor.keys())
 
-    def get_overlapping_nodes_with_lon_pos(self, time_step: int, lon_pos: float):
+    def get_overlapping_nodes_with_lon_pos(self, time_step: int, lon_pos: float) -> List:
         reach_node = self._corridor[time_step]
         overlap_nodes = util_reach_operation.determine_overlapping_nodes_with_lon_pos(reach_node, lon_pos)
         return overlap_nodes
 
-    def get_connected_components(self, overlap_nodes: list()):
+    def get_connected_components(self, overlap_nodes: list()) -> List:
         lat_connected_sets = util_reach_operation.determine_connected_components(overlap_nodes)
         return lat_connected_sets
 
-    def get_lat_interval(self, reach_node):
+    def get_lat_interval(self, reach_node) -> Tuple[float, float]:
         lat_interval = util_reach_operation.lat_interval_connected_set(reach_node)
         return lat_interval
 
-    def get_drivable_area(self, time_step: int):
+    def get_drivable_area(self, time_step: int) -> List[Tuple]:
         area = list()
         for reach_node in self._corridor.reach_nodes_at_step(time_step):
             area.append(reach_node.position_rectangle.bounds)

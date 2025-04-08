@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional, List
+from typing import Optional, List, Dict, Tuple
 import numpy as np
 
 from commonroad_rp.driving_corridor.corridor_selector import DrivingCorridorSelector
@@ -21,15 +21,20 @@ class ReachFlowCorridor(DrivingCorridorSelector):
     """
 
     def __init__(self, corridor: DynamicDrivingCorridor):
+        """
+        Create a new ReachFlowCorridor.
+
+        :param corridor: Driving corridor from CommonRoad-Reach-Flow.
+        """
         super().__init__(corridor)
         if not cr_reach_flow_installed:
             raise ImportError("<ReachFlowCorridor>: Please install CommonRoad-Reach-Flow to use driving corridor!")
         self._corridor: Optional[DynamicDrivingCorridor] = corridor
         self._graph = corridor.reach_graph
         self._params : List[Parameters] = list()
-        self._velocity_constraints = dict()
+        self._velocity_constraints : Dict = dict()
 
-    def get_bounding_box_at_step(self):
+    def get_bounding_box_at_step(self) -> List[Parameters]:
         params = Parameters()
         for step in range(self._graph.initial_step, self._graph.final_step + 1):
             for node in self._graph.get_nodes_at_step(step):
@@ -44,14 +49,14 @@ class ReachFlowCorridor(DrivingCorridorSelector):
             self._params.append(params)
         return self._params
 
-    def set_velocity_constraints(self):
+    def set_velocity_constraints(self) -> Dict:
         for time_idx in self.get_time_step():
             reach_node = self._corridor.get_nodes_at_step(time_idx)
             velocity_interval = self.get_lon_velocity_interval(reach_node)
             self._velocity_constraints[time_idx] = [velocity_interval[0], velocity_interval[1]]
         return self._velocity_constraints
 
-    def get_lon_velocity_interval(self, reach_node):
+    def get_lon_velocity_interval(self, reach_node) -> Tuple[float, float]:
         min_max_array = np.asarray([[node.set.v_lon_min, node.set.v_lon_max]
                                    for node in reach_node])
         # get minimum and maximum value for the connected set
@@ -59,10 +64,10 @@ class ReachFlowCorridor(DrivingCorridorSelector):
         max_connected_set = np.max(min_max_array[:, 1])
         return min_connected_set, max_connected_set
 
-    def get_time_step(self):
+    def get_time_step(self) -> List[int]:
         return list(range(self._graph.initial_step, self._graph.final_step + 1))
 
-    def get_overlapping_nodes_with_lon_pos(self, time_step: int, lon_pos: float):
+    def get_overlapping_nodes_with_lon_pos(self, time_step: int, lon_pos: float) -> List:
         overlap_nodes = list()
         reach_node = self._corridor.get_nodes_at_step(time_step)
         for node in reach_node:
@@ -71,7 +76,7 @@ class ReachFlowCorridor(DrivingCorridorSelector):
                 overlap_nodes.append(node)
         return overlap_nodes
 
-    def get_connected_components(self, overlap_nodes: list()):
+    def get_connected_components(self, overlap_nodes: list()) -> List:
         connected_components = list()
         overlap_nodes.sort(key=lambda node: (node.set.p_lat_min, node.set.p_lat_max))
         if len(overlap_nodes) == 1:
@@ -90,7 +95,7 @@ class ReachFlowCorridor(DrivingCorridorSelector):
                 added_idx.add(idx + 1)
         return connected_components
 
-    def get_lat_interval(self, reach_node):
+    def get_lat_interval(self, reach_node) -> Tuple[float, float]:
         min_max_array = np.asarray([[node.set.p_lat_min, node.set.p_lat_max]
                                    for node in reach_node])
         # get minimum and maximum value for the connected set
@@ -98,7 +103,7 @@ class ReachFlowCorridor(DrivingCorridorSelector):
         max_connected_set = np.max(min_max_array[:,1])
         return min_connected_set, max_connected_set
 
-    def get_drivable_area(self, time_step: int):
+    def get_drivable_area(self, time_step: int) -> List[Tuple]:
         area = list()
         for reach_node in self._corridor.get_nodes_at_step(time_step):
             area.append(reach_node.set.position_rectangle.bounds)
