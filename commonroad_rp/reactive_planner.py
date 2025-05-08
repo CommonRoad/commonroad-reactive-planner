@@ -40,7 +40,7 @@ from commonroad_rp.trajectories import TrajectoryBundle, TrajectorySample, Carte
 from commonroad_rp.utility.utils_coordinate_system import CoordinateSystem, interpolate_angle
 from commonroad_rp.utility.general import shift_orientation, retrieve_desired_velocity_from_pp
 from commonroad_rp.utility.config import ReactivePlannerConfiguration, VehicleConfiguration
-from commonroad_rp.utility.logger import logging_dict
+from commonroad_rp.utility.logger import init_logging_dict
 
 
 # get logger
@@ -83,7 +83,7 @@ class ReactivePlanner(object):
         self._infeasible_reason_dict: Dict = dict()
         self._optimal_cost: float = 0.0
         self._planning_times_list: List = list()
-        self._journal: Dict[str, float] = logging_dict
+        self._journal: Dict[str, float] = init_logging_dict()
         self._record_state_list: List[ReactivePlannerState] = list()
         self._record_input_list: List[InputState] = list()
 
