@@ -15,7 +15,7 @@ before_script:
   - git config --global url."https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.lrz.de".insteadOf "ssh://git@gitlab.lrz.de"
   - pip install poetry
   - poetry config virtualenvs.in-project true
-  - poetry install --with tests,docs
+  - poetry install --verbose --with tests,docs
   - source .venv/bin/activate
 
 ########## Test ###############
