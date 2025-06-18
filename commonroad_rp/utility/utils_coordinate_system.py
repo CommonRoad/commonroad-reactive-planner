@@ -51,6 +51,8 @@ class CoordinateSystem(CurvilinearCoordinateSystem):
         :params clcs_params: CLCS parameters
                 - if None: The default clcs parameters are taken (see commonroad_clcs.config for details)
         """
+        if clcs_params is None:
+            clcs_params = CLCSParams()
 
         super().__init__(
             reference_path=reference,
