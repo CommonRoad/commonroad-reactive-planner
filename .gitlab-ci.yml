@@ -69,7 +69,7 @@ pages:
   publish: site
   only:
     - master
-    - develop
+    - development
   when:
     manual
   script:
