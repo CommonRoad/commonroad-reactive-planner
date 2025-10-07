@@ -276,7 +276,20 @@ class GeneralConfiguration(BaseConfiguration):
         """
         self.path_scenario = os.path.join(self.path_scenarios, scenario_name)
 
+    def set_scenario_dir_and_xml_path(
+            self,
+            scenario_dir: Union[Path, str],
+            scenario_xml: Union[Path, str]
+    ) -> None:
+        """
+        Sets scenario dir and scenario path manually
+        :param scenario_dir: absolute path to scenario dir
+        :param scenario_xml: absolute path to scenario xml
+        """
+        self.path_scenarios = str(scenario_dir)
+        self.path_scenario = str(scenario_xml)
 
+# TODO: Build factory to make this easier
 @dataclass
 class ReactivePlannerConfiguration(BaseConfiguration):
     """Configuration parameters for reactive planner."""
@@ -291,6 +304,7 @@ class ReactivePlannerConfiguration(BaseConfiguration):
         self.scenario: Optional[Scenario] = None
         self.planning_problem: Optional[PlanningProblem] = None
         self.planning_problem_set: Optional[PlanningProblemSet] = None
+
 
     @classmethod
     def load(cls, file_path: Union[Path, str], scenario_name: Optional[str] = None, validate_types: bool = True) \
@@ -318,8 +332,41 @@ class ReactivePlannerConfiguration(BaseConfiguration):
         params.vehicle.update_vehicle_config(loaded_yaml["vehicle"])
         return params
 
-    def update(self, scenario: Scenario = None, planning_problem: PlanningProblem = None,
-               idx_planning_problem: Optional[int] = None):
+    @classmethod
+    def load_from_xml_and_yaml(
+            cls,
+            scenario_xml_path: Union[Path, str],
+            config_yaml_path: Union[Path, str],
+            validate_types: bool = True
+    ) -> 'ReactivePlannerConfiguration':
+        """
+        Loads parameters from a config yaml file and scenario from xml and returns the Configuration class.
+
+        :param scenario_xml_path: Path to scenario xml
+        :param config_yaml_path: Path to config yaml.
+        :param validate_types:  Boolean indicating whether loaded config should be validated against CARLA parameters.
+        :return: Base parameter class.
+        """
+        assert Path(config_yaml_path).suffix == ".yaml", f"File type {Path(config_yaml_path).suffix} is unsupported! Please use .yaml!"
+        loaded_yaml = OmegaConf.load(config_yaml_path)
+        if validate_types:
+            OmegaConf.merge(OmegaConf.structured(ReactivePlannerConfiguration), loaded_yaml)
+        params = _dict_to_params(OmegaConf.to_object(loaded_yaml), cls)
+        # add path to scenario file to config
+        params.general.set_scenario_dir_and_xml_path(
+            scenario_dir=scenario_xml_path,
+            scenario_xml=scenario_xml_path
+        )
+        # update vehicle configuration params
+        params.vehicle.update_vehicle_config(loaded_yaml["vehicle"])
+        return params
+
+
+    def update(
+            self, scenario: Scenario = None,
+            planning_problem: PlanningProblem = None,
+            idx_planning_problem: Optional[int] = None
+    ) -> None:
         """
         Updates configuration based on the given attributes.
         Function used to construct initial configuration before planner initialization and update configuration during
@@ -329,6 +376,8 @@ class ReactivePlannerConfiguration(BaseConfiguration):
         :param planning_problem: (initial or updated) planning problem
         :param state_initial: initial state (can be different from planning problem initial state during re-planning)
         """
+        # TODO: Disentangle this entire mess
+        # TODO: This is an init outside the init !?
         # update scenario and planning problem with explicitly given ones
         self.scenario = scenario
         self.planning_problem = planning_problem

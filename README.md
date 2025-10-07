@@ -7,6 +7,9 @@ to a given cost function.
 
 <img src="docs/assets/ZAM_Tjunction-1_42_T-1.gif" alt="reactive-planner" width="600"/>
 
+## Documentation
+The documentation with code examples can be found [here](https://cps.pages.gitlab.lrz.de/reactive-planner/).
+
 
 ## Getting Started
 These instructions should help you to install the trajectory planner and use it for development and testing purposes.

@@ -19,5 +19,14 @@ nav:
   - Introduction:
     - "Introduction": index.md
 
-  - Reactive Planner:
+  - Examples:
+      - "Minimal Examples": examples/minimal_examples.md
+      - "Long Examples": examples/long_examples.md
+
+  - API:
+    - "Easy API": easy_api.md
+
+  - API:
     - "Reactive Planner": reactive_planner.md
+    - "State, Input, Trajectory": state_traj.md
+
