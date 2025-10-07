@@ -14,8 +14,9 @@ class ExampleTest(unittest.TestCase):
 
     def test_example(self):
         filename = "ZAM_Over-1_1.xml"
-        path_config = Path(__file__).parents[1] / "configurations" / f"{filename[:-4]}.yaml"
-        config = ReactivePlannerConfiguration.load(path_config, filename)
+        xml = Path(__file__).parents[1] / "example_scenarios" / filename
+        config_path = Path(__file__).parents[1] / "configurations" / f"{filename[:-4]}.yaml"
+        config = ReactivePlannerConfiguration.load_from_xml_and_yaml(xml, config_path)
         config.general.path_output = Path(os.path.abspath(Path(__file__).parents[1])) / "output"
         config.update()
 

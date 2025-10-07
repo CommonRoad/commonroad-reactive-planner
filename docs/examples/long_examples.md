@@ -1,11 +1,7 @@
-__author__ = "Gerald Würsching"
-__copyright__ = "TUM Cyber-Physical Systems Group"
-__version__ = "2024.1"
-__maintainer__ = "Gerald Würsching"
-__email__ = "commonroad@lists.lrz.de"
-__status__ = "Beta"
+# Long Example
+Below is a long example on how to use and visualize the planner
 
-
+```Python
 # standard imports
 from copy import deepcopy
 from pathlib import Path
@@ -29,7 +25,6 @@ def main(
 ) -> None:
     # initialize and get logger
     initialize_logger(config)
-    logger = logging.getLogger("RP_LOGGER")
 
     # *************************************
     # Initialize Planner
@@ -127,8 +122,8 @@ def main(
 # Run planning
 # *************************************
 if __name__ == "__main__":
-    xml = Path("/home/tmasc/projects/reactive-planner/example_scenarios/ZAM_Over-1_1.xml")
-    config = Path("/home/tmasc/projects/reactive-planner/configurations/ZAM_Over-1_1.yaml")
+    xml = Path("PATH/TO/XML")
+    config = Path("PATH/TO/YAML")
 
 
     # Build config object
@@ -136,3 +131,6 @@ if __name__ == "__main__":
     rp_config.update()
 
     main(config=rp_config)
+
+
+```

@@ -12,7 +12,7 @@ log/
 .pyc
 __pycache__
 
-scenarios/
+example_scenarios/
 plots/
 unit_tests/img/
 evals/
